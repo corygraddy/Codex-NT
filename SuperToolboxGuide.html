@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Toolbox v7 Guide</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Slate & Amber -->
+    <!-- Application Structure Plan: I've designed a two-panel, filterable navigation layout. The left panel contains a categorized and searchable list of all toolbox modes. The right panel is a dynamic content area that displays the full details of the selected mode. This structure was chosen because the primary user task is a quick lookup ("What does Vactrol VCA do?" or "Show me all the logic gates"). A filterable list is far more efficient than scrolling through a static document. By separating navigation from content, the user can easily switch between modes without losing their place, making it an ideal interactive reference tool. -->
+    <!-- Visualization & Content Choices: The source report is a technical manual. Goal: Inform/Organize. Method: A filterable HTML list for navigation and dynamically updated HTML text blocks/tables for content. Interaction: User clicks a mode name to view its details or types in a search box to filter the list. Justification: This provides the fastest path to information for a user who needs to quickly reference a specific function's inputs and use case during a patching session. The data is descriptive and structural, so no data charts are needed. Signal flow is represented with Unicode arrows for clarity. This approach prioritizes information retrieval and readability over complex visualization. Library/Method: Vanilla JS for data handling and DOM manipulation. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .main-container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 1.5rem;
+        }
+        @media (max-width: 768px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        .mode-item.active {
+            background-color: #f59e0b; /* amber-500 */
+            color: #ffffff;
+        }
+        .prose-custom p { margin-bottom: 0.75rem; }
+        .prose-custom h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; font-weight: 600; font-size: 1.125rem; }
+        .prose-custom code {
+            background-color: #e2e8f0; /* slate-200 */
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-slate-900">Super Toolbox v7 Guide</h1>
+            <p class="text-lg text-slate-600 mt-2">Interactive Manual for the Disting NT Lua Script</p>
+        </header>
+
+        <main class="main-container bg-white p-6 rounded-2xl shadow-lg">
+            <!-- Left Panel: Navigation & Search -->
+            <aside class="border-r border-slate-200 pr-6">
+                <div class="sticky top-6">
+                    <h2 class="text-xl font-semibold mb-4 text-slate-900">Toolbox Modes</h2>
+                    <input type="text" id="searchInput" placeholder="Search modes..." class="w-full p-2 border border-slate-300 rounded-lg mb-4 focus:ring-2 focus:ring-amber-500 focus:border-amber-500">
+                    <nav id="modeList" class="max-h-[70vh] overflow-y-auto"></nav>
+                </div>
+            </aside>
+
+            <!-- Right Panel: Content Display -->
+            <section id="contentDisplay" class="prose-custom">
+                <div class="text-center p-12 text-slate-500">
+                    <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v11.494m-9-5.747h18"></path></svg>
+                    <h2 class="text-2xl font-semibold">Welcome to the Super Toolbox Guide</h2>
+                    <p>Select a mode from the list on the left to see its details, patching guide, and example use cases.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const toolboxData = [
+            // CV & Mixing
+            { category: "CV & Mixing", mode: 0, name: "Vactrol-Style VCA", inputs: {x: "Signal In", y: "Envelope CV", z: "Slew Amount CV"}, output: "VCA Out", desc: "A Voltage Controlled Amplifier with a CV-controlled slew on the envelope input, simulating the soft, organic response of a vactrol.", use_case: "Control the volume of a `VCO` algorithm with an `Envelope Generator` algorithm. Use Input Z to make the envelope sound softer and more organic." },
+            { category: "CV & Mixing", mode: 1, name: "Deluxe Attenuverter", inputs: {x: "Signal In", y: "Level CV", z: "Curve CV"}, output: "Attenuverted Out", desc: "A bipolar attenuator with a curve control. Input Z warps the response from linear to exponential or logarithmic.", use_case: "Change a linear LFO from a `Clocked LFO` algorithm into an exponential or logarithmic curve for more musical modulation." },
+            { category: "CV & Mixing", mode: 2, name: "Crossfader", inputs: {x: "Source A", y: "Source B", z: "Mix CV"}, output: "Mixed Out", desc: "Fades smoothly between Input X (Source A) and Input Y (Source B) using the CV from Input Z.", use_case: "Use a physical CV input to morph between a clean signal from a `Sample Player` and an effected version." },
+            
+            // Gate & Trigger Logic
+            { category: "Gate & Trigger Logic", mode: 3, name: "Stochastic AND", inputs: {x: "Gate 1", y: "Gate 2", z: "Probability CV"}, output: "Gate Out", desc: "Outputs a high gate only when both Gate 1 and Gate 2 are high, AND a probability check (controlled by Input Z) succeeds.", use_case: "Add variation to rhythmic patterns from a `Step Sequencer` by making some hits conditional." },
+            { category: "Gate & Trigger Logic", mode: 4, name: "Stochastic OR", inputs: {x: "Gate 1", y: "Gate 2", z: "Probability CV"}, output: "Gate Out", desc: "Outputs a high gate if either Gate 1 or Gate 2 is high, AND a probability check succeeds.", use_case: "Combine two sparse trigger patterns into a new, probabilistically varied pattern." },
+            { category: "Gate & Trigger Logic", mode: 5, name: "Stochastic XOR", inputs: {x: "Gate 1", y: "Gate 2", z: "Probability CV"}, output: "Gate Out", desc: "Outputs a high gate only if one input is high (but not both), AND a probability check succeeds.", use_case: "Generate complex, evolving gate patterns from two out-of-phase `Clocked LFOs` (set to square wave), with added unpredictability." },
+            { category: "Gate & Trigger Logic", mode: 6, name: "Prob. Trigger", inputs: {x: "Clock In", y: "Probability CV"}, output: "Trigger Out", desc: "Passes the clock from Input X based on the probability CV at Input Y.", use_case: "Create 'ghost notes' or evolving hi-hat patterns by varying the probability with a CV from an `LFO` algorithm." },
+            { category: "Gate & Trigger Logic", mode: 7, name: "Gate Skipper", inputs: {x: "Clock In", y: "Skip Probability CV"}, output: "Gate Out", desc: "Mutes (skips) a clock from Input X based on the probability CV at Input Y.", use_case: "Create dropouts and rests in a steady trigger sequence from a `Clock` algorithm." },
+            { category: "Gate & Trigger Logic", mode: 8, name: "Comparator", inputs: {x: "Signal In", y: "Threshold CV"}, output: "Gate Out", desc: "Outputs a high gate when the voltage of Signal In (Input X) is greater than the Threshold CV (Input Y).", use_case: "Turn a sine wave `LFO` (In X) into a pulse wave with adjustable pulse width by changing the threshold CV (In Y)." },
+            
+            // CV Processing & Waveshaping
+            { category: "CV Processing & Waveshaping", mode: 9, name: "Voltage Clamp", inputs: {x: "Signal In", y: "Min Voltage", z: "Max Voltage"}, output: "Clamped Out", desc: "Limits a signal (Input X) so it cannot go below a minimum voltage (Input Y) or above a maximum (Input Z).", use_case: "Tame a wild CV from the `Chaos` algorithm to keep it within a specific musical range." },
+            { category: "CV Processing & Waveshaping", mode: 10, name: "Hard Clipper", inputs: {x: "Audio In", y: "Drive CV"}, output: "Clipped Out", desc: "A simple distortion that clips the peaks of a signal. Drive is set by Input Y.", use_case: "Add aggressive distortion to the output of a `Sample Player` or `VCO` algorithm." },
+            { category: "CV Processing & Waveshaping", mode: 11, name: "Half-Wave Rectifier", inputs: {x: "Audio/LFO In"}, output: "Rectified Out", desc: "Flips the negative portion of a waveform to zero, adding harmonics.", use_case: "Change the timbre of an `LFO` or audio signal, making it buzzier and more aggressive." },
+            { category: "CV Processing & Waveshaping", mode: 12, name: "Full-Wave Rectifier", inputs: {x: "Audio/LFO In"}, output: "Rectified Out", desc: "Flips the negative portion of a waveform to positive, doubling its frequency.", use_case: "Doubles the frequency of an `LFO` or adds rich harmonics to a simple audio wave from a `VCO`." },
+            { category: "CV Processing & Waveshaping", mode: 13, name: "Bipolar->Unipolar", inputs: {x: "Bipolar Signal"}, output: "Unipolar Out", desc: "Shifts a bipolar signal (-5V to +5V) to a unipolar range (0V to 10V).", use_case: "Make a bipolar `LFO` algorithm compatible with an input that only accepts positive voltage." },
+            
+            // Pitch & Harmony
+            { category: "Pitch & Harmony", mode: 14, name: "Octave Switch", inputs: {x: "V/Oct In", y: "Gate In"}, output: "V/Oct Out", desc: "Adds 1V (one octave) to a V/Oct signal (Input X) when a gate is high at Input Y.", use_case: "Use a gate from a `Step Sequencer` to make a melody jump up an octave for emphasis." },
+            { category: "Pitch & Harmony", mode: 15, name: "Semitone Transposer", inputs: {x: "V/Oct In", y: "Transpose CV"}, output: "V/Oct Out", desc: "Adds a precise CV offset to a V/Oct signal based on the CV at Input Y (0-5V maps to 0-12 semitones).", use_case: "Use a CV source to smoothly transpose a sequence from a `Step Sequencer`." },
+            
+            // Generative & Audio
+            { category: "Generative & Audio", mode: 16, name: "Chaotic Shaper", inputs: {x: "Audio/LFO In"}, output: "Shaped Out", desc: "A strange, unpredictable waveshaper that creates complex, non-linear timbres.", use_case: "Feed it a simple sine or triangle wave from a `VCO` algorithm to generate harsh, metallic tones." },
+            { category: "Generative & Audio", mode: 17, name: "Freq. Divider", inputs: {x: "Audio Signal In"}, output: "Sub Octave Out", desc: "A simple audio-rate clock divider that creates a square wave one octave lower.", use_case: "Use it as a simple sub-oscillator for a `VCO` algorithm's output." },
+            
+            // Combinations
+            { category: "Combinations", mode: 19, name: "Window Comparator", inputs: {x: "Signal In", y: "Min Threshold", z: "Max Threshold"}, output: "Gate Out", desc: "Fires a gate when a CV (Input X) is between a min (Input Y) and max (Input Z) voltage.", use_case: "Trigger an event only when a slow `Chaos` algorithm's output is in a specific 'sweet spot'." },
+            
+            // Macro Functions
+            { category: "Macro Functions", mode: 21, name: "Side-Chain Ducker", inputs: {x: "Audio to Duck", y: "Trigger (Kick)", z: "Duck Amount CV"}, output: "Ducked Audio", desc: "A complete side-chain compressor. When a trigger hits Input Y, the audio on Input X is ducked.", use_case: "Create a classic pumping effect. Patch your kick trigger from a `Step Sequencer` to In Y and a pad sound from a `Poly Wavetable` algorithm to In X." },
+            { category: "Macro Functions", mode: 22, name: "Chaotic Trigger Gen", inputs: {x: "Slow LFO", y: "Threshold CV"}, output: "Trigger Out", desc: "A non-linear trigger generator. It runs a slow LFO through a chaotic formula, firing a gate when the result crosses a threshold.", use_case: "Generate unpredictable 'ghost notes' for percussion. Feed it a slow sine wave from an `LFO` and modulate the threshold." },
+            { category: "Macro Functions", mode: 23, name: "Pinged LPG Sim", inputs: {x: "Audio In", y: "Trigger In", z: "Decay CV"}, output: "LPG Out", desc: "Simulates a Low Pass Gate. When triggered, it 'pings' the audio, creating a percussive sound with a natural decay.", use_case: "Feed noise from the `Noise Generator` algorithm (In X) and a trigger (In Y) to create classic Buchla-style bongo sounds." },
+            { category: "Macro Functions", mode: 24, name: "Folded LFO", inputs: {x: "LFO In", y: "Fold Amount CV"}, output: "Folded LFO Out", desc: "A CV waveshaper that folds a simple LFO to create more complex modulation shapes.", use_case: "Turn a simple sine wave `LFO` into a more aggressive, harmonically rich modulation source for filter FM." },
+
+            // Multi-Output
+            { category: "Multi-Output", mode: 26, name: "Chaos Router", inputs: {x: "Signal A", y: "Signal B", z: "Signal C", w: "Clock"}, outputs: {a: "Out 1", b: "Out 2", c: "Out 3", d: "Mix of A+C"}, desc: "A clocked 3x3 signal router. On each clock pulse, it shuffles the three input signals to the three outputs.", use_case: "Create evolving polyrhythms by routing three different gate patterns from a `Step Sequencer` or `Euclidean Patterns` algorithm." },
+            { category: "Multi-Output", mode: 27, name: "Quad LFO", inputs: {x: "Rate CV", y: "Shape CV"}, outputs: {a:"LFO 1", b:"LFO 2", c:"LFO 3", d:"LFO 4"}, desc: "Four LFOs with 90° phase offsets. Rate is controlled by Input X, and waveshape (Sine to Saw) by Input Y.", use_case: "A complete modulation hub in one mode. Generate rich, animated modulation for ambient patches." },
+            { category: "Multi-Output", mode: 28, name: "Dual Prob. Trigger", inputs: {x: "Clock", y: "Prob. A CV", z: "Prob. B CV"}, outputs: {a: "Trigger A", b: "Trigger B"}, desc: "Two independent probabilistic trigger outputs from a single clock.", use_case: "Use two separate CV sources to control the density of two independent rhythmic layers for a drum machine setup." },
+            { category: "Multi-Output", mode: 29, name: "Sequencer (UP)", inputs: {x: "Clock", y: "Reset Gate", z: "CV Range"}, outputs: {a: "CV Out", b: "Gate Out"}, desc: "A simple 8-step sequencer that outputs a rising staircase of voltages.", use_case: "Generate a simple arpeggio or modulation ramp. Input Z controls the melodic range." },
+            { category: "Multi-Output", mode: 30, name: "Sequencer (DOWN)", inputs: {x: "Clock", y: "Reset Gate", z: "CV Range"}, outputs: {a: "CV Out", b: "Gate Out"}, desc: "A simple 8-step sequencer that outputs a falling staircase of voltages.", use_case: "Create a descending arpeggio or modulation ramp." },
+            { category: "Multi-Output", mode: 31, name: "Sequencer (UP/DOWN)", inputs: {x: "Clock", y: "Reset Gate", z: "CV Range"}, outputs: {a: "CV Out", b: "Gate Out"}, desc: "A 14-step sequencer that plays up and then down, like a triangle wave.", use_case: "Generate a classic triangle-shaped modulation sequence." },
+            { category: "Multi-Output", mode: 32, name: "Sequencer (DOWN/UP)", inputs: {x: "Clock", y: "Reset Gate", z: "CV Range"}, outputs: {a: "CV Out", b: "Gate Out"}, desc: "A 14-step sequencer that plays down and then up, like an inverted triangle.", use_case: "Generate an inverted triangle modulation sequence." },
+            { category: "Multi-Output", mode: 33, name: "Sequencer (INWARD)", inputs: {x: "Clock", y: "Reset Gate", z: "CV Range"}, outputs: {a: "CV Out", b: "Gate Out"}, desc: "An 8-step sequencer that alternates from the outer steps toward the middle (7,0,6,1...).", use_case: "Create unusual, converging melodic or modulation patterns." },
+            { category: "Multi-Output", mode: 34, name: "Sequencer (OUTWARD)", inputs: {x: "Clock", y: "Reset Gate", z: "CV Range"}, outputs: {a: "CV Out", b: "Gate Out"}, desc: "An 8-step sequencer that alternates from the middle steps toward the ends (3,4,2,5...).", use_case: "Create unusual, diverging melodic or modulation patterns." },
+            { category: "Multi-Output", mode: 35, name: "Stepped Pendulum", inputs: {x: "Clock In", y: "Min CV", z: "Max CV", w: "Steps CV"}, outputs: {a: "Pendulum CV", b: "EOC Gate"}, desc: "A clocked, stepped LFO that swings between two voltage levels. The number of steps is voltage-controlled.", use_case: "Create organic, non-linear filter sweeps. The analogy is a person walking in a room where you can move the walls." },
+        ];
+
+        const modeList = document.getElementById('modeList');
+        const contentDisplay = document.getElementById('contentDisplay');
+        const searchInput = document.getElementById('searchInput');
+
+        function renderMode(mode) {
+            let inputsHtml = '<h3>Inputs</h3><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b"><th class="text-left p-2">Port</th><th class="text-left p-2">Function</th></tr></thead><tbody>';
+            if (mode.inputs) {
+                if (mode.inputs.x) inputsHtml += `<tr><td class="p-2"><code>Input X (1)</code></td><td class="p-2">${mode.inputs.x}</td></tr>`;
+                if (mode.inputs.y) inputsHtml += `<tr><td class="p-2"><code>Input Y (2)</code></td><td class="p-2">${mode.inputs.y}</td></tr>`;
+                if (mode.inputs.z) inputsHtml += `<tr><td class="p-2"><code>Input Z (3)</code></td><td class="p-2">${mode.inputs.z}</td></tr>`;
+                if (mode.inputs.w) inputsHtml += `<tr><td class="p-2"><code>Input W (4)</code></td><td class="p-2">${mode.inputs.w}</td></tr>`;
+            } else {
+                 inputsHtml += `<tr><td class="p-2 text-slate-500" colspan="2">No inputs required.</td></tr>`;
+            }
+            inputsHtml += '</tbody></table></div>';
+            
+            let outputsHtml = '<h3>Outputs</h3><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b"><th class="text-left p-2">Port</th><th class="text-left p-2">Function</th></tr></thead><tbody>';
+             if (mode.outputs) {
+                if (mode.output) { // Single output
+                    outputsHtml += `<tr><td class="p-2"><code>Output A (1)</code></td><td class="p-2">${mode.output}</td></tr>`;
+                } else { // Multi-output
+                    if (mode.outputs.a) outputsHtml += `<tr><td class="p-2"><code>Output A (1)</code></td><td class="p-2">${mode.outputs.a}</td></tr>`;
+                    if (mode.outputs.b) outputsHtml += `<tr><td class="p-2"><code>Output B (2)</code></td><td class="p-2">${mode.outputs.b}</td></tr>`;
+                    if (mode.outputs.c) outputsHtml += `<tr><td class="p-2"><code>Output C (3)</code></td><td class="p-2">${mode.outputs.c}</td></tr>`;
+                    if (mode.outputs.d) outputsHtml += `<tr><td class="p-2"><code>Output D (4)</code></td><td class="p-2">${mode.outputs.d}</td></tr>`;
+                }
+            } else {
+                 outputsHtml += `<tr><td class="p-2 text-slate-500" colspan="2">No dedicated outputs.</td></tr>`;
+            }
+
+            outputsHtml += '</tbody></table></div>';
+
+            contentDisplay.innerHTML = `
+                <h2 class="text-3xl font-bold mb-2 text-slate-900">${mode.name}</h2>
+                <p class="text-slate-600 mb-6">${mode.desc}</p>
+                ${inputsHtml}
+                ${outputsHtml}
+                <h3>Example Use Case</h3>
+                <p>${mode.use_case}</p>
+            `;
+        }
+
+        function renderList(filter = '') {
+            modeList.innerHTML = '';
+            const groupedModes = toolboxData.reduce((acc, mode) => {
+                if (!acc[mode.category]) {
+                    acc[mode.category] = [];
+                }
+                acc[mode.category].push(mode);
+                return acc;
+            }, {});
+
+            const searchTerm = filter.toLowerCase();
+
+            for (const category in groupedModes) {
+                const filteredModes = groupedModes[category].filter(mode => mode.name.toLowerCase().includes(searchTerm) || mode.category.toLowerCase().includes(searchTerm));
+
+                if (filteredModes.length > 0) {
+                    const categoryHeader = document.createElement('h3');
+                    categoryHeader.className = 'text-sm font-semibold text-slate-500 uppercase mt-4 mb-2 px-2';
+                    categoryHeader.textContent = category;
+                    modeList.appendChild(categoryHeader);
+
+                    filteredModes.forEach(mode => {
+                        const item = document.createElement('a');
+                        item.href = '#';
+                        item.textContent = mode.name;
+                        item.className = 'block p-2 rounded-lg hover:bg-amber-100 transition-colors mode-item';
+                        item.dataset.modeId = mode.mode;
+                        item.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            document.querySelectorAll('.mode-item').forEach(el => el.classList.remove('active'));
+                            item.classList.add('active');
+                            renderMode(mode);
+                        });
+                        modeList.appendChild(item);
+                    });
+                }
+            }
+        }
+        
+        searchInput.addEventListener('input', (e) => {
+            renderList(e.target.value);
+        });
+
+        renderList();
+    </script>
+</body>
+</html>
