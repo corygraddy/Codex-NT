@@ -1,0 +1,116 @@
+Project Brief: Generative Harmony & Rhythm Engine (codename: compositionMatrix)
+This is a custom C++ plugin for the Expert Sleepers Disting NT Eurorack module.
+
+## I. Project Overview
+
+The goal is to create a powerful, 8-voice generative music engine for live performance. The user discovers and captures looping patterns ("seeds") from a chaotic, evolving source. These captured patterns, along with their associated performance settings, can then be arranged into a full song structure. The engine is built on a deterministic, seed-based system, making all generated music repeatable.
+
+## II. Core Workflow & UI
+
+The workflow is a multi-stage, non-destructive process for creating and managing patterns.
+
+Explore Mode: On an empty slot, the engine automatically auditions a new, looping pattern every 4 bars. All performance parameters are live and editable. New sessions inherit settings from the previously played pattern.
+
+Refine Mode: The user pushes an encoder to freeze the current melodic/rhythmic pattern. The core notes and gates are locked, but all Performance Macro Parameters (Chaos, Density, Velocity, etc.) remain live for tweaking and sculpting the pattern's feel.
+
+Save Action: A second encoder push saves the frozen pattern seed and the current state of all performance parameters to one of 100 pattern slots.
+
+Duplicate Function: Allows a saved pattern and its settings to be copied to a new slot for creating variations (e.g., a verse and a chorus with different dynamics).
+
+Cancel Action: A different encoder push discards changes and returns to the previous state.
+
+## III. Musical Generation Engine
+
+Voicing & Polyphony (Global Setting):
+
+A global parameter controls which voices are active: Lead Only, Lead+Bass, Lead+Support, All Voices, and Supporting Voices only (Headless Mode).
+
+The engine calculates all 8 voices in the background; this setting only affects the outputs.
+
+Voice Roles: 1 Lead Voice, 1 Bass Voice (slower, lower octave), up to 3 Supporting Voices.
+
+Harmony Engine:
+
+Global Key, Scale, and Mode settings.
+
+Chord Extension parameter adds harmonic complexity (Triad, 7th, 9th, etc.) to the note pool for supporting voices.
+
+Supporting voices cycle through a shuffled but deterministic order of the available chord tones.
+
+Rhythm & Dynamics:
+
+Gate Patterns: Generated from the seed and captured with the pattern.
+
+Density: Separate probability controls for Lead, Bass, and Support voices.
+
+Probabilistic Gate Length: A macro that moves between uniform staccato, chaotic variation, and uniform legato.
+
+Velocity Logic: A Base Velocity parameter sets the core dynamic level. A Velocity Dynamics macro controls the range of random deviation around that base value.
+
+Octave Control: Separate Spread and Offset parameters for the Lead, Bass, and Supporting voice groups.
+
+Chaos Engine: Three separate parameters for Velocity Chaos, Gate Chaos, and Note Chaos introduce deterministic "accidents" (random overrides) that are saved with the pattern.
+
+## IV. Performance Song Mode
+
+A 50-slot arranger for sequencing captured patterns.
+
+Per-Step Settings: Each step in the song stores the Pattern ID, Repeat Count, and the desired voicing structure for that step.
+
+Workflow: Features Insert and Delete functions and a "Live Audition Slot" at the end of the sequence that loops indefinitely for iterative jamming.
+
+UI: A unified screen shows the song list and a "What's Coming Next" performance view, displaying the current, next, and following patterns with their full harmonic context.
+
+## V. Output Architecture
+
+All generated voices must output their note and gate information on both CV and MIDI simultaneously.
+
+VI. Development Plan & Testing Strategy
+Development will proceed in phases with integrated logging for verification.
+
+## Logging Functionality
+A logMessage(string) function will be created in C++. It will append a timestamped message to an engine_log.txt file on the Disting NT's SD card for debugging and regression testing.
+
+## Base Prototype (MVP)
+
+Features: Single Voice (Pitch/Gate) output. Basic generative engine (clocked shift register). Hard-coded scale. Simple freeze logic via CV input.
+
+Goal: Validate the core generative loop before adding complexity.
+
+## Phased Rollout & Testing
+
+Phase 1: UI & Pattern Management
+
+Features: Implement the Explore -> Refine -> Save -> Duplicate workflow and data persistence (serialize()/deserialize()).
+
+Testing: Verify patterns can be captured, saved, and reloaded correctly after a power cycle by checking the log file.
+
+Phase 2: Polyphony & Harmonic Engine
+
+Features: Add all voices, global voicing controls, and harmonic parameters.
+
+Testing: Set a specific key/mode (e.g., C Major/Ionian). Verification: The log file must confirm that supporting voices only output CV/notes corresponding to the C Major triad. Test "Headless" mode.
+
+Phase 3: Rhythmic & Dynamic Control
+
+Features: Implement Density, Probabilistic Gate Length, and Velocity Dynamics macros.
+
+Testing: Use the log file. Verification: At 0% Gate Length, all gates must be short. At 0% Velocity Dynamics, all logged velocities must be identical to the Base Velocity.
+
+Phase 4: Song Mode
+
+Features: Implement the unified Song Page, arrangement functions, and the "Live Audition" workflow.
+
+Testing: Build a 3-step song. Verification: Does it play in order, respect repeat counts, and loop the final pattern correctly?
+
+## Technical Stack
+
+Language: C++
+
+Target: Expert Sleepers Disting NT (ARM processor)
+
+IDE: VS Code on macOS
+
+Compiler: arm-none-eabi-gcc toolchain via Homebrew.
+
+API: Official distingNT_API from GitHub.
