@@ -25,7 +25,7 @@ TARGET_ARCH := arm-none-eabi-
 
 # Compiler and flags.
 CXX := $(TARGET_ARCH)c++
-CXXFLAGS := -std=gnu++11 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -fno-rtti -fno-exceptions -Os -fPIC -Wall
+CXXFLAGS := -std=c++11 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -fno-exceptions -Os -fPIC -Wall
 
 # --- Build Rules ---
 
