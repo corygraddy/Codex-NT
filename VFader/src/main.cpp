@@ -143,8 +143,6 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
     initPages();
     alg->parameters = parameters;
     alg->parameterPages = &pages;
-    // notify host of parameter definition changes for named faders
-    for (int i = 0; i < 64; ++i) NT_updateParameterDefinition(NT_algorithmIndex(alg), kParamFaderBase + i);
     return alg;
 }
 
@@ -269,7 +267,7 @@ bool draw(_NT_algorithm* self) {
             }
         }
     }
-    return true;
+    return true; // keep suppressing default header; change to false if needed in next step
 }
 
 uint32_t hasCustomUi(_NT_algorithm* self) { (void)self; return 0; }
