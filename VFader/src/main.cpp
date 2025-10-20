@@ -212,11 +212,14 @@ bool draw(_NT_algorithm* self) {
     int msbCC = sel;
     int lsbCC = (sel <= 32) ? (31 + sel) : (63 + sel);
     int chDisp = (int)clampU8(self->v[kParamMidiChannel], 1, 16);
-    char header[64];
+    char header[96];
     int off = 0;
     off += snprintf(header + off, (size_t)(sizeof(header) - off), "F%02d  CC %d/", sel, msbCC);
     off += snprintf(header + off, (size_t)(sizeof(header) - off), "%d  Ch ", lsbCC);
-    snprintf(header + off, (size_t)(sizeof(header) - off), "%d", chDisp);
+    off += snprintf(header + off, (size_t)(sizeof(header) - off), "%d", chDisp);
+    // diagnostics: queue size and budget
+    uint8_t qSize = (uint8_t)((a->qTail - a->qHead) & 63);
+    off += snprintf(header + off, (size_t)(sizeof(header) - off), "  qS %u b %u", (unsigned)qSize, (unsigned)a->sendBudgetPerStep);
     NT_drawText(8, 8, header);
 
     // page indicators: draw shorter boxes
