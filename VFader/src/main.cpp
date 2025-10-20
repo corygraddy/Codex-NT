@@ -14,23 +14,18 @@ struct VFader : public _NT_algorithm {
     bool uiActive = false; // true only while algorithm UI is being drawn
     uint8_t uiActiveTicks = 0; // small countdown after draw to absorb immediate UI events
 
-    // change tracking and throttled MIDI queue
+    // change tracking (kept for UI display)
     float last[64] = {0};
     bool everSet[64] = {false};
-    bool queued[64] = {false};
-    uint8_t queue[64] = {0};
-    uint8_t qHead = 0, qTail = 0; // circular queue of 1..64 fader indices
 
-    // config
-    uint8_t sendBudgetPerStep = 8; // CC pairs per step
+    // config (budget retained as a parameter/display only)
+    uint8_t sendBudgetPerStep = 8; // display only in minimal mode
     // pot throttling
     float potLast[3] = { -1.0f, -1.0f, -1.0f };
     uint32_t potLastStep[3] = { 0, 0, 0 };
     uint8_t minStepsBetweenPotWrites = 2;
-    // rate limit for enqueues per fader
+    // step counter retained for potential future use
     uint32_t stepCounter = 0;
-    uint32_t lastEnqueueStep[64] = {0};
-    uint8_t minStepsBetweenEnqueues = 3; // only enqueue a given fader once per N steps
 };
 
 // parameters
@@ -106,21 +101,7 @@ static void initPages() {
 static inline uint8_t clampU8(int v, int lo, int hi) { return (uint8_t)(v < lo ? lo : v > hi ? hi : v); }
 static inline int faderIndex(uint8_t page, uint8_t col) { return (page - 1) * 8 + col; } // 1..64
 
-static void enqueue(VFader* a, uint8_t idx1based) {
-    uint8_t bit = (uint8_t)(idx1based - 1);
-    if (a->queued[bit]) return; // already queued
-    // check full (next tail equals head)
-    uint8_t nextTail = (uint8_t)((a->qTail + 1) & 63);
-    if (nextTail == a->qHead) {
-        // drop oldest to make room
-        uint8_t old = a->queue[a->qHead];
-        if (old >= 1 && old <= 64) a->queued[old - 1] = false;
-        a->qHead = (uint8_t)((a->qHead + 1) & 63);
-    }
-    a->queue[a->qTail] = idx1based;
-    a->qTail = nextTail;
-    a->queued[bit] = true;
-}
+// queue removed in minimal mode
 
 static inline uint32_t destMaskFromParam(int destParamVal) {
     switch (destParamVal) {
@@ -170,35 +151,10 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     (void)busFrames; (void)numFramesBy4;
     VFader* a = (VFader*)self;
-    // advance step counter
+    // advance step counter and keep minimal uiActive ticking
     a->stepCounter++;
-    // tick down UI active window; draw() will refresh it
-    if (a->uiActiveTicks > 0) {
-        a->uiActive = true;
-        --a->uiActiveTicks;
-    } else {
-        a->uiActive = false;
-    }
-
-    // drain queue (budgeted)
-    uint8_t ch = (uint8_t)clampU8(self->v[kParamMidiChannel], 1, 16);
-    uint32_t destMask = destMaskFromParam((int)self->v[kParamMidiDest]);
-    bool highFirst = (self->v[kParamCCOrder] < 0.5f);
-    uint8_t budget = (uint8_t)clampU8((int)self->v[kParamSendBudget], 1, 8);
-    a->sendBudgetPerStep = budget;
-    // per-step de-dupe mask to avoid resending same fader within the same step
-    bool sentThisStep[64] = {false};
-    while (budget && a->qHead != a->qTail) {
-        uint8_t idx1 = a->queue[a->qHead];
-        a->qHead = (uint8_t)((a->qHead + 1) & 63);
-        if (idx1 >= 1 && idx1 <= 64) a->queued[idx1 - 1] = false;
-        if (idx1 >= 1 && idx1 <= 64 && !sentThisStep[idx1 - 1]) {
-            sentThisStep[idx1 - 1] = true;
-            float v = a->last[idx1 - 1];
-            sendCCPair(destMask, ch, idx1, v, highFirst);
-            --budget;
-        }
-    }
+    if (a->uiActiveTicks > 0) { a->uiActive = true; --a->uiActiveTicks; }
+    else { a->uiActive = false; }
 }
 
 bool draw(_NT_algorithm* self) {
@@ -217,9 +173,8 @@ bool draw(_NT_algorithm* self) {
     off += snprintf(header + off, (size_t)(sizeof(header) - off), "F%02d  CC %d/", sel, msbCC);
     off += snprintf(header + off, (size_t)(sizeof(header) - off), "%d  Ch ", lsbCC);
     off += snprintf(header + off, (size_t)(sizeof(header) - off), "%d", chDisp);
-    // diagnostics: queue size and budget
-    uint8_t qSize = (uint8_t)((a->qTail - a->qHead) & 63);
-    off += snprintf(header + off, (size_t)(sizeof(header) - off), "  qS %u b %u", (unsigned)qSize, (unsigned)a->sendBudgetPerStep);
+    // diagnostics: queue size and budget (qS forced 0 in minimal mode)
+    off += snprintf(header + off, (size_t)(sizeof(header) - off), "  qS %u b %u", 0u, (unsigned)a->sendBudgetPerStep);
     NT_drawText(8, 8, header);
 
     // page indicators: draw shorter boxes
@@ -317,124 +272,11 @@ bool draw(_NT_algorithm* self) {
     return true;
 }
 
-uint32_t hasCustomUi(_NT_algorithm* self) {
-    (void)self;
-    // Always advertise which controls we override. Per API, this enables setupUi() to be called
-    // when our algorithm display appears, and avoids deadlocks where customUi() never engages.
-    return (uint32_t)(kNT_encoderL | kNT_encoderR | kNT_potL | kNT_potC | kNT_potR);
-}
+uint32_t hasCustomUi(_NT_algorithm* self) { (void)self; return 0; }
 
-void customUi(_NT_algorithm* self, const _NT_uiData& data) {
-    VFader* a = (VFader*)self;
-    // Only handle controls when our GUI is active
-    if (!a->uiActive) return;
-    // encoders
-    if (data.encoders[0]) { // left encoder: page
-        int delta = data.encoders[0];
-        if (delta > 8) delta = 8; else if (delta < -8) delta = -8; // cap
-        int p = a->page;
-        if (delta > 0) {
-            while (delta--) { ++p; if (p > 8) p = 1; }
-        } else if (delta < 0) {
-            while (delta++) { --p; if (p < 1) p = 8; }
-        }
-        a->page = (uint8_t)p;
-        // keep selection aligned within page
-        int localIdx = ((a->sel - 1) % 8) + 1;
-        a->sel = (uint8_t)faderIndex(a->page, localIdx);
-    }
-    if (data.encoders[1]) { // right encoder: column within page
-        int localIdx = ((a->sel - 1) % 8) + 1;
-        int delta = data.encoders[1];
-        if (delta > 8) delta = 8; else if (delta < -8) delta = -8; // cap
-        // avoid negative modulo: wrap manually
-        if (delta > 0) {
-            while (delta--) { ++localIdx; if (localIdx > 8) localIdx = 1; }
-        } else if (delta < 0) {
-            while (delta++) { --localIdx; if (localIdx < 1) localIdx = 8; }
-        }
-        a->sel = (uint8_t)faderIndex(a->page, localIdx);
-    }
+void customUi(_NT_algorithm* self, const _NT_uiData& data) { (void)self; (void)data; }
 
-    // pots: write directly to parameters (0..1 mapped by scaling1000)
-    auto setParam01 = [&](int paramIndex, float value01){
-        int16_t scaled = (int16_t)(value01 * 1000.0f + 0.5f);
-        // avoid redundant writes if value unchanged
-        int16_t cur = self->v[paramIndex];
-        if (cur != scaled) {
-            NT_setParameterFromUi(NT_algorithmIndex(self), paramIndex + NT_parameterOffset(), scaled);
-        }
-    };
-
-    int base = kParamFaderBase - 0;
-    int localSel = ((a->sel - 1) % 8) + 1;
-    // Default neighbor mapping
-    int colL = localSel - 1;
-    int colC = localSel;
-    int colR = localSel + 1;
-    bool enableL = (colL >= 1);
-    bool enableC = true;
-    bool enableR = (colR <= 8);
-    // Edge rules per user request
-    if (localSel == 1) { enableL = false; colL = 1; }
-    if (localSel == 8) { enableR = false; colR = 8; }
-
-    if (a->uiActive && (data.controls & kNT_potL) && enableL) {
-        int idx = faderIndex(a->page, colL);
-        float v = data.pots[0];
-        uint32_t elapsed = a->stepCounter - a->potLastStep[0];
-    if ((a->potLast[0] < 0.0f || std::fabs(v - a->potLast[0]) >= 0.005f) && (elapsed >= a->minStepsBetweenPotWrites)) {
-            setParam01(base + (idx - 1), v);
-            a->potLast[0] = v;
-            a->potLastStep[0] = a->stepCounter;
-        }
-    }
-    if (a->uiActive && (data.controls & kNT_potC) && enableC) {
-        int idx = faderIndex(a->page, colC);
-        float v = data.pots[1];
-        uint32_t elapsed = a->stepCounter - a->potLastStep[1];
-    if ((a->potLast[1] < 0.0f || std::fabs(v - a->potLast[1]) >= 0.005f) && (elapsed >= a->minStepsBetweenPotWrites)) {
-            setParam01(base + (idx - 1), v);
-            a->potLast[1] = v;
-            a->potLastStep[1] = a->stepCounter;
-        }
-    }
-    if (a->uiActive && (data.controls & kNT_potR) && enableR) {
-        int idx = faderIndex(a->page, colR);
-        float v = data.pots[2];
-        uint32_t elapsed = a->stepCounter - a->potLastStep[2];
-    if ((a->potLast[2] < 0.0f || std::fabs(v - a->potLast[2]) >= 0.005f) && (elapsed >= a->minStepsBetweenPotWrites)) {
-            setParam01(base + (idx - 1), v);
-            a->potLast[2] = v;
-            a->potLastStep[2] = a->stepCounter;
-        }
-    }
-}
-
-void setupUi(_NT_algorithm* self, _NT_float3& pots) {
-    VFader* a = (VFader*)self;
-        // Mark UI as active and give a grace window so hasCustomUi() engages immediately
-        a->uiActive = true;
-        a->uiActiveTicks = 8;
-    int localSel = ((a->sel - 1) % 8) + 1;
-    int colL = localSel - 1;
-    int colC = localSel;
-    int colR = localSel + 1;
-    bool enableL = (colL >= 1);
-    bool enableC = true;
-    bool enableR = (colR <= 8);
-    if (localSel == 1) { colL = 1; colC = 2; enableL = true; enableR = false; }
-    else if (localSel == 8) { colC = 7; colR = 8; enableL = false; enableR = true; }
-    auto val01 = [&](int col){
-        int idx = faderIndex(a->page, col);
-        float v = self->v[kParamFaderBase + (idx - 1)] * 0.001f;
-        if (v < 0) v = 0; else if (v > 1) v = 1;
-        return v;
-    };
-        if (enableL) { pots[0] = val01(colL); a->potLast[0] = pots[0]; } else { a->potLast[0] = -1.0f; }
-        if (enableC) { pots[1] = val01(colC); a->potLast[1] = pots[1]; } else { a->potLast[1] = -1.0f; }
-        if (enableR) { pots[2] = val01(colR); a->potLast[2] = pots[2]; } else { a->potLast[2] = -1.0f; }
-}
+void setupUi(_NT_algorithm* self, _NT_float3& pots) { (void)self; pots[0]=pots[1]=pots[2]=0.0f; }
 
 void parameterChanged(_NT_algorithm* self, int p) {
     VFader* a = (VFader*)self;
@@ -442,21 +284,13 @@ void parameterChanged(_NT_algorithm* self, int p) {
         int i = p - kParamFaderBase; // 0..63
         float v = self->v[p] * 0.001f;
         if (v < 0) v = 0; else if (v > 1) v = 1;
-        // enqueue only if changed by at least 1 step of 1000-scale
-        if (!a->everSet[i] || v != a->last[i]) {
-            // rate-limit: only enqueue if enough steps elapsed since last enqueue for this fader
-            if (a->everSet[i]) {
-                uint32_t elapsed = a->stepCounter - a->lastEnqueueStep[i];
-                if (elapsed < a->minStepsBetweenEnqueues) {
-                    a->last[i] = v; // update cached value but skip enqueue
-                    return;
-                }
-            }
-            a->last[i] = v;
-            a->everSet[i] = true;
-            enqueue(a, (uint8_t)(i + 1));
-            a->lastEnqueueStep[i] = a->stepCounter;
-        }
+        // directly send MIDI CC pair immediately (minimal mode)
+        a->last[i] = v;
+        a->everSet[i] = true;
+        uint8_t ch = (uint8_t)clampU8(self->v[kParamMidiChannel], 1, 16);
+        uint32_t destMask = destMaskFromParam((int)self->v[kParamMidiDest]);
+        bool highFirst = (self->v[kParamCCOrder] < 0.5f);
+        sendCCPair(destMask, ch, (uint8_t)(i + 1), v, highFirst);
     }
 }
 
