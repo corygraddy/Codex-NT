@@ -1,0 +1,4103 @@
+I added a complete working example plug-in to the repo. (edited)Friday, February 7, 2025 at 7:02 AM
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+Nate — 2/7/25, 11:50 AMFriday, February 7, 2025 at 11:50 AM
+
+Very exciting! It's very "c" for a c++ api :). Are there any plans to have an API to access samples on the sd card?
+
+os — 2/7/25, 11:54 AMFriday, February 7, 2025 at 11:54 AM
+
+That would be a long way down the line, if it happens at all.
+
+[11:58 AM]Friday, February 7, 2025 at 11:58 AM
+
+Can you give some examples of when and how you'd use that?
+
+Nate — 2/7/25, 12:12 PMFriday, February 7, 2025 at 12:12 PM
+
+Any sort of sample-playing plugin, for example, one that implements tempo-synced time stretching (phase vocoder based). Or a binaurlization plugin that can access (head-related) impulse response data... I suppose the latter could be baked into the binary.
+
+1
+
+AgentTerror — 2/7/25, 12:32 PMFriday, February 7, 2025 at 12:32 PM
+
+would that mean no access to the SD card at all, including loading other resources (font, sprite, etc.)? not sure if that "no" was a matter of keeping the card contents protected and sane, but could it be sandboxed such that we could only read/write to a ./resources subfolder of the plugins folder? So the algorithm would own it's own resources?
+
+os — 2/7/25, 12:39 PMFriday, February 7, 2025 at 12:39 PM
+
+At the moment the API is very much focussed on the DSP code that goes on within an algorithm. There's no other system access at all. So you have your parameters, your input & output busses, some memory, and that's your lot.
+
+[12:40 PM]Friday, February 7, 2025 at 12:40 PM
+
+I may expose the sample streaming interface at some point.
+
+[12:40 PM]Friday, February 7, 2025 at 12:40 PM
+
+But no plans to expose the file system in a more general way.
+
+1
+
+@AgentTerror
+
+would that mean no access to the SD card at all, including loading other resources (font, sprite, etc.)?  not sure if that "no" was a matter of keeping the card contents protected and sane, but could it be sandboxed such that we could only read/write to a ./resources subfolder of the plugins folder?  So the algorithm would own it's own resources?
+
+os — 2/7/25, 2:37 PMFriday, February 7, 2025 at 2:37 PM
+
+I'm curious about what you had in mind that would need this stuff.
+
+AgentTerror — 2/7/25, 2:52 PMFriday, February 7, 2025 at 2:52 PM
+
+I personally have no immediate need of it, I've got my hands full with the lua stuff at the moment... just kinda thinking out loud and feeling out what might be possible in the future. But I would think in general it would be handy for the user (and/or creator) of a plugin to be able to create, save, and recall data for an algorithm. Somewhat analogous to presets in a VST... you might have pre-defined envelope values you like for a snappy envelope, and want to recall that.... or you might want to make an algorithm that lets the user draw a single-cycle waveform they can recall and use later, stuff like that.
+
+os — 2/7/25, 3:00 PMFriday, February 7, 2025 at 3:00 PM
+
+I'll bear it in mind. My immediate thought is that I would prefer that to be a binary blob that's stored with the algorithm in the preset, rather than proliferating various kinds of files on the SD card. (edited)Friday, February 7, 2025 at 3:00 PM
+
+AgentTerror — 2/7/25, 3:10 PMFriday, February 7, 2025 at 3:10 PM
+
+Sure, I can understand being uneasy about opening up the file system to amateurs to do whatever their own brand of file management is However, just to be devil's advocate tho, that would mean you forgo the possibility of adding new content into your algorithm, right? I guess what I was thinking was maybe a handful of methods that would list files in the algo's sandbox, and the ability to create/request file handles or streams or something for files in that sandbox... But I've only thought about it for like 10 mins so there is that.
+
+February 17, 2025
+
+vijaymarupudi — 2/17/25, 9:47 AMMonday, February 17, 2025 at 9:47 AM
+
+One use case I have for accessing files is a data sonification algo for stepped CV by choosing a file (for example a CSV) as input. Would need to handle text differently from binary, but definitely needs access to files
+
+thorinside — 2/17/25, 9:52 AMMonday, February 17, 2025 at 9:52 AM
+
+@os Tried the new toolchain, and maybe this requires a new firmware beta, but the greyhole plugin vanishes after installing the .o built with the latest github bits.
+
+@thorinside
+
+@os Tried the new toolchain, and maybe this requires a new firmware beta, but the greyhole plugin vanishes after installing the .o built with the latest github bits.
+
+os — 2/17/25, 10:37 AMMonday, February 17, 2025 at 10:37 AM
+
+I don't recall changing anything that would cause that, but probably best to wait for another beta before we get too worried. (edited)Monday, February 17, 2025 at 10:37 AM
+
+1
+
+os — 2/17/25, 2:32 PMMonday, February 17, 2025 at 2:32 PM
+
+@thorinside can you give me your .o file? Curious to see why it needs memset (and mine doesn't).
+
+thorinside — 2/17/25, 2:33 PMMonday, February 17, 2025 at 2:33 PM
+
+greyhole.o
+
+22.93 KB
+
+Download
+
+os — 2/17/25, 2:35 PMMonday, February 17, 2025 at 2:35 PM
+
+Interesting. Which version of arm-none-eabi-c++ are you using?
+
+[2:35 PM]Monday, February 17, 2025 at 2:35 PM
+
+arm-none-eabi-c++ --version
+
+thorinside — 2/17/25, 2:38 PMMonday, February 17, 2025 at 2:38 PM
+
+arm-none-eabi-c++ (GNU Arm Embedded Toolchain 10.3-2021.10) 10.3.1 20210824 (release) Copyright (C) 2020 Free Software Foundation, Inc. This is free software; see the source for copying conditions. There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+os — 2/17/25, 2:38 PMMonday, February 17, 2025 at 2:38 PM
+
+Ok I have a really old one it seems!
+
+os — 2/17/25, 2:46 PMMonday, February 17, 2025 at 2:46 PM
+
+And yours isn't current either. How did you install it?
+
+thorinside — 2/17/25, 2:46 PMMonday, February 17, 2025 at 2:46 PM
+
+Mine got installed with DaisyToolchain 0.2.0 which I installed last year sometime to do Daisy firmware development.
+
+os — 2/17/25, 2:46 PMMonday, February 17, 2025 at 2:46 PM
+
+Ah.
+
+thorinside — 2/17/25, 2:46 PMMonday, February 17, 2025 at 2:46 PM
+
+I'd be willing to upgrade it to be at the same version as you.
+
+os — 2/17/25, 2:47 PMMonday, February 17, 2025 at 2:47 PM
+
+I have a bit of a mess, as the main firmware is built with the version included with MCU-xpresso, but I also have that really old homebrew version kicking about.
+
+thorinside — 2/17/25, 2:47 PMMonday, February 17, 2025 at 2:47 PM
+
+My homebrew installs the same version I have, I think.
+
+[2:48 PM]Monday, February 17, 2025 at 2:48 PM
+
+I also have MCU-xpresso, though.
+
+os — 2/17/25, 2:50 PMMonday, February 17, 2025 at 2:50 PM
+
+*** this is a mess.
+
+[2:51 PM]Monday, February 17, 2025 at 2:51 PM
+
+homebrew installs arm-none-eabi-gcc
+
+[2:51 PM]Monday, February 17, 2025 at 2:51 PM
+
+but I also have something called gcc-arm-none-eabi !
+
+[2:51 PM]Monday, February 17, 2025 at 2:51 PM
+
+which homebrew claims to know nothing about (edited)Monday, February 17, 2025 at 2:51 PM
+
+thorinside — 2/17/25, 2:52 PMMonday, February 17, 2025 at 2:52 PM
+
+Yeah, don't be doing something that will break your build pipeline, that'd be a tragedy.
+
+os — 2/17/25, 2:52 PMMonday, February 17, 2025 at 2:52 PM
+
+But that's version 5.4.1 from 2015!
+
+[2:52 PM]Monday, February 17, 2025 at 2:52 PM
+
+I think our old friend rm -rf might be coming out.
+
+thorinside — 2/17/25, 2:53 PMMonday, February 17, 2025 at 2:53 PM
+
+But not rm -rf / okay.
+
+thorinside — 2/17/25, 3:01 PMMonday, February 17, 2025 at 3:01 PM
+
+Alright after installing the latest homebrew version, making sure that version is being found in my path, I have: arm-none-eabi-c++ (GCC) 14.2.0
+
+[3:02 PM]Monday, February 17, 2025 at 3:02 PM
+
+From last year! It feels so new.
+
+[3:04 PM]Monday, February 17, 2025 at 3:04 PM
+
+But, now we've entered new territory, possibly newer C++? 
+
+../faust2distingnt greyhole.dsp plugins/greyhole.o
+plugins/greyhole.o.cpp:11:10: fatal error: algorithm: No such file or directory
+   11 | #include <algorithm>
+      |          ^~~~~~~~~~~
+compilation terminated.
+
+os — 2/17/25, 3:04 PMMonday, February 17, 2025 at 3:04 PM
+
+OK me too.
+
+[3:05 PM]Monday, February 17, 2025 at 3:05 PM
+
+Cripes.
+
+[3:05 PM]Monday, February 17, 2025 at 3:05 PM
+
+gain.cpp:2:10: fatal error: math.h: No such file or directory 2 | #include <math.h> | ^~~~ compilation terminated.
+
+[3:05 PM]Monday, February 17, 2025 at 3:05 PM
+
+This can wait until tomorrow! What a mess.
+
+[3:06 PM]Monday, February 17, 2025 at 3:06 PM
+
+Ideally we'd all be using the same version as the main firmware but that's a pain to get everyone to install.
+
+thorinside — 2/17/25, 3:07 PMMonday, February 17, 2025 at 3:07 PM
+
+Yeah, getting late for you. I'll see if I can make sense of it. Something with header paths probably. Perhaps there's a happy medium where we all install the same homebrew version.
+
+[3:07 PM]Monday, February 17, 2025 at 3:07 PM
+
+Or match the FW build version with the homebrew build version.
+
+os — 2/17/25, 3:08 PMMonday, February 17, 2025 at 3:08 PM
+
+FWIW the MCU-xpresso version is arm-none-eabi-c++ (Arm GNU Toolchain 12.3.Rel1 (Build arm-12.35)) 12.3.1 20230626 Copyright (C) 2022 Free Software Foundation, Inc.
+
+thorinside — 2/17/25, 3:09 PMMonday, February 17, 2025 at 3:09 PM
+
+I'll see if homebrew stocks that version.
+
+os — 2/17/25, 3:09 PMMonday, February 17, 2025 at 3:09 PM
+
+but surely any version should be able to find math.h
+
+thorinside — 2/17/25, 3:09 PMMonday, February 17, 2025 at 3:09 PM
+
+Maybe you were a bit too happy with the rm -rf? It's just not finding your include path I guess.
+
+[3:10 PM]Monday, February 17, 2025 at 3:10 PM
+
+Mine doesn't find the disting NT api, so I probably have the math.h in the right place.
+
+AgentTerror — 2/17/25, 3:19 PMMonday, February 17, 2025 at 3:19 PM
+
+might it make sense to use a container to do the builds, then you could direct everyone to the appropriate one to build with? Looks like this one goes back far enough for your 12.3.1 version: https://hub.docker.com/r/xlemonx/arm-gnu-toolchain
+
+thorinside — 2/17/25, 3:29 PMMonday, February 17, 2025 at 3:29 PM
+
+I'll give that a try. @AgentTerror luckily all I did was change my path, so I still have all of the old stuff. Homebrew doesn't make it easy to install older toolchains that's for sure. I won't bother with that. (edited)Monday, February 17, 2025 at 3:30 PM
+
+thorinside — 2/17/25, 5:22 PMMonday, February 17, 2025 at 5:22 PM
+
+After experimenting for a while, making a Dockerfile that has all of the things installed, and getting a toolchain that has a version of 10.3.1 greyhole.o still won't load, but sawtooth and the dualvcf both do. I'll write up what I did, might be helpful to remember.
+
+thorinside — 2/17/25, 5:30 PMMonday, February 17, 2025 at 5:30 PM
+
+I just downgraded to an older ubuntu docker image, which contained arm-none-eabi-c++ (15:9-2019-q4-0ubuntu1) 9.2.1 20191025 toolchain, and greyhole is now showing up on the module.
+
+[5:33 PM]Monday, February 17, 2025 at 5:33 PM
+
+I put this Dockerfile in an empty directory: 
+
+FROM ubuntu:20.04
+
+# Preconfigure tzdata
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Etc/UTC
+
+# Install required packages
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    gcc-arm-none-eabi \
+    make \
+    cmake \
+    git \
+    python3 \
+    pkg-config
+
+WORKDIR /app
+
+RUN git clone https://github.com/grame-cncm/faust.git
+RUN cd faust && make && make install
+RUN rm -rf faust
+
+CMD ["/bin/bash"]
+
+ then I did a docker build . -t nt_toolchain and then I ran it using docker run -it -v /Users/nealsanche/github/distingNT_API/:/app/api nt_toolchain it opens a shell and I cd /app/api/faust/examples and do make clean && make and it builds the .o files and the NT is happy with them.
+
+1
+
+[5:35 PM]Monday, February 17, 2025 at 5:35 PM
+
+I'm going to try the latest ubuntu images and see if those work, but I suspect they won't.
+
+thorinside — 2/17/25, 5:50 PMMonday, February 17, 2025 at 5:50 PM
+
+Toolchain arm-none-eabi-c++ (15:13.2.rel1-2) 13.2.1 20231009 produces a greyhole.o that doesn't load.
+
+AgentTerror — 2/17/25, 8:37 PMMonday, February 17, 2025 at 8:37 PM
+
+can confirm that I was able to build them with that Dockerfile from my linux (unraid) server, load the plugins, and they seem to work as expected
+
+1
+
+AgentTerror — 2/17/25, 9:55 PMMonday, February 17, 2025 at 9:55 PM
+
+I did just try to compile one of the examples here (the church organ): https://faustdoc.grame.fr/examples/generator/ I had to remove the gate button and the t variable it was being assigned to to get it to compile, because it complained otherwise... the disting doesn't show this plug-in as an option, however. I am not sure if this is even expected to work with this beta yet, but thought I would mention it!
+
+[9:56 PM]Monday, February 17, 2025 at 9:56 PM
+
+Of course, I know nothing about faust yet other than what I see on those example screens... I just liked the sound and wanted to see if I could get it on the disting!
+
+February 18, 2025
+
+os — 2/18/25, 3:45 AMTuesday, February 18, 2025 at 3:45 AM
+
+I found the answer to my issue here: https://stackoverflow.com/questions/77249021/no-stdint-h-in-arm-none-eabi-gccmac TL;DR 
+
+brew install --cask gcc-arm-embedded
+
+Stack Overflow
+
+no "stdint.h" in arm-none-eabi-gcc(mac)
+
+I'm working on a stm32f3 dev board, and met an error /opt/homebrew/Cellar/arm-none-eabi-gcc/13.2.0/lib/gcc/arm-none-eabi/13.2.0/include/stdint.h:9:16: fatal error: stdint.h: No such file or directo...
+
+[3:49 AM]Tuesday, February 18, 2025 at 3:49 AM
+
+As to the faust code not loading, that's because the newer compiler is (quite sensibly) replacing faust's explicit zeroing of arrays into memset() calls, and the NT doesn't currently expose memset, so I just need to add that.
+
+1
+
+@AgentTerror
+
+I did just try to compile one of the examples here (the church organ):  https://faustdoc.grame.fr/examples/generator/  I had to remove the gate button and the t variable it was being assigned to to get it to compile, because it complained otherwise...  the disting doesn't show this plug-in as an option, however.  I am not sure if this is even expected to work with this beta yet, but thought I would mention it!
+
+os — 2/18/25, 4:43 AMTuesday, February 18, 2025 at 4:43 AM
+
+I got the church organ to build. The next beta will support it.
+
+[4:47 AM]Tuesday, February 18, 2025 at 4:47 AM
+
+It's a pretty brute force additive synth!
+
+AgentTerror — 2/18/25, 8:26 AMTuesday, February 18, 2025 at 8:26 AM
+
+excellent, I will give it a try when the next beta drops. Will the button UI element get mapped to an input that takes a gate? Does that even make sense from a faust perspective? Not sure if it has latched buttons as well as momentary like in this example.
+
+os — 2/18/25, 9:01 AMTuesday, February 18, 2025 at 9:01 AM
+
+It'll just become a parameter in the algorithm. You could map that to a CV.
+
+[9:02 AM]Tuesday, February 18, 2025 at 9:02 AM
+
+Faust has a scheme for automagically driving freq and gate parameters from MIDI. I need to look at that, and perhaps also automagically turning them into CV inputs as well/instead.
+
+February 19, 2025
+
+sletz — 2/19/25, 3:33 AMWednesday, February 19, 2025 at 3:33 AM
+
+@os In case it helps, when doing the faust2vcvrack architecture, we had to think about CV and defined this CV metadata: see https://github.com/grame-cncm/faust/tree/master-dev/architecture/vcvrack (edited)Wednesday, February 19, 2025 at 3:39 AM
+
+GitHub
+
+faust/architecture/vcvrack at master-dev · grame-cncm/faust
+
+Functional programming language for signal processing and sound synthesis - grame-cncm/faust
+
+[3:33 AM]Wednesday, February 19, 2025 at 3:33 AM
+
+The architecture file is here: https://github.com/grame-cncm/faust/blob/master-dev/architecture/vcvrack/template/src/FaustModule.cpp (a bit complex for VCV Rack, but some ideas inside could make sense in your use case) (edited)Wednesday, February 19, 2025 at 3:34 AM
+
+GitHub
+
+faust/architecture/vcvrack/template/src/FaustModule.cpp at master-d...
+
+Functional programming language for signal processing and sound synthesis - grame-cncm/faust
+
+@sletz
+
+@os In case it helps, when doing the faust2vcvrack architecture, we had to think about CV and defined this CV metadata: see https://github.com/grame-cncm/faust/tree/master-dev/architecture/vcvrack (edited)Wednesday, February 19, 2025 at 3:39 AM
+
+os — 2/19/25, 3:37 AMWednesday, February 19, 2025 at 3:37 AM
+
+Thanks, I'll definitely pick up on that.
+
+@sletz
+
+@os In case it helps, when doing the faust2vcvrack architecture, we had to think about CV and defined this CV metadata: see https://github.com/grame-cncm/faust/tree/master-dev/architecture/vcvrack (edited)Wednesday, February 19, 2025 at 3:39 AM
+
+os — 2/19/25, 7:23 AMWednesday, February 19, 2025 at 7:23 AM
+
+Looking into this in more detail, I'm not sure it makes sense to support the CV metadata. The usage in on controllers, which run at the control rate. VCV uses a single frame compute() so this kind of makes sense, but the NT does not. On the NT, there's no real reason to provide an actual CV input unless the data is going to be used per-sample. If you want CV control over a control rate parameter, on the NT you do that via the mapping menu, which is completely general - you can control any parameter that way.
+
+[7:25 AM]Wednesday, February 19, 2025 at 7:25 AM
+
+A more general point is that faust programs seem to often have a 'frequency' control, whereas in a modular environment what you want is a 1V/octave CV control. Easy to convert, of course, but I don't know if I should support doing that automatically.
+
+thorinside — 2/19/25, 1:26 PMWednesday, February 19, 2025 at 1:26 PM
+
+@os, can I ask what the correct toolchain version is? I find that the ones I've tried lead to churchOrgan not being available, so I must need to a specific version? Maybe the faust version number would be good to know as well.
+
+@thorinside
+
+@os, can I ask what the correct toolchain version is? I find that the ones I've tried lead to churchOrgan not being available, so I must need to a specific version? Maybe the faust version number would be good to know as well.
+
+os — 2/19/25, 2:11 PMWednesday, February 19, 2025 at 2:11 PM
+
+I'd like to make it so the toolchain doesn't actually matter. Can you send me the one that won't load?
+
+[2:11 PM]Wednesday, February 19, 2025 at 2:11 PM
+
+Is the NT showing any error?
+
+[2:11 PM]Wednesday, February 19, 2025 at 2:11 PM
+
+I did just update the API version so you'll need to rebuild.
+
+thorinside — 2/19/25, 2:54 PMWednesday, February 19, 2025 at 2:54 PM
+
+These are the ones that don't load for me. I've tried three toolchains.
+
+BrassMIDI.o
+
+7.02 KB
+
+Download
+
+churchOrgan.o
+
+14.85 KB
+
+Download
+
+virtualAnalogLab.o
+
+33.97 KB
+
+Download
+
+[2:54 PM]Wednesday, February 19, 2025 at 2:54 PM
+
+@os ^^
+
+os — 2/19/25, 2:55 PMWednesday, February 19, 2025 at 2:55 PM
+
+On it.
+
+[2:55 PM]Wednesday, February 19, 2025 at 2:55 PM
+
+It's not just running out of space, is it? There's a fairly small limit right now.
+
+[2:55 PM]Wednesday, February 19, 2025 at 2:55 PM
+
+Did you try these individually?
+
+thorinside — 2/19/25, 2:55 PMWednesday, February 19, 2025 at 2:55 PM
+
+They just don't appear in the Algorithms list.
+
+[2:56 PM]Wednesday, February 19, 2025 at 2:56 PM
+
+DualFilter is the one I made, with a few small changes.
+
+os — 2/19/25, 2:56 PMWednesday, February 19, 2025 at 2:56 PM
+
+That lot is enough to fill the ram at the moment.
+
+[2:57 PM]Wednesday, February 19, 2025 at 2:57 PM
+
+Try removing the others.
+
+thorinside — 2/19/25, 2:57 PMWednesday, February 19, 2025 at 2:57 PM
+
+Ah, okay, will try that.
+
+[3:00 PM]Wednesday, February 19, 2025 at 3:00 PM
+
+Managed to see an insufficient memory message on the screen while just loading BrassMIDI.o churchOrgam.o and virtualAnalogLab.o. Only BrassMIDI made it into the Algorithms list.
+
+os — 2/19/25, 3:01 PMWednesday, February 19, 2025 at 3:01 PM
+
+There you go then.
+
+[3:01 PM]Wednesday, February 19, 2025 at 3:01 PM
+
+Toolchain is fine.
+
+[3:02 PM]Wednesday, February 19, 2025 at 3:02 PM
+
+Some of those demo programs allocate huge lookup tables for sine(). And of course they all allocate their own, since they know nothing of each other.
+
+[3:02 PM]Wednesday, February 19, 2025 at 3:02 PM
+
+They really need recoding to use a smaller table, or a computed sine().
+
+thorinside — 2/19/25, 3:04 PMWednesday, February 19, 2025 at 3:04 PM
+
+Yeah, churchOrgan loads if it's the only one there. So you're right, it's the limits. I guess you have to instantiate them to load their parameters and metadata. But you could unload them again?
+
+os — 2/19/25, 3:05 PMWednesday, February 19, 2025 at 3:05 PM
+
+I was thinking I could and started off down that road. But it's not so easy, since the algorithm "specs" system requires the ability to have a callable function (to calc the memory) before the object is instantiated.
+
+[3:06 PM]Wednesday, February 19, 2025 at 3:06 PM
+
+I'm sure it's possible but it's more than I wanted to do right now.
+
+[3:06 PM]Wednesday, February 19, 2025 at 3:06 PM
+
+These algorithms are hostile to an embedded system. There's only so much effort I want to put into dealing with that. They should really be rewritten for the target.
+
+thorinside — 2/19/25, 3:09 PMWednesday, February 19, 2025 at 3:09 PM
+
+Yeah, I understand. I suspect people will only want 1 or 2 of these to run at a time, but won't really understand why they don't appear in the algorithm list when they are on the card. Too bad you can't load one, and then nuke it from orbit, and load the next. Some sort of sandbox you can reset.
+
+[3:10 PM]Wednesday, February 19, 2025 at 3:10 PM
+
+(I don't know the hardware side of this at all, though)
+
+
+
+
+
+
+
+Cool! Can't wait to try it.
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+[12:13 PM]Monday, April 7, 2025 at 12:13 PM
+
+I would suggest you make a release in github for the plug-in itself, and mention explicitly which firmware/API version it's built for, since the API stuff is changing quite a bit at the moment.
+
+1
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+@os
+
+I would suggest you make a release in github for the plug-in itself, and mention explicitly which firmware/API version it's built for, since the API stuff is changing quite a bit at the moment.
+
+j4s0n — 4/7/25, 12:39 PMMonday, April 7, 2025 at 12:39 PM
+
+Done. Thanks for the advice.
+
+1
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+@j4s0n
+
+polyGen:   I T ' S  A L I V E! Release: https://github.com/j4s0n-c/disting_NT-things/releases/tag/polyGen_NT Source and readme: https://github.com/j4s0n-c/disting_NT-things#polygen (edited)Monday, April 7, 2025 at 2:58 PM
+
+issey olive — 4/7/25, 9:31 PMMonday, April 7, 2025 at 9:31 PM
+
+I'm so thrilled that I can use "polyGen" here!
+
+1
+
+April 8, 2025
+
+j4s0n — 4/8/25, 12:57 PMTuesday, April 8, 2025 at 12:57 PM
+
+USB from Host, polyGen, USB to Host. Pandora out on 1&2 to speakers and back in to VCV on 1&2, polyGen on 3&4, mixed and displayed on our scope.
+
+Download
+
+@j4s0n
+
+USB from Host, polyGen, USB to Host. Pandora out on 1&2 to speakers and back in to VCV on 1&2, polyGen on 3&4, mixed and displayed on our scope.
+
+thorinside — 4/8/25, 10:21 PMTuesday, April 8, 2025 at 10:21 PM
+
+Very cool. I had a little play with it last night. Sounds cool. It might be nice to have the pots and encoders control the parameters. Since you added that nice screen with the view of the polygon, I started fiddling with the knobs right away. Pot 3 kinda works if it's on a parameter already. But it would be way more fun if we could control it without menu diving.
+
+1
+
+@thorinside
+
+Very cool. I had a little play with it last night. Sounds cool. It might be nice to have the pots and encoders control the parameters. Since you added that nice screen with the view of the polygon, I started fiddling with the knobs right away. Pot 3 kinda works if it's on a parameter already. But it would be way more fun if we could control it without menu diving.
+
+j4s0n — 4/8/25, 10:57 PMTuesday, April 8, 2025 at 10:57 PM
+
+I have a MIDI Fighter Twister mapped to all the parameters via FH-2. You can turn the top bar back on in the settings so you can see what parameter pot 3 will control. We could maybe add a little config menu to choose 3 favorite parameters and auto map those to the pots when in “fullscreen” mode?
+
+April 9, 2025
+
+@j4s0n
+
+I have a MIDI Fighter Twister mapped to all the parameters via FH-2. You can turn the top bar back on in the settings so you can see what parameter pot 3 will control. We could maybe add a little config menu to choose 3 favorite parameters and auto map those to the pots when in “fullscreen” mode?
+
+thorinside — 4/9/25, 8:58 AMWednesday, April 9, 2025 at 8:58 AM
+
+That'd be fun.
+
+April 11, 2025
+
+Nate — 4/11/25, 1:16 PMFriday, April 11, 2025 at 1:16 PM
+
+Do I understand correctly that there is no way to implement custom UI in plugins? For example, if I wanted of override what the pots/encoders are doing in the UI screen? The lua UI scripts achieve this (from what I understand), but there is no way to update the internal state of the plugin without exposing a parameter. Related question - would it be possible to know which paramter is selected? I could then update my UI to show which paramter has focus..
+
+April 12, 2025
+
+@Nate
+
+Do I understand correctly that there is no way to implement custom UI in plugins? For example, if I wanted of override what the pots/encoders are doing in the UI screen?  The lua UI scripts achieve this (from what I understand), but there is no way to update the internal state of the plugin without exposing a parameter. Related question - would it be possible to know which paramter is selected? I could then update my UI to show which paramter has focus..
+
+os — 4/12/25, 4:07 AMSaturday, April 12, 2025 at 4:07 AM
+
+Correct, the API doesn't currently expose a means to override the UI in the way that the Lua algorithms do. Parameters are encouraged as the way to manage state, even if you do override the UI, since it allows users to map them to CV, MIDI etc.
+
+1
+
+April 14, 2025
+
+Nate — 4/14/25, 5:09 PMMonday, April 14, 2025 at 5:09 PM
+
+Okay, another questions about the API. What would be the best practice to define a trigger source? I see two possibilities.. (1) use kNT_unitCvInput (with the macro), which I presume would allow easy mapping to a buffer in the UI. I would presumably have to detect a rising edge in the step function. The issue is that there is no way to trigger it manually from the UI. (2) Alternativly, I could create a parameter - however, unless I am mistaken, there does not seem to be a appropriate unit (eg. bool, accepting only 0 or 1 values). It would feel quite awkward to use kNT_unitVolts and detect if it is over/under a threshold. Perhaps enum with "on" and "off" would work? For now, I'll probably look into using CV inputs, because not having a manual trigger is probably okay for now. Perhaps what I am asking is, is there a fundemental difference between a CV input, and a parameter that has been mapped to a CV (buffer)? At what rate are the parameters updated in _NT_algorithm::v?
+
+April 15, 2025
+
+os — 4/15/25, 4:37 AMTuesday, April 15, 2025 at 4:37 AM
+
+The update rate is the key. Mapped parameters are processed at the control rate (defined by the buffer size, 24 frames by default). So it depends if you care about processing triggers at a single sample rate, or if once every 0.5ms is enough.
+
+[4:38 AM]Tuesday, April 15, 2025 at 4:38 AM
+
+Internally, there's no bool parameter - they're all enums (off/on).
+
+[4:40 AM]Tuesday, April 15, 2025 at 4:40 AM
+
+If you don't need single sample accuracy, parameters are handy because
+
+you can change them manually,
+
+you can map them to CV, MIDI, or I2C,
+
+you get a nice callback in the code when they change.,
+
+os — 4/15/25, 4:46 AMTuesday, April 15, 2025 at 4:46 AM
+
+Conversely trigger CV inputs can be preferable because:
+
+the user can access them without having to set up a mapping,
+
+you can make them velocity sensitive (like e.g. the built-in polysynth inputs),
+
+and of course the timing is more accurate.,
+
+[4:47 AM]Tuesday, April 15, 2025 at 4:47 AM
+
+If it's a CV/gate or CV/trigger pair you're defining, the user would certainly expect an input rather than a parameter.
+
+Nate — 4/15/25, 10:58 AMTuesday, April 15, 2025 at 10:58 AM
+
+That's useful info, thanks for the explanaition!
+
+tsarpf — 4/15/25, 11:40 AMTuesday, April 15, 2025 at 11:40 AM
+
+Are the C custom algos able to process midi in and send it out? I got the idea that maybe I could save on a separate midi processor, and use the disting nt instead For low latency, I guess the lua scripts don't update fast enough, so looking into the C API. (What I really want for now is just to map note velocity to a specific CC, and pass all other midi through as-is)
+
+[11:44 AM]Tuesday, April 15, 2025 at 11:44 AM
+
+My guess would be that it's not possible, if the api is mostly for processing audio, but I thought I'd shoot it out anyway, also in case there is some other approach to achieve this on the Disting.
+
+@tsarpf
+
+Are the C custom algos able to process midi in and send it out?  I got the idea that maybe I could save on a separate midi processor, and use the disting nt instead   For low latency, I guess the lua scripts don't update fast enough, so looking into the C API.  (What I really want for now is just to map note velocity to a specific CC, and pass all other midi through as-is)
+
+thorinside — 4/15/25, 11:44 AMTuesday, April 15, 2025 at 11:44 AM
+
+Yes. I made a 14bit midi processor example.
+
+tsarpf — 4/15/25, 11:44 AMTuesday, April 15, 2025 at 11:44 AM
+
+oh!
+
+[11:45 AM]Tuesday, April 15, 2025 at 11:45 AM
+
+I checked https://github.com/expertsleepersltd/distingNT_API/tree/main/examples but couldn't find anything related to MIDI. Also, is this repo all info there is, or is there a pdf spec like for Lua?
+
+GitHub
+
+distingNT_API/examples at main · expertsleepersltd/distingNT_API
+
+C++ API for the disting NT Eurorack module. Contribute to expertsleepersltd/distingNT_API development by creating an account on GitHub.
+
+[11:47 AM]Tuesday, April 15, 2025 at 11:47 AM
+
+oh "fourteen" is the one I assume
+
+thorinside — 4/15/25, 11:48 AMTuesday, April 15, 2025 at 11:48 AM
+
+Yeah
+
+tsarpf — 4/15/25, 11:48 AMTuesday, April 15, 2025 at 11:48 AM
+
+well this is damn great! and thanks for providing the example
+
+os — 4/15/25, 12:34 PMTuesday, April 15, 2025 at 12:34 PM
+
+There's no API for sending MIDI currently, but no reason I couldn't add one.
+
+3
+
+tsarpf — 4/15/25, 1:32 PMTuesday, April 15, 2025 at 1:32 PM
+
+ah, I read through the example quickly and did not even notice it doesn't do any sending of midi I guess one vote for that to come available someday then!
+
+thorinside — 4/15/25, 5:36 PMTuesday, April 15, 2025 at 5:36 PM
+
+A vote from me as well.
+
+Percivale — 4/15/25, 9:47 PMTuesday, April 15, 2025 at 9:47 PM
+
+Send MIDI to/from NT? Yeah that'll be great. It would be good to have bidirectional MIDI parameter options as some algo don't send MIDI notes or cc info to tiny breakout or usb. (edited)Tuesday, April 15, 2025 at 10:41 PM
+
+April 23, 2025
+
+snailed — 4/23/25, 12:07 PMWednesday, April 23, 2025 at 12:07 PM
+
+Hi, I would like to try running those Airwindows plugins. I haven't kept up on the C stuff and how to load everything, sorry-- anyone have a for dummies guide on how to try them?
+
+thorinside — 4/23/25, 12:10 PMWednesday, April 23, 2025 at 12:10 PM
+
+Download the .zip and unzip it, the paths inside the zips mirror the paths inside the SD card in the end. Once those files are in your NT, you'll be able to add these algorithms with a separate 'load' step through the usual mechanisms. https://github.com/expertsleepersltd/distingNT_API/releases/tag/v1.8.0
+
+GitHub
+
+Release v1.8.0 · expertsleepersltd/distingNT_API
+
+For firmware v1.8.0.
+
+[12:11 PM]Wednesday, April 23, 2025 at 12:11 PM
+
+I think my fave Airindows plugin so far is 'Cans'. Which simulates various rooms while wearing headphones.
+
+@snailed
+
+Hi, I would like to try running those Airwindows plugins. I haven't kept up on the C stuff and how to load everything, sorry-- anyone have a for dummies guide on how to try them?
+
+os — 4/23/25, 12:14 PMWednesday, April 23, 2025 at 12:14 PM
+
+I would like to think you could figure this out from the user manual. If not, I've failed.
+
+2
+
+snailed — 4/23/25, 12:19 PMWednesday, April 23, 2025 at 12:19 PM
+
+i'm just being lazy, haha
+
+[12:19 PM]Wednesday, April 23, 2025 at 12:19 PM
+
+I will figure it out
+
+@thorinside
+
+Download the .zip and unzip it, the paths inside the zips mirror the paths inside the SD card in the end. Once those files are in your NT, you'll be able to add these algorithms with a separate 'load' step through the usual mechanisms. https://github.com/expertsleepersltd/distingNT_API/releases/tag/v1.8.0
+
+snailed — 4/23/25, 12:19 PMWednesday, April 23, 2025 at 12:19 PM
+
+perfect! thanks
+
+[12:20 PM]Wednesday, April 23, 2025 at 12:20 PM
+
+that's what i was looking for, @thorinside
+
+1
+
+[12:25 PM]Wednesday, April 23, 2025 at 12:25 PM
+
+and i'm up and running. easy. oh my god, i step away for 1 month and the amount of progress made here is astounding. this is great, thanks again to the whole community.
+
+3
+
+tyhodson — 4/23/25, 6:22 PMWednesday, April 23, 2025 at 6:22 PM
+
+Dumb question maybe, but how do you route audio to a plug-in? I tried using churchOrgan, but it only has outputs. When I added it after another algorithm I don’t see a way to send audio to it, and I didn’t see anything in the user manual about that. (edited)Wednesday, April 23, 2025 at 8:13 PM
+
+@tyhodson
+
+Dumb question maybe, but how do you route audio to a plug-in? I tried using churchOrgan, but it only has outputs.  When I added it after another algorithm I don’t see a way to send audio to it, and I didn’t see anything in the user manual about that. (edited)Wednesday, April 23, 2025 at 8:13 PM
+
+j4s0n — 4/23/25, 7:57 PMWednesday, April 23, 2025 at 7:57 PM
+
+Does that algo process audio or only generate it? If it takes inputs, they should be selectable on the Routing page.
+
+tyhodson — 4/23/25, 8:06 PMWednesday, April 23, 2025 at 8:06 PM
+
+A fair question. I saw "organ" so figured it was a sound generating instrument. It defaults to outputs 1 and 2, but I don't see a way to make it produce sounds (e.g. it has no MIDI settings for me to control it). So then I thought maybe it's not a generator, but instead an audio processor. So I placed it after Poly FM, but it also has no inputs... So I don't know what it's supposed to do. That's when I thought maybe I don't know what I'm doing. (edited)Wednesday, April 23, 2025 at 8:14 PM
+
+[8:12 PM]Wednesday, April 23, 2025 at 8:12 PM
+
+Ah, I found a 'gate' parameter that I changed from 0 to 1, and it started droning. So it does make sound, and I can change how it sounds by changing its other parameters, but I don't see a way to control it via MIDI or CV. Maybe I just picked the wrong plug-in to understand how to use it... (edited)Wednesday, April 23, 2025 at 8:14 PM
+
+tyhodson — 4/23/25, 8:22 PMWednesday, April 23, 2025 at 8:22 PM
+
+OK, so I picked a different plug-in (Gain), and see that it has an input, as I would expect. So I answered my original question (i.e. how to route audio to it).
+
+tyhodson — 4/23/25, 8:30 PMWednesday, April 23, 2025 at 8:30 PM
+
+OK, I figured out what churchOrgan wants: It responds to external control by way of mappings.
+
+1
+
+1
+
+April 25, 2025
+
+os — 4/25/25, 11:37 AMFriday, April 25, 2025 at 11:37 AM
+
+Have added API calls to send MIDI messages. Will be in the next beta.
+
+2
+
+1
+
+April 26, 2025
+
+@j4s0n
+
+polyGen:   I T ' S  A L I V E! Release: https://github.com/j4s0n-c/disting_NT-things/releases/tag/polyGen_NT Source and readme: https://github.com/j4s0n-c/disting_NT-things#polygen (edited)Monday, April 7, 2025 at 2:58 PM
+
+Jodok31283TOC — 4/26/25, 9:16 AMSaturday, April 26, 2025 at 9:16 AM
+
+WOW I have to say it that is amazing stuff...
+
+1
+
+thorinside — 4/26/25, 6:35 PMSaturday, April 26, 2025 at 6:35 PM
+
+The AI made an A151 clone, with Stereo ins and outs, with specifications. It works as far as I can tell so far. But I want to hand-tweak it a bit.
+
+Jodok31283TOC — 4/26/25, 6:37 PMSaturday, April 26, 2025 at 6:37 PM
+
+when choosing 2channels 8ins and 8 outs I get an error
+
+thorinside — 4/26/25, 6:38 PMSaturday, April 26, 2025 at 6:38 PM
+
+Too many. But you can do 2 channels 6 ins, 4 outs, math.
+
+Jodok31283TOC — 4/26/25, 6:39 PMSaturday, April 26, 2025 at 6:39 PM
+
+same error
+
+thorinside — 4/26/25, 6:39 PMSaturday, April 26, 2025 at 6:39 PM
+
+I have only tested stereo 1 to 3 so far.
+
+Jodok31283TOC — 4/26/25, 6:39 PMSaturday, April 26, 2025 at 6:39 PM
+
+everything different than the default setting gives me an error
+
+thorinside — 4/26/25, 6:40 PMSaturday, April 26, 2025 at 6:40 PM
+
+Try 2,1,3
+
+Jodok31283TOC — 4/26/25, 6:40 PMSaturday, April 26, 2025 at 6:40 PM
+
+do you use v1.8.0 or the beta1.9 ?
+
+[6:40 PM]Saturday, April 26, 2025 at 6:40 PM
+
+I'm currently on 1.8.0
+
+thorinside — 4/26/25, 6:41 PMSaturday, April 26, 2025 at 6:41 PM
+
+Oh that's why. I'm on 1.9 beta.
+
+Jodok31283TOC — 4/26/25, 6:42 PMSaturday, April 26, 2025 at 6:42 PM
+
+2,1,3 works
+
+thorinside — 4/26/25, 6:42 PMSaturday, April 26, 2025 at 6:42 PM
+
+C API 5
+
+Jodok31283TOC — 4/26/25, 6:42 PMSaturday, April 26, 2025 at 6:42 PM
+
+oky doky I try to install the beta
+
+thorinside — 4/26/25, 6:42 PMSaturday, April 26, 2025 at 6:42 PM
+
+Wait
+
+Jodok31283TOC — 4/26/25, 6:42 PMSaturday, April 26, 2025 at 6:42 PM
+
+API 5 should be on 1.8.0
+
+thorinside — 4/26/25, 6:43 PMSaturday, April 26, 2025 at 6:43 PM
+
+If 2, 1, 3 works just keep in mind it is counting by twos if stereo
+
+Jodok31283 started a thread: A151. See all threads. — 4/26/25, 6:43 PMSaturday, April 26, 2025 at 6:43 PM
+
+ThreadA15175 Messages ›
+
+There are no recent messages in this thread.
+
+April 28, 2025
+
+AgentTerror — 4/28/25, 10:03 PMMonday, April 28, 2025 at 10:03 PM
+
+been looking closer at the C++ API over the past few evenings, thinking how I might try to move from lua to C++.... I see the custom UI methods were just added today... are there plans for some form of the custom preset data (de)serialization to be added also?
+
+April 29, 2025
+
+@AgentTerror
+
+been looking closer at the C++ API over the past few evenings, thinking how I might try to move from lua to C++....  I see the custom UI methods were just added today...  are there plans for some form of the custom preset data (de)serialization to be added also?
+
+os — 4/29/25, 3:14 AMTuesday, April 29, 2025 at 3:14 AM
+
+There wasn't, but it would make sense to maintain parity with Lua. I do want to encourage custom serialisation as the exception rather than the rule though. If everything is parameters, it keeps it all so much cleaner.
+
+[3:16 AM]Tuesday, April 29, 2025 at 3:16 AM
+
+It's going to be a much more complex proposition in C unless I introduce dynamic memory management, which I prefer to keep out of it if at all possible.
+
+AgentTerror — 4/29/25, 9:08 AMTuesday, April 29, 2025 at 9:08 AM
+
+Hmm... well my C++ is VERY rusty, I've been in higher-level languages for way too many years where I don't have to worry about memory management, so apologies if this is somewhat naive, but assuming the size of the data to be persisted is fixed, does that help? could it be handled as just another memory requirement, something like: req.sram_persist = sizeof(customDataStruct), where that buffer gets created along with the others, but is persisted, and restored via some sort of preset loaded event?
+
+[9:11 AM]Tuesday, April 29, 2025 at 9:11 AM
+
+I would actually like to use parameters, and do for a number of other things in my lua, it's just I have too many data points... 32 grid cells x 13 different values per cell.
+
+os — 4/29/25, 9:38 AMTuesday, April 29, 2025 at 9:38 AM
+
+It would certainly be easier if the persistence could deal with a simple binary blob, rather than a nicely formatted thing like we get from Lua.
+
+AgentTerror — 4/29/25, 9:45 AMTuesday, April 29, 2025 at 9:45 AM
+
+yeah, I at least would not expect, or even want, some generic structure of indeterminate size, but rather a known blob that I could do a placement new on top of and just access (I think that would work?), and have it filled in when presets are loaded. I'm pretty sure the problems I'm having in lua mainly stem from not having tighter memory access (and garbage collection), so those are the 2 things I'm looking to solve by moving to C (well that and just brushing up on it in general) (edited)Tuesday, April 29, 2025 at 9:46 AM
+
+AgentTerror — 4/29/25, 10:52 PMTuesday, April 29, 2025 at 10:52 PM
+
+ok, I started my journey into C++ plugins in earnest this evening... but a question... should we be able to use virtual methods? When I have them, It compiles fine, but I get unresolved symbol errors with strange symbol names thrown on the NT, which I assume is maybe trying to reference the vtable, but I don't really know. I can however replicate the issue but just making this change in the gain.cpp reference: struct _gainAlgorithm : public _NT_algorithm {     _gainAlgorithm() {}     ~_gainAlgorithm() {}      virtual void Test() { gain = 5; }          float gain; };
+
+[10:57 PM]Tuesday, April 29, 2025 at 10:57 PM
+
+the error is thrown when scanning the plugins, before I ever try to load it
+
+April 30, 2025
+
+os — 4/30/25, 3:22 AMWednesday, April 30, 2025 at 3:22 AM
+
+No, virtuals probably won't work. It might be possible to add, but I don't really see any need for it right now.
+
+[3:23 AM]Wednesday, April 30, 2025 at 3:23 AM
+
+Happy to be convinced otherwise though.
+
+AgentTerror — 4/30/25, 8:39 AMWednesday, April 30, 2025 at 8:39 AM
+
+Hmm... well I was just trying to migrate what I have in lua and have it work similarly, where do a bit of polymorphic calls... one example is I have 4 display modes (or UI pages) that I tried to derive from a common base with pure virtual functions, and render them polymorphically... something like selectedMode->Draw(), where each of the possible modes knows how to render itself. That said, I might be able to use function pointers to free functions, or even just some if/case logic to accomplish the same thing, so I won't be making a case for it yet, until I have a chance to try out alternatives. If I'm honest, I thought it might be a bug, and didn't realize it is something you would have to explicitly support from your side.
+
+os — 4/30/25, 8:45 AMWednesday, April 30, 2025 at 8:45 AM
+
+Yeah, sounds like switch/case to me.
+
+[8:46 AM]Wednesday, April 30, 2025 at 8:46 AM
+
+That said it might be worth me looking into rudimentary support for virtual functions.
+
+AgentTerror — 4/30/25, 2:10 PMWednesday, April 30, 2025 at 2:10 PM
+
+so I did a little reading and talking to ChatGPT, and arrived at adding the -fno-rtti flag when compiling my plugin, which then allows the virtual methods to work, FYI. I'll let you speak to if that's appropriate, but it seems to work so far, so I will keep using it for now. (edited)Wednesday, April 30, 2025 at 2:11 PM
+
+[2:11 PM]Wednesday, April 30, 2025 at 2:11 PM
+
+I guess it builds differently to make it work in environments without RTTI.
+
+thorinside — 4/30/25, 2:12 PMWednesday, April 30, 2025 at 2:12 PM
+
+(Runtine Type Information?) Probably means it builds it so that the information needed at runtime is baked in?
+
+AgentTerror — 4/30/25, 2:12 PMWednesday, April 30, 2025 at 2:12 PM
+
+yeah
+
+[2:12 PM]Wednesday, April 30, 2025 at 2:12 PM
+
+I guess maybe by default it tries to use a more dynamic vtable or something
+
+thorinside — 4/30/25, 2:13 PMWednesday, April 30, 2025 at 2:13 PM
+
+Good find though.
+
+May 1, 2025
+
+os — 5/1/25, 3:06 AMThursday, May 1, 2025 at 3:06 AM
+
+Nice. I'll add that flag to the makefiles.
+
+1
+
+Nate — 5/1/25, 6:08 PMThursday, May 1, 2025 at 6:08 PM
+
+I updated my plugin to the latest API, and I see there is now a way to implement a custom ui! Awesome! I now have a easy way to select cells in my matrix with the pots. However, I'm trying to figure out how I am able to/supposed to implement button presses. It seems that they are in conflict with the navigation controls...
+
+Nate — 5/1/25, 6:33 PMThursday, May 1, 2025 at 6:33 PM
+
+From what I can tell... certian buttons are just ignored?
+
+AgentTerror — 5/1/25, 6:59 PMThursday, May 1, 2025 at 6:59 PM
+
+I'm pretty sure only pot3 and encoder2 pushes will work, as the rest of them have meaning when navigating around the disting. I think they are all listed because the original lua UI scripting puts you in a mode that basically captures the input, and you have to press all 4 buttons to exit that capture mode.
+
+[7:00 PM]Thursday, May 1, 2025 at 7:00 PM
+
+I have implemented short/long press logic on those to have them do double duty in the one I'm working on
+
+AgentTerror — 5/1/25, 7:08 PMThursday, May 1, 2025 at 7:08 PM
+
+Although some of disting meanings are duplicated when viewing your algorithm.... P1 push and E1 push for instance both hop you out to the overview screen. B2 and P2 push similarly do the same thing. It would be nice if those duplicates could be freed up to allow for a few extra push events.
+
+1
+
+Nate — 5/1/25, 8:17 PMThursday, May 1, 2025 at 8:17 PM
+
+That makes sense.. thanks!
+
+May 2, 2025
+
+AgentTerror — 5/2/25, 1:04 AMFriday, May 2, 2025 at 1:04 AM
+
+@os I am getting the following message when the NT scans my plugin: "Not enough memory to build global offset table". Any ideas? I'm attaching the .o file, and the source is in my fork here: https://github.com/NerdRoger/distingNT_API/tree/main/examples/directionalSequencer
+
+directionalSequencer.o
+
+18.20 KB
+
+Download
+
+AgentTerror — 5/2/25, 1:15 AMFriday, May 2, 2025 at 1:15 AM
+
+I am compiling and linking multiple files together, but that has been working fine so far, until I just refactored some stuff, and now I'm getting the memory error... of course, I think my refactor should have made the data structures tighter, but I also added a bunch of static data fields at the same time, so maybe that plays into it.
+
+AgentTerror — 5/2/25, 1:50 AMFriday, May 2, 2025 at 1:50 AM
+
+well I think I have it working again locally for now, I changed all of those static members to "static constexpr" which I think they should have been all along, and that got me further, and cleared up a few more errors after that. I will leave the question however, as the answer may help inform me.
+
+os — 5/2/25, 3:29 AMFriday, May 2, 2025 at 3:29 AM
+
+It looks like you have a lot of variables at file scope. You basically shouldn't have any. Any memory you use should be accounted for and contained within your plug-in object.
+
+[3:30 AM]Friday, May 2, 2025 at 3:30 AM
+
+If you must have static data (perhaps shared between plug-in instances?), put it inside a struct so there's only one global symbol. Or ideally precompute it and make it const.
+
+AgentTerror — 5/2/25, 6:55 AMFriday, May 2, 2025 at 6:55 AM
+
+ok thanks for having a look. I originally thought it was memory that was accounted for, because it was in fact within a struct that is preallocated by the plugin for scoping... but I had the fields only marked as "static", which I guess when thinking about it still means the compiler is responsible for placing that data, and not me, because that data wouldn't be accounted for with sizeof(struct). Changing them to the "static constexpr" allowed me to make them true constants scoped to that struct, which is what I was after in the beginning. I should have realized something was amiss when the compiler wouldn't let me set the values in the header file when they were defined that way, instead forcing me to set them in the cpp file, which is how I ended up here I think.
+
+[6:57 AM]Friday, May 2, 2025 at 6:57 AM
+
+Trying to unwind many years of not caring about this level of detail over here!
+
+os — 5/2/25, 6:58 AMFriday, May 2, 2025 at 6:58 AM
+
+Yeah, you're in embedded land now.
+
+[6:58 AM]Friday, May 2, 2025 at 6:58 AM
+
+With great power comes great responsibility.
+
+2
+
+Owneiric — 5/2/25, 12:22 PMFriday, May 2, 2025 at 12:22 PM
+
+Anyone had a go at the Time Machine machine to the NT? https://github.com/oamodular/time-machine would that work?
+
+GitHub
+
+GitHub - oamodular/time-machine
+
+Contribute to oamodular/time-machine development by creating an account on GitHub.
+
+1
+
+Nate — 5/2/25, 10:12 PMFriday, May 2, 2025 at 10:12 PM
+
+That's an interesting prospect.. I didn't realize it was open source. I just had a quick peek but it looks like it depends on the daisy signal processing library, so parts of that might need to be ported as well.
+
+May 4, 2025
+
+AgentTerror — 5/4/25, 1:48 PMSunday, May 4, 2025 at 1:48 PM
+
+is NT_floatToString not respecting the decimalPlaces parameter? I have a value of 5.555 and I call it with decimalPlaces=3, and I end up with "5.555000". I created a little function to strip the trailing zeroes, so not a huge deal, but what was more difficult was realizing because of that, my result buffer was being overrun, stomping on the next items in my struct. I had my result buffer defined smaller than this because of the known size of my numbers and expected 3 decimal places. So that also leads me to ask: should the NT_XXXToString functions either take a buffer size parameter and not exceed that, or specify the size of the buffer we should preallocate so as to never be overrun?
+
+AgentTerror — 5/4/25, 2:05 PMSunday, May 4, 2025 at 2:05 PM
+
+I just set my buffer size to 20 which seems more than ample so far
+
+AgentTerror — 5/4/25, 10:11 PMSunday, May 4, 2025 at 10:11 PM
+
+addendum: just had occasion to use the NT_floatToString in a different area, and found it does respect decimalPlaces if it's 1 or 2, but 3 gives 6 places as above
+
+May 5, 2025
+
+@AgentTerror
+
+addendum:  just had occasion to use the NT_floatToString in a different area, and found it does respect decimalPlaces if it's 1 or 2, but 3 gives 6 places as above
+
+os — 5/5/25, 4:28 AMMonday, May 5, 2025 at 4:28 AM
+
+Correct. I should fix that up.
+
+os — 5/5/25, 9:40 AMMonday, May 5, 2025 at 9:40 AM
+
+Done for the next beta.
+
+1
+
+AgentTerror — 5/5/25, 10:28 AMMonday, May 5, 2025 at 10:28 AM
+
+So I've made it far enough into my C++ re-implementation from lua that I feel I have a grasp on how development would go and that I could finish it, but the one thing I'm still lacking would be a way to store all of my preset data... so I have to ask about the prospects of that again before I go too much further... I know you want us to use parameters, and in fact I also would like to because then I could have individual mappings, but I just have more than you currently allow (13 values * 32 cells + other sundry params).
+
+os — 5/5/25, 10:29 AMMonday, May 5, 2025 at 10:29 AM
+
+It's on my list for 1.9. I have Superbooth this week though!
+
+AgentTerror — 5/5/25, 10:32 AMMonday, May 5, 2025 at 10:32 AM
+
+ok great, as long as it's forthcoming, that's plenty enough for me to continue forward. Superbooth always looks like fun when I see the videos, enjoy!
+
+May 6, 2025
+
+AgentTerror — 5/6/25, 8:15 AMTuesday, May 6, 2025 at 8:15 AM
+
+is the cpu cycle count directly related to time? i.e. can I divide the diff of 2 counts by some constant factor to get ms? Or is it dependant on load?
+
+[8:21 AM]Tuesday, May 6, 2025 at 8:21 AM
+
+or should I use step/frame count to measure time? would that be dependent on the sample rate? or is step fired at a constant rate as it was in lua, and frame count changes as sample rate changes?
+
+AgentTerror — 5/6/25, 8:25 AMTuesday, May 6, 2025 at 8:25 AM
+
+trying to do things like "if held for < 250ms, treat button as short press, otherwise long press" or "after 10s of no clock input, reset the sequencer". In lua I measured that by counting step calls, but not sure if that is the best way here.
+
+os — 5/6/25, 8:34 AMTuesday, May 6, 2025 at 8:34 AM
+
+Don't use the cpu cycle count for time. It runs at 600MHz which means it overflows at 7s.
+
+[8:34 AM]Tuesday, May 6, 2025 at 8:34 AM
+
+Count frames and divide by sample rate.
+
+AgentTerror — 5/6/25, 8:38 AMTuesday, May 6, 2025 at 8:38 AM
+
+got it, thanks!
+
+May 11, 2025
+
+Stimulusfunctions — 5/11/25, 7:45 AMSunday, May 11, 2025 at 7:45 AM
+
+I got into hardware synths because I didn't want to mix making music with writing code, and now I'm thinking about how I could save 8HP in my 7U performance rack if I could take the Jornalogue Enhance 2 out of it, and now I'm reading up on writing mid-side processing algos in faust. I blame you all.
+
+4
+
+1
+
+2
+
+Jodok31283TOC — 5/11/25, 8:17 AMSunday, May 11, 2025 at 8:17 AM
+
+Hahahaha blame yourself LOL
+
+Nate — 5/11/25, 6:04 PMSunday, May 11, 2025 at 6:04 PM
+
+If you don't want to do it yourself.. there is a mid side converter in the air windows plugins
+
+[6:08 PM]Sunday, May 11, 2025 at 6:08 PM
+
+(I also wrote one before realizing that.. lol). Though I was thinking it would be cool to add a correlation meter like enhance 2 has. Not sure I'll find the time.. tbh
+
+May 12, 2025
+
+@Nate
+
+(I also wrote one before realizing that.. lol). Though I was thinking it would be cool to add a correlation meter like enhance 2 has. Not sure I'll find the time.. tbh
+
+McNoodlesoSUS — 5/12/25, 3:59 AMMonday, May 12, 2025 at 3:59 AM
+
+I also made mid-side tools but mine are for the three_pot. An 'encoder' and a mixer.
+
+os — 5/12/25, 4:01 AMMonday, May 12, 2025 at 4:01 AM
+
+M/S encoding is basically just an add and a subtract, so there are a hundred ways of doing it on the NT.
+
+@os
+
+M/S encoding is basically just an add and a subtract, so there are a hundred ways of doing it on the NT.
+
+McNoodlesoSUS — 5/12/25, 4:08 AMMonday, May 12, 2025 at 4:08 AM
+
+yeh, that's why it was in 'inverted commas'. Now you've leaked highly secret industry knowledge!!
+
+Andras Eichstaedt — 5/12/25, 11:05 AMMonday, May 12, 2025 at 11:05 AM
+
+HI! Im setting up my computer to write plugins for the NT, and I could make gain.o from the repo already. How does it become a linked useable file like .bin? I appreciate all help I have very little programming or computer knowledge. My goal for now is to understand and master the flow from text to a .bin file that runs on the module.
+
+@Andras Eichstaedt
+
+HI!  Im setting up my computer to write plugins for the NT, and I could make gain.o from the repo already. How does it become a linked useable file like .bin?  I appreciate all help I have very little programming or computer knowledge. My goal for now is to understand and master the flow from text to a .bin file that runs on the module.
+
+j4s0n — 5/12/25, 11:07 AMMonday, May 12, 2025 at 11:07 AM
+
+No .bin files needed. The .o files are placed on the SD card /programs/plug-ins/
+
+Andras Eichstaedt — 5/12/25, 11:08 AMMonday, May 12, 2025 at 11:08 AM
+
+Thank you that makes me very happy now !!
+
+1
+
+@os
+
+M/S encoding is basically just an add and a subtract, so there are a hundred ways of doing it on the NT.
+
+Stimulusfunctions — 5/12/25, 1:49 PMMonday, May 12, 2025 at 1:49 PM
+
+Yup! I've got balance and stereo width adjustment via encoding to mid/side and then back working fine in faust, was very simple. I'll be looking at the other features of the Enhance 2 hopefully this weekend (the spectrum "tilt" for both the mid and side data along with a phase monitor. It's a good little project to learn faust -> disting nt on.
+
+May 13, 2025
+
+@Stimulusfunctions
+
+Yup! I've got balance and stereo width adjustment via encoding to mid/side and then back working fine in faust, was very simple. I'll be looking at the other features of the Enhance 2 hopefully this weekend (the spectrum "tilt" for both the mid and side data along with a phase monitor. It's a good little project to learn faust -> disting nt on.
+
+McNoodlesoSUS — 5/13/25, 4:16 AMTuesday, May 13, 2025 at 4:16 AM
+
+Be sure to let us know if you get it all working. I can always use another Enhance 2
+
+Andras Eichstaedt — 5/13/25, 6:52 AMTuesday, May 13, 2025 at 6:52 AM
+
+Hi! I made a .o file and it does not show up among the algorithms if I put it in disting/plugins I tried gain.o it wont show either. Am I doing something wrong?
+
+Jodok31283TOC — 5/13/25, 6:53 AMTuesday, May 13, 2025 at 6:53 AM
+
+The path is DistingNT/programs/plug-ins
+
+
+
+
+
+I've been looking at my code and wanted to ask if NT does any smoothing on incoming midi data? Or if that's usually built in to higher quality midi controllers? I could add a lowpass filter to smooth out erratic midi noise from old controllers but that would add a bit of latency - which is bad if I intend to use CC messaging as a cue point/ scratching type thing. Then I was thinking about the pot smoothing. Would I be right in thinking I wouldn't have to create dead-zones the for pots? Is this all done before it hits the C++ API?
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+os — 5/20/25, 10:38 AMTuesday, May 20, 2025 at 10:38 AM
+
+The NT doesn't smooth MIDI data.
+
+[10:39 AM]Tuesday, May 20, 2025 at 10:39 AM
+
+Pot smoothing is handled by the API.
+
+1
+
+@os
+
+Pot smoothing is handled by the API.
+
+McNoodlesoSUS — 5/20/25, 10:41 AMTuesday, May 20, 2025 at 10:41 AM
+
+great, so i can just use the 'raw' data and not have to worry about it? (edited)Tuesday, May 20, 2025 at 10:41 AM
+
+os — 5/20/25, 10:43 AMTuesday, May 20, 2025 at 10:43 AM
+
+That's the plan.
+
+1
+
+McNoodlesoSUS — 5/20/25, 2:54 PMTuesday, May 20, 2025 at 2:54 PM
+
+@Lamarcph Yeh, I haven't told it what NOT to use so it's freely assigned the panel buttons. I'll take a look to see if I can improve that.. or feel free to edit any of it and reshare (edited)Tuesday, May 20, 2025 at 3:02 PM
+
+Lamarcph — 5/20/25, 3:20 PMTuesday, May 20, 2025 at 3:20 PM
+
+Even if the algo load, it still gives an error. I will have to look more later (edited)Tuesday, May 20, 2025 at 3:20 PM
+
+May 21, 2025
+
+McNoodlesoSUS — 5/21/25, 5:16 AMWednesday, May 21, 2025 at 5:16 AM
+
+is there an environment or ruleset to follow for testing plugins in? I'm building little ideas and getting errors that make it a long process to go back and forth from the hardware with ai tools. Would be nice to have a little test bed before loading on NT
+
+os — 5/21/25, 5:21 AMWednesday, May 21, 2025 at 5:21 AM
+
+Not currently. If they're missing symbol errors, let me know - I'm happy to gradually add all the stdlib symbols that people need, but there are a lot so I'm not going to sit down and do them all just in case.
+
+@os
+
+Not currently.  If they're missing symbol errors, let me know - I'm happy to gradually add all the stdlib symbols that people need, but there are a lot so I'm not going to sit down and do them all just in case.
+
+McNoodlesoSUS — 5/21/25, 5:34 AMWednesday, May 21, 2025 at 5:34 AM
+
+OK, so the only real way is to test directly on the NT? It's just that I'm green to all of this so it would be pretty sweet to get an idea built and working on my computer in order to cut out most of the file transferring. I'll see if I can make something Update: Making something is far too complex back to usb transfers and awaiting beta! excite! (edited)Wednesday, May 21, 2025 at 5:57 AM
+
+Andras Eichstaedt — 5/21/25, 7:23 AMWednesday, May 21, 2025 at 7:23 AM
+
+Hi! How do I tell my plugin to listen to the clock algo above it on any bus? I could make it work but my plugin always listened to more than one bus I could not bring it down to just one.
+
+[7:26 AM]Wednesday, May 21, 2025 at 7:26 AM
+
+The cosest I've been was 4 buses with this code:
+
+[7:26 AM]Wednesday, May 21, 2025 at 7:26 AM
+
+// in pluginStep(…), at the top: // 1) pick which bus (1–28 → index 0–27) int bus = alg->v[IDX_CLOCK_INPUT] - 1; // 2) sample that bus’s very first frame float clk = 0.0f; if (bus >= 0 && bus < 28) { clk = busses[ bus * numFramesBy4 ]; } // later, use clk vs. lastClock for rising-edge detection: if (clk > 0.5f && p->lastClock <= 0.5f) { // … your clock-driven logic here … } // and at the end: p->lastClock = clk;
+
+os — 5/21/25, 7:30 AMWednesday, May 21, 2025 at 7:30 AM
+
+clk = busses[ bus * numFrames ];
+
+Andras Eichstaedt — 5/21/25, 7:31 AMWednesday, May 21, 2025 at 7:31 AM
+
+Thank you!
+
+os — 5/21/25, 7:31 AMWednesday, May 21, 2025 at 7:31 AM
+
+If you do that you'll miss clocks that last less than numFrames frames.
+
+[7:31 AM]Wednesday, May 21, 2025 at 7:31 AM
+
+Which is short, but could happen.
+
+[7:32 AM]Wednesday, May 21, 2025 at 7:32 AM
+
+Ideally you scan all the frames in the bus.
+
+Andras Eichstaedt — 5/21/25, 7:32 AMWednesday, May 21, 2025 at 7:32 AM
+
+I try it with the stock clock algo now
+
+os — 5/21/25, 7:35 AMWednesday, May 21, 2025 at 7:35 AM
+
+Btw the standard in the built-in algorithms is to require a 1V clock. So clk > 1.0f.
+
+McNoodlesoSUS — 5/21/25, 7:57 AMWednesday, May 21, 2025 at 7:57 AM
+
+should i avoid snprintf and stick to NT_intToString and NT_floatToString?
+
+os — 5/21/25, 7:58 AMWednesday, May 21, 2025 at 7:58 AM
+
+Those are more efficient if they do what you want.
+
+1
+
+[7:58 AM]Wednesday, May 21, 2025 at 7:58 AM
+
+snprintf will work in the beta I just posted.
+
+Andras Eichstaedt — 5/21/25, 8:08 AMWednesday, May 21, 2025 at 8:08 AM
+
+I compiled it with clk = busses[ bus * numFrames ]; and still have groups of 4 clock inputs
+
+[8:08 AM]Wednesday, May 21, 2025 at 8:08 AM
+
+// ----- Audio step: listen to one external clock bus ----- extern "C" void pluginStep(_NT_algorithm* alg, float* busses, int numFrames) { Plugin* p = (Plugin)alg; // pick which bus (1–28 → index 0–27) int bus = alg->v[IDX_CLOCK_INPUT] - 1; // sample that bus’s very first frame float clk = 0.0f; if (bus >= 0 && bus < 28) { // ←── patched here: use numFrames instead of numFramesBy4 clk = busses[bus numFrames]; }
+
+os — 5/21/25, 8:36 AMWednesday, May 21, 2025 at 8:36 AM
+
+You have numFrames in the function arguments. That should be numFramesBy4.
+
+os — 5/21/25, 12:49 PMWednesday, May 21, 2025 at 12:49 PM
+
+I just pushed a new API, which revises the plug-in custom UI interface. Also updated the gainCustomUI.cpp example. If you're interested in custom UIs, please see if the changes make sense.
+
+[12:50 PM]Wednesday, May 21, 2025 at 12:50 PM
+
+I implemented the suggestion that pressing all 4 buttons at once takes you out of any custom UI (like for the UI scripts), in case you override button 2.
+
+2
+
+1
+
+AgentTerror — 5/21/25, 12:51 PMWednesday, May 21, 2025 at 12:51 PM
+
+awesome! meaning 4-press will give us access to all of the pot/buttons we didn't have previously? I will definately check that out ASAP
+
+os — 5/21/25, 12:52 PMWednesday, May 21, 2025 at 12:52 PM
+
+NB you don't have the actual firmware that supports this yet.
+
+AgentTerror — 5/21/25, 12:53 PMWednesday, May 21, 2025 at 12:53 PM
+
+sure sure but if it's coming, I can plan, because I am already doing things like short/long press to double dip on the controls we have.
+
+1
+
+AgentTerror — 5/21/25, 1:12 PMWednesday, May 21, 2025 at 1:12 PM
+
+looking at the diff it seems to make sense to me... but just so I'm clear, if we override the control, we have it by default, and the user has to take action (4-press) to get back to the NT-defaults?
+
+os — 5/21/25, 1:14 PMWednesday, May 21, 2025 at 1:14 PM
+
+The four button press takes you out of the UI altogether. Like pressing button 2 usually does.
+
+[1:14 PM]Wednesday, May 21, 2025 at 1:14 PM
+
+Any control you return in the mask from hasCustomUi() won't be used by the NT for anything.
+
+[1:15 PM]Wednesday, May 21, 2025 at 1:15 PM
+
+So if you return ~0 then you get everything and the NT does nothing.
+
+[1:16 PM]Wednesday, May 21, 2025 at 1:16 PM
+
+I'm more and more of the opinion that all these custom UIs are just going to confuse the heck out of people and you should all do it with parameters only, but hey we'll find out.
+
+1
+
+1
+
+AgentTerror — 5/21/25, 1:17 PMWednesday, May 21, 2025 at 1:17 PM
+
+well, then allow me to ask: what's the chances of increasing the number of parameters to use a 16-bit index?
+
+AgentTerror — 5/21/25, 1:27 PMWednesday, May 21, 2025 at 1:27 PM
+
+I guess that's somewhat of a non-sequitur, because while related, I would still need custom UI even if I were storing everything in parameters
+
+@os
+
+I'm more and more of the opinion that all these custom UIs are just going to confuse the heck out of people and you should all do it with parameters only, but hey we'll find out.
+
+McNoodlesoSUS — 5/21/25, 5:49 PMWednesday, May 21, 2025 at 5:49 PM
+
+maybe toggle custom UI with button 3 hold? It doesn't do much else iirc (edited)Thursday, May 22, 2025 at 5:14 AM
+
+@os
+
+I implemented the suggestion that pressing all 4 buttons at once takes you out of any custom UI (like for the UI scripts), in case you override button 2.
+
+Jodok31283TOC — 5/21/25, 5:55 PMWednesday, May 21, 2025 at 5:55 PM
+
+Custom UI hmmmm, I'm curious but will definitely do my first things using the NT standard UI in the beginning, not sure if custom UI could create confusion, hope not
+
+1
+
+@McNoodlesoSUS
+
+maybe toggle custom UI with button 3 hold?  It doesn't do much else iirc (edited)Thursday, May 22, 2025 at 5:14 AM
+
+Jodok31283TOC — 5/21/25, 5:56 PMWednesday, May 21, 2025 at 5:56 PM
+
+Button 3 is the shift button ?
+
+[5:59 PM]Wednesday, May 21, 2025 at 5:59 PM
+
+Ah no I see in the manual it is the help button
+
+[5:59 PM]Wednesday, May 21, 2025 at 5:59 PM
+
+Jodok31283TOC — 5/21/25, 6:04 PMWednesday, May 21, 2025 at 6:04 PM
+
+A wise thing to do when someone will use a custom UI is definitely to write a little manual where the functionality is explained in detail.
+
+May 22, 2025
+
+AgentTerror — 5/22/25, 11:43 AMThursday, May 22, 2025 at 11:43 AM
+
+@os Looking at detecting triggers, and wondering if I'm re-inventing something that may already exist / could be exposed? I know in lua you offered methods specifically for that... in c++ I assume we are supposed to monitor the inputs in step, but wondering if I should really be monitoring every sample? or is just checking, say, the last sample of the block every call enough? Are triggers usually ignored unless they are at least a certain length? i.e. if I got a 2-sample trigger (0.0, 5.0, 5.0, 0.0) would that generally trigger things, or would I typically drop that as too short to qualify?
+
+[11:47 AM]Thursday, May 22, 2025 at 11:47 AM
+
+Right now I have what I think might be a fairly typical setup (that I learned about from VCV docs) but I'm wondering should I really be calling process for every single sample, for every input that I have as a trigger: struct Trigger { private:     static constexpr float LowThreshold = 0.1f;     static constexpr float HighThreshold = 1.0f;      bool State; public:     enum Edge {         None,         Rising,         Falling     };      inline Edge Process(float val) {         if (State && val < LowThreshold) {             State = false;             return Falling;         } else if (!State && val >= HighThreshold) {             State = true;             return Rising;         }         return None;     } };
+
+os — 5/22/25, 11:48 AMThursday, May 22, 2025 at 11:48 AM
+
+It's between you and your conscience, really. All of the built in algorithms check every frame.
+
+AgentTerror — 5/22/25, 11:49 AMThursday, May 22, 2025 at 11:49 AM
+
+ok great, I will start there then, thanks!
+
+os — 5/22/25, 11:49 AMThursday, May 22, 2025 at 11:49 AM
+
+They do it in a tight loop within step. I don't have a class for it or anything. Seems like overkill. (edited)Thursday, May 22, 2025 at 11:49 AM
+
+AgentTerror — 5/22/25, 11:52 AMThursday, May 22, 2025 at 11:52 AM
+
+haha well I'm just starting down this particular path, but I was hoping the fact that I've got the Process method as inline would compile to mostly a similar loop
+
+Lamarcph — 5/22/25, 12:11 PMThursday, May 22, 2025 at 12:11 PM
+
+Can we build a plugin on c++17? I guess not?
+
+Lamarcph
+
+Can we build a plugin on c++17? I guess not?
+
+Lamarcph — 5/22/25, 12:15 PMThursday, May 22, 2025 at 12:15 PM
+
+it's not really important...
+
+AgentTerror — 5/22/25, 12:16 PMThursday, May 22, 2025 at 12:16 PM
+
+yes I am using c++23 to build
+
+Lamarcph — 5/22/25, 12:17 PMThursday, May 22, 2025 at 12:17 PM
+
+ok!
+
+Lamarcph — 5/22/25, 1:49 PMThursday, May 22, 2025 at 1:49 PM
+
+I am trying to wrap my head around the "float* busFrames" structure in the step. If we are working in stereo, this count as 2 channel? so, in this example, the gain example is mono? For my understanding I am trying to "convert" this into 4 vectors of floats, stereo inputs, stereo outputs. Is this documented somewhere?
+
+AgentTerror — 5/22/25, 1:57 PMThursday, May 22, 2025 at 1:57 PM
+
+I also had a little bit of a time getting my head around the code in gain.cpp.... I think what I was missing is that v[] doesn't contain the value you're after, it contains the bus number you should be pulling your data from. But yes, stereo would be 2 different inputs and 2 different outputsit can sound frantic when the square moves fast. And it can sound slow with some faster changes when the square goes over the more detailed parts.
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+[7:47 PM]Saturday, May 31, 2025 at 7:47 PM
+
+Yes, the code is just hard coded constants for the jula fractal. When you zoom all the way out you can see a shape similar to above. Sort of.
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+[7:48 PM]Saturday, May 31, 2025 at 7:48 PM
+
+It's kind of an inside-out mandelbrot set.
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+Jodok31283TOC — 5/31/25, 7:48 PMSaturday, May 31, 2025 at 7:48 PM
+
+I can't wait to test that out tomorrow morning, my expectations are high so be warned.... joking obviously. I just can't now imagine how it works and dream about how it "should work" from my expectations point of view
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+thorinside — 5/31/25, 7:49 PMSaturday, May 31, 2025 at 7:49 PM
+
+Temper expectations. Low bar.
+
+@thorinside
+
+Yes, the code is just hard coded constants for the jula fractal. When you zoom all the way out you can see a shape similar to above. Sort of.
+
+Jodok31283TOC — 5/31/25, 7:49 PMSaturday, May 31, 2025 at 7:49 PM
+
+Hmmm interesting interesting
+
+[7:50 PM]Saturday, May 31, 2025 at 7:50 PM
+
+Fractal values could be a nice source of randomness that isn't too much random, as per se the fractal repeats itself in itself, if that sentence makes sense
+
+thorinside — 5/31/25, 7:50 PMSaturday, May 31, 2025 at 7:50 PM
+
+I just have these ideas when I walk and talk to ChatGPT, and then I need to get them out of my head so I can move on.
+
+[7:51 PM]Saturday, May 31, 2025 at 7:51 PM
+
+The 'Chaos' algorithm in NT is another source of these. Probably much more efficient than what I made.
+
+Jodok31283TOC — 5/31/25, 7:56 PMSaturday, May 31, 2025 at 7:56 PM
+
+The CopierMachine clone uses 128 digits of a fractal sequence count down by two from successive integers
+
+[7:56 PM]Saturday, May 31, 2025 at 7:56 PM
+
+1, 2, 3, 1, 4, 2, 5, 3, 1, 6, 4, 2, 7, 5, 3, 1, 8, 6, 4, 2, 9, 7, 5, 3, 1, 10, 8, 6, 4, 2, 11, 9, 7, 5, 3, 1, 12, 10, 8, 6, 4, 2, 13, 11, 9, 7, 5, 3, 1, 14, 12, 10, 8, 6, 4, 2, 15, 13, 11, 9, 7, 5, 3, 1, 16, 14, 12, 10, 8, 6, 4, 2, 17, 15, 13, 11, 9, 7, 5, 3, 1, 18, 16, 14, 12, 10, 8, 6, 4, 2, 19, 17
+
+[7:56 PM]Saturday, May 31, 2025 at 7:56 PM
+
+I like fractals they can be musical when associated to a quantizer
+
+[7:59 PM]Saturday, May 31, 2025 at 7:59 PM
+
+It has two integers sequences of fractals actually... (edited)Saturday, May 31, 2025 at 8:00 PM
+
+thorinside — 5/31/25, 8:01 PMSaturday, May 31, 2025 at 8:01 PM
+
+Well, send me some music made with it tomorrow. You know who to blame.
+
+1
+
+Jodok31283TOC — 5/31/25, 8:03 PMSaturday, May 31, 2025 at 8:03 PM
+
+First I need to figure out how it works, then I can plan on how to use it for a specific experiment . But who knows maybe already tomorrow something interesting will come out...
+
+June 1, 2025
+
+Jodok31283TOC — 6/1/25, 7:10 AMSunday, June 1, 2025 at 7:10 AM
+
+@thorinside interesting idea your new algorithm. I have to think about how to use it, the julia goes into an attenuverter (very attenuated) then into a quantizer (all 3 in the same NT) and than I send the output to a rings clone... it's not too memory hungry for now without any modulation of the parameters. The only thing I could criticize is that the ball could be a little bit slower at his slowest setting. Yesterday at sometime you said to reset periodically that reset I can't find anywhere in the settings
+
+@Jodok31283TOC
+
+@thorinside interesting idea your new algorithm. I have to think about how to use it, the julia goes into an attenuverter (very attenuated) then into a quantizer (all 3 in the same NT)  and than I send the output to a rings clone... it's not too memory hungry for now without any modulation of the parameters. The only thing I could criticize is that the ball could be a little bit slower at his slowest setting. Yesterday at sometime you said to reset periodically that reset I can't find anywhere in the settings
+
+thorinside — 6/1/25, 8:35 AMSunday, June 1, 2025 at 8:35 AM
+
+Yeah, the reset is only on encoder 2 press. I'll surface the input for that too.
+
+thorinside — 6/1/25, 3:40 PMSunday, June 1, 2025 at 3:40 PM
+
+@os I have been trying to send SysEX from a plug-in today, and I can only get it to send the SysEX to the internal bus, never to the USB bus. I'll keep trying but if I can't get anywhere I'll drop the test plugin here.
+
+snailed — 6/1/25, 4:15 PMSunday, June 1, 2025 at 4:15 PM
+
+That Julia Set plugin is super fun. I see only .cpp files for the CopierMachine plugin-- how do I load those?
+
+1
+
+@snailed
+
+That Julia Set plugin is super fun. I see only .cpp files for the CopierMachine plugin-- how do I load those?
+
+thorinside — 6/1/25, 4:25 PMSunday, June 1, 2025 at 4:25 PM
+
+⁠disting-nt-c-api⁠ is the one I was using, 4 channels. The .o is there too.
+
+snailed — 6/1/25, 4:34 PMSunday, June 1, 2025 at 4:34 PM
+
+ah ha! i downloaded the wrong one. Okay, thanks!
+
+1
+
+Jodok31283TOC — 6/1/25, 5:01 PMSunday, June 1, 2025 at 5:01 PM
+
+Yeah I was thinking I put the cpp files with the .o files so that people can have a look into the code and make comments, critics or whatever they want to say, about the code. And of course re use pieces of the code to create new stuff. For example I used the scales from CopierMachine also in the I-Ching plug-in
+
+AgentTerror — 6/1/25, 7:14 PMSunday, June 1, 2025 at 7:14 PM
+
+@os I have setup a parameter CV mapping on physical input 9, and have a trigger (clock) on physical input 10. I am seeing what I think might be crosstalk between the channels, because I'm getting parameter changed events for the parameter mapped to input 9 when don't have a cable plugged into it. However, I am also seeing behavior that makes it seem like you are compensating for that in the NT.... the parameter value does not move in the parameter menu, and the parameter value I print is always steady.... however I also track the previous value to make comparisons against, and that's where I'm noticing it... the crosstalk seems to cause a parameter change event, and I record that as my previous value... but then it seems that maybe you immediately issue a "correcting" event, with the stable value. I say this because I also am counting events trying to diagnose, and I seem to get these phantom events in pairs, and my count always increases by 2. Of course this is all conjecture from the behavior I'm seeing, but it's the only thing I can think of that explains what I see. Do I have a ghost in the machine (or code), or does this ring true to you?
+
+1
+
+[7:15 PM]Sunday, June 1, 2025 at 7:15 PM
+
+And I guess if so, my follow-on question would be should we (not) be getting events for the uncorrected values? Or no events at all if the "stable" value has not changed? (edited)Sunday, June 1, 2025 at 7:32 PM
+
+[7:17 PM]Sunday, June 1, 2025 at 7:17 PM
+
+Here’s a video showing the behavior
+
+Download
+
+AgentTerror — 6/1/25, 7:21 PMSunday, June 1, 2025 at 7:21 PM
+
+The number to the left of the T is the event count, always increasing by 2, the number after the T is my previous value I record, then the currently reported value, and finally the delta of the 2
+
+AgentTerror — 6/1/25, 9:44 PMSunday, June 1, 2025 at 9:44 PM
+
+Ok, after some more thinking and playing around, I think I may just be on a fools errand here anyway with my approach... In theory, I am trying to track the previous parameter value so that I can, for every change, know if I am increasing or decreasing, and use that information to scale values toward one value or another.... but in the real world, with CV mappings, even when patched to a constant voltage (as opposed to the unpatched video above), I just get lots of param change events due to micro voltage fluctuations, making my code scale values in one direction, then another over and over, compounding a bunch of small errors very quickly. I think I just need to rethink what I'm doing in this section.
+
+issey olive — 6/1/25, 10:06 PMSunday, June 1, 2025 at 10:06 PM
+
+This might be unrelated, but especially when using presets, I've noticed that when I physically connect external inputs to what seem to be unrouted inputs, like inputs 10-11 or 8-9, the scale or other parameters change. It doesn't happen if I don't patch anything there, so I've just been avoiding patching or routing to those inputs. However, since it's a preset, I'm wondering if this behavior is due to some kind of algorithm routing within the preset, but I'm not sure
+
+June 2, 2025
+
+@Jodok31283TOC
+
+Yeah I was thinking I put the cpp files with the .o files so that people can have a look into the code and make comments, critics or whatever they want to say, about the code. And of course re use pieces of the code to create new stuff. For example I used the scales from CopierMachine also in the I-Ching plug-in
+
+os — 6/2/25, 3:29 AMMonday, June 2, 2025 at 3:29 AM
+
+You need to start putting your stuff in GitHub or similar.
+
+@thorinside
+
+@os I have been trying to send SysEX from a plug-in today, and I can only get it to send the SysEX to the internal bus, never to the USB bus. I'll keep trying but if I can't get anywhere I'll drop the test plugin here.
+
+os — 6/2/25, 3:35 AMMonday, June 2, 2025 at 3:35 AM
+
+No, that won't work. SysEx over USB MIDI is fiddly. Ideally I would expose a dedicated function to send a SysEx message, rather than you pumping it out byte by byte which is what you must be doing now.
+
+@os
+
+You need to start putting your stuff in GitHub or similar.
+
+Jodok31283TOC — 6/2/25, 5:49 AMMonday, June 2, 2025 at 5:49 AM
+
+As soon as I understood how to do it. Should I make a PR on expertsleepers github too?
+
+os — 6/2/25, 5:51 AMMonday, June 2, 2025 at 5:51 AM
+
+That would come later. Get comfortable with using it for basic stuff before you start worrying about PRs.
+
+Jodok31283TOC — 6/2/25, 5:52 AMMonday, June 2, 2025 at 5:52 AM
+
+What you mean by 'basic stuff' ?
+
+[5:53 AM]Monday, June 2, 2025 at 5:53 AM
+
+Any tips on what I should focus first?
+
+os — 6/2/25, 5:58 AMMonday, June 2, 2025 at 5:58 AM
+
+Well, just creating a repo, and submitting code to it. Managing a local repo and pushing changes to the online one.
+
+Jodok31283TOC — 6/2/25, 5:59 AMMonday, June 2, 2025 at 5:59 AM
+
+Ok thank you
+
+@os
+
+No, that won't work. SysEx over USB MIDI is fiddly. Ideally I would expose a dedicated function to send a SysEx message, rather than you pumping it out byte by byte which is what you must be doing now.
+
+thorinside — 6/2/25, 9:26 AMMonday, June 2, 2025 at 9:26 AM
+
+Sounds good. That sounds perfect. Ideally the buffer would be large enough to send messages up to 1024 bytes long since Oxi has a display.
+
+1
+
+1
+
+@thorinside
+
+Sounds good. That sounds perfect. Ideally the buffer would be large enough to send messages up to 1024 bytes long since Oxi has a display.
+
+os — 6/2/25, 10:02 AMMonday, June 2, 2025 at 10:02 AM
+
+Try this, and the new API I just pushed.
+
+manufacturing_package.zip
+
+1.37 MB
+
+Download
+
+1
+
+@os
+
+Try this, and the new API I just pushed.
+
+thorinside — 6/2/25, 10:03 AMMonday, June 2, 2025 at 10:03 AM
+
+Wow. Okay will do shortly.
+
+os — 6/2/25, 10:04 AMMonday, June 2, 2025 at 10:04 AM
+
+Caveat: not tested, but it's a thin wrapper over an internal function which is well tested.
+
+@os
+
+Caveat: not tested, but it's a thin wrapper over an internal function which is well tested.
+
+thorinside — 6/2/25, 10:04 AMMonday, June 2, 2025 at 10:04 AM
+
+Understood.
+
+@os
+
+Caveat: not tested, but it's a thin wrapper over an internal function which is well tested.
+
+thorinside — 6/2/25, 10:25 AMMonday, June 2, 2025 at 10:25 AM
+
+For now I worked around it by #include <stddef.h> in the api.h, but you do what you need to.
+
+os — 6/2/25, 10:26 AMMonday, June 2, 2025 at 10:26 AM
+
+Oof, sorry.
+
+thorinside — 6/2/25, 10:27 AMMonday, June 2, 2025 at 10:27 AM
+
+No worries. I've done much worse.
+
+[10:30 AM]Monday, June 2, 2025 at 10:30 AM
+
+Initial test is successful. Oxi has received a sysex from NT over USB and has gone into remote mode. Will I see the 0xF7 bytes for response messages @os ?
+
+os — 6/2/25, 10:32 AMMonday, June 2, 2025 at 10:32 AM
+
+Will you see them?
+
+thorinside — 6/2/25, 10:33 AMMonday, June 2, 2025 at 10:33 AM
+
+Sorry, direct question: midiRealtime will receive them? (edited)Monday, June 2, 2025 at 10:33 AM
+
+os — 6/2/25, 10:33 AMMonday, June 2, 2025 at 10:33 AM
+
+It's not a realtime message.
+
+thorinside — 6/2/25, 10:33 AMMonday, June 2, 2025 at 10:33 AM
+
+Say Oxi sending back some bytes for an ACK.
+
+os — 6/2/25, 10:34 AMMonday, June 2, 2025 at 10:34 AM
+
+I don't believe plug-ins receive sysex at all. Let me check.
+
+[10:35 AM]Monday, June 2, 2025 at 10:35 AM
+
+No, plug-ins don't receive SysEx.
+
+thorinside — 6/2/25, 10:36 AMMonday, June 2, 2025 at 10:36 AM
+
+Okay, can I formally request a way to enable that to happen? I think I'll need it for this to be of any use.
+
+[10:36 AM]Monday, June 2, 2025 at 10:36 AM
+
+I only need it on USB for now too.
+
+os — 6/2/25, 10:37 AMMonday, June 2, 2025 at 10:37 AM
+
+Sure, but I won't be able to do that in the next 5 minutes. Needs some thought.
+
+[10:37 AM]Monday, June 2, 2025 at 10:37 AM
+
+I'm trying to actually wrap up 1.9.
+
+thorinside — 6/2/25, 10:37 AMMonday, June 2, 2025 at 10:37 AM
+
+My expectations are low. This is a long term idea. No rush at all.
+
+os — 6/2/25, 10:37 AMMonday, June 2, 2025 at 10:37 AM
+
+What is the general idea?
+
+thorinside — 6/2/25, 10:40 AMMonday, June 2, 2025 at 10:40 AM
+
+Well, Oxi One has a Remote mode built in. It's controlled by Sysex. This means NT could use Oxi as a 'Display', a 'Grid' and for a four knob controller. So a plug-in could look at the algorithms, and provide ways to control those algorithms from the Oxi One, by basically being a man-in-the-middle sending the necessary commands to make it look like Oxi has control over say the step sequencers in a preset, or potentially other abstractions of how to control parameters on the external screen of the Oxi.
+
+1
+
+1
+
+[10:41 AM]Monday, June 2, 2025 at 10:41 AM
+
+Or even copying information onto the screen from Disting NT.
+
+os — 6/2/25, 10:42 AMMonday, June 2, 2025 at 10:42 AM
+
+Does it make sense for this to be an algorithm per se?
+
+[10:43 AM]Monday, June 2, 2025 at 10:43 AM
+
+Is it a more general class of system level processors?
+
+thorinside — 6/2/25, 10:44 AMMonday, June 2, 2025 at 10:44 AM
+
+There will likely be a desire to have similar things for other controllers with Sysex protocols.
+
+[10:44 AM]Monday, June 2, 2025 at 10:44 AM
+
+It does feel a little like providing a way to make a 'driver' for Oxi, or Playend, or whatever, might make more sense.
+
+[10:45 AM]Monday, June 2, 2025 at 10:45 AM
+
+Would require a lot more thought.
+
+[10:46 AM]Monday, June 2, 2025 at 10:46 AM
+
+Maybe I can experiment with how far I can go with just what you've given me so far, with the intent that it will change 'shape' if you add a more system-level service.
+
+os — 6/2/25, 10:46 AMMonday, June 2, 2025 at 10:46 AM
+
+Yup.
+
+[10:47 AM]Monday, June 2, 2025 at 10:47 AM
+
+I mean, will it even have any busses? Probably not.
+
+thorinside — 6/2/25, 10:47 AMMonday, June 2, 2025 at 10:47 AM
+
+Well, the Bitwig remote shows 'Audio Levels' on the Oxi display. So, perhaps.
+
+os — 6/2/25, 10:47 AMMonday, June 2, 2025 at 10:47 AM
+
+Also, how large are the sysex messages coming in likely to be?
+
+thorinside — 6/2/25, 10:49 AMMonday, June 2, 2025 at 10:49 AM
+
+Honestly, I think there's only one Sysex coming back, it's part of the start-up protocol: Go into remote mode -> OK I'm in Remote Mode. That's the only message that comes back I think.
+
+[10:50 AM]Monday, June 2, 2025 at 10:50 AM
+
+The rest are CCs.
+
+[10:50 AM]Monday, June 2, 2025 at 10:50 AM
+
+I'll just check the reference, and drop it here.
+
+os — 6/2/25, 10:51 AMMonday, June 2, 2025 at 10:51 AM
+
+OK so you're not blocked at all on this right now?
+
+thorinside — 6/2/25, 10:51 AMMonday, June 2, 2025 at 10:51 AM
+
+No, it's just that one message coming back, which I can ignore.
+
+[10:52 AM]Monday, June 2, 2025 at 10:52 AM
+
+Just giving you the details, so you're aware of the silly things I'm trying to do.
+
+1
+
+[10:54 AM]Monday, June 2, 2025 at 10:54 AM
+
+Here's the rather sparse information on the remote control protocol for Oxi One.
+
+OXI ONE REMOTE.pdf
+
+192.48 KB
+
+Download
+
+os — 6/2/25, 10:59 AMMonday, June 2, 2025 at 10:59 AM
+
+That's a genuine snort-my-coffee LOL from me.
+
+[10:59 AM]Monday, June 2, 2025 at 10:59 AM
+
+ONE PAGE
+
+thorinside — 6/2/25, 11:00 AMMonday, June 2, 2025 at 11:00 AM
+
+Yeah. It's not a complicated protocol. It does NOTHING by itself.
+
+[11:00 AM]Monday, June 2, 2025 at 11:00 AM
+
+The driving program must do everything. (edited)Monday, June 2, 2025 at 11:00 AM
+
+os — 6/2/25, 11:00 AMMonday, June 2, 2025 at 11:00 AM
+
+A lot like the Launchpad in programmer mode.
+
+thorinside — 6/2/25, 11:01 AMMonday, June 2, 2025 at 11:01 AM
+
+Right. I am guessing there are quite a few devices out there that NT could potentially reach out to and use as 'sequencers' or 'displays' for a few of the algorithms in NT.
+
+os — 6/2/25, 11:02 AMMonday, June 2, 2025 at 11:02 AM
+
+Bearing in mind that the Step Sequencer is based off the FH-2 one, which requires a Launchpad to be used at all.
+
+[11:03 AM]Monday, June 2, 2025 at 11:03 AM
+
+All this would make a lot more sense if the NT was a USB host.
+
+thorinside — 6/2/25, 11:03 AMMonday, June 2, 2025 at 11:03 AM
+
+Oxi is a USB Host, and it connects with NT just fine in 'Host+Power' mode.
+
+os — 6/2/25, 11:04 AMMonday, June 2, 2025 at 11:04 AM
+
+w00t
+
+thorinside — 6/2/25, 11:06 AMMonday, June 2, 2025 at 11:06 AM
+
+One USB-C cable between them.
+
+1
+
+os — 6/2/25, 11:13 AMMonday, June 2, 2025 at 11:13 AM
+
+What's the screen resolution on the Oxi?
+
+thorinside — 6/2/25, 11:15 AMMonday, June 2, 2025 at 11:15 AM
+
+It's a 1024 bitmap. I seem to remember it's 5 lines of very small text. I'll check the pixel dimensions.
+
+os — 6/2/25, 11:16 AMMonday, June 2, 2025 at 11:16 AM
+
+64 x 16?
+
+thorinside — 6/2/25, 11:17 AMMonday, June 2, 2025 at 11:17 AM
+
+128x64.
+
+os — 6/2/25, 11:18 AMMonday, June 2, 2025 at 11:18 AM
+
+Oh, monochrome?
+
+thorinside — 6/2/25, 11:18 AMMonday, June 2, 2025 at 11:18 AM
+
+Half Disting width.
+
+[11:18 AM]Monday, June 2, 2025 at 11:18 AM
+
+Yes, monochrome.
+
+os — 6/2/25, 11:18 AMMonday, June 2, 2025 at 11:18 AM
+
+OK.
+
+[11:18 AM]Monday, June 2, 2025 at 11:18 AM
+
+I mean those are big sysex messages to be throwing around too often.
+
+thorinside — 6/2/25, 11:19 AMMonday, June 2, 2025 at 11:19 AM
+
+True. But I was surprised by how fast it handles them.
+
+[11:19 AM]Monday, June 2, 2025 at 11:19 AM
+
+But it's supposed to be used for text that doesn't change too much.
+
+[11:21 AM]Monday, June 2, 2025 at 11:21 AM
+
+The guy who did the Bitwig remote driver ended up doing some animation and stuff like that, a bit overkill, but he was showing audio levels changing. And parameter value updates as you turn the knobs and so on. I am guessing those would quickly cause audio dropouts on NT.
+
+[11:22 AM]Monday, June 2, 2025 at 11:22 AM
+
+But experiments will be made. It is just midi after all.
+
+[11:23 AM]Monday, June 2, 2025 at 11:23 AM
+
+I think the hard parts here will be making 'text' for the bitmap display. So I may leave the display logic for later.
+
+os — 6/2/25, 11:24 AMMonday, June 2, 2025 at 11:24 AM
+
+I would. Leave the Oxi as the controls and the NT as the display.
+
+1
+
+thorinside — 6/2/25, 11:25 AMMonday, June 2, 2025 at 11:25 AM
+
+I'd love to be able to display parameter names and their values, though, at some point.
+
+1
+
+os — 6/2/25, 11:26 AMMonday, June 2, 2025 at 11:26 AM
+
+Obvs I do have a font rendering scheme. I could expose an API to render to a buffer.
+
+[11:26 AM]Monday, June 2, 2025 at 11:26 AM
+
+It's FreeType underneath, so you could actually choose your own .ttf font files
+
+thorinside — 6/2/25, 11:27 AMMonday, June 2, 2025 at 11:27 AM
+
+Add it to your low priority list. But yes, I was hoping.
+
+[11:28 AM]Monday, June 2, 2025 at 11:28 AM
+
+I'm sure, also, AI would write some really bad code to make text without this.
+
+os — 6/2/25, 11:28 AMMonday, June 2, 2025 at 11:28 AM
+
+Or you could generate some fixed font data as static const arrays in your plug-in.
+
+thorinside — 6/2/25, 11:28 AMMonday, June 2, 2025 at 11:28 AM
+
+Yeah. It's doable for sure.
+
+os — 6/2/25, 11:28 AMMonday, June 2, 2025 at 11:28 AM
+
+I seem to recall imagemagick will actually spit out PNGs for you.
+
+thorinside — 6/2/25, 11:28 AMMonday, June 2, 2025 at 11:28 AM
+
+So, I'll go as far as I can without added APIs.
+
+1
+
+@thorinside
+
+So, I'll go as far as I can without added APIs.
+
+McNoodlesoSUS — 6/2/25, 12:11 PMMonday, June 2, 2025 at 12:11 PM
+
+Very exciting! I might have to pick up an oxi one if this works out. Would prefer an official NT companion device thouh. Maybe forum-led if an additional ES controller is off the cards
+
+@McNoodlesoSUS
+
+Very exciting! I might have to pick up an oxi one if this works out.  Would prefer an official NT companion device thouh.  Maybe forum-led if an additional ES controller is off the cards
+
+thorinside — 6/2/25, 12:33 PMMonday, June 2, 2025 at 12:33 PM
+
+The main downside to this sort of driver is that it makes Oxi an extension of NT, and you loose all of the great sequencers the Oxi has built-in.
+
+1
+
+os — 6/2/25, 12:41 PMMonday, June 2, 2025 at 12:41 PM
+
+You could get a second Oxi to use as an Oxi.
+
+1
+
+1
+
+thorinside — 6/2/25, 12:42 PMMonday, June 2, 2025 at 12:42 PM
+
+Yeah, that might be a reason for a MkII.
+
+[12:42 PM]Monday, June 2, 2025 at 12:42 PM
+
+But then I'd need to find the desk space for both.
+
+os — 6/2/25, 12:42 PMMonday, June 2, 2025 at 12:42 PM
+
+I can see more value in a Launchpad or Launchcontrol integration where the thing is designed primarily as a controller. (edited)Monday, June 2, 2025 at 12:42 PM
+
+snailed — 6/2/25, 1:22 PMMonday, June 2, 2025 at 1:22 PM
+
+Launchpad integration would be great, but I suppose it'd have to get plugged in via something else like an FH2 or a USB host?
+
+[1:22 PM]Monday, June 2, 2025 at 1:22 PM
+
+I tried out CopierMachine.o and was confused by the i/o numbering
+
+[1:23 PM]Monday, June 2, 2025 at 1:23 PM
+
+It's just #'d 1 - 24.
+
+[1:23 PM]Monday, June 2, 2025 at 1:23 PM
+
+sorry, 28
+
+[1:24 PM]Monday, June 2, 2025 at 1:24 PM
+
+I imagine it's inputs followed by outputs followed by auxes?
+
+AgentTerror — 6/2/25, 1:25 PMMonday, June 2, 2025 at 1:25 PM
+
+@os I think that SetupUi might not be getting called when loading a preset that immediately displays the UI screen... but it does get called if I save the preset on the conveyer belt view, load that, then enter the UI (edited)Monday, June 2, 2025 at 1:37 PM
+
+@snailed
+
+I imagine it's inputs followed by outputs followed by auxes?
+
+os — 6/2/25, 2:14 PMMonday, June 2, 2025 at 2:14 PM
+
+It will be but there's no need for plug-ins to have weird bus naming. There are macros in the API specifically for that stuff, so plug-ins look just like regular algorithms.
+
+@AgentTerror
+
+@os I think that SetupUi might not be getting called when loading a preset that immediately displays the UI screen...  but it does get called if I save the preset on the conveyer belt view, load that, then enter the UI (edited)Monday, June 2, 2025 at 1:37 PM
+
+os — 6/2/25, 2:15 PMMonday, June 2, 2025 at 2:15 PM
+
+I'll check tomorrow.
+
+1
+
+thorinside — 6/2/25, 2:30 PMMonday, June 2, 2025 at 2:30 PM
+
+Okay, a little update: I think that Oxi One isn't programmed to be able to do USB Host mode at the same time as Remote mode. So the only way to get this to work would be through another USB host. So I set up a midi router on my mac, and was able to get NT to put Oxi into Remote mode and take it back out of remote mode, and also turn on a few of the grid lights. So that works for now.
+
+@snailed
+
+I tried out CopierMachine.o and was confused by the i/o numbering 
+
+Jodok31283TOC — 6/2/25, 2:32 PMMonday, June 2, 2025 at 2:32 PM
+
+Hmmm... appreciate the critics about the in/out management in my plug-ins, you already mentioned that for the I-Ching_RND plug-in. If that's the only critical part of those plug-ins I can live with that until I have some time to fix that. If you want it fixed earlier the code is there free to use, I have a full-time job and often do overtime. So don't be surprised if it takes a long time to be fixed from my side on.
+
+@thorinside
+
+Okay, a little update: I think that Oxi One isn't programmed to be able to do USB Host mode at the same time as Remote mode. So the only way to get this to work would be through another USB host. So I set up a midi router on my mac, and was able to get NT to put Oxi into Remote mode and take it back out of remote mode, and also turn on a few of the grid lights. So that works for now.
+
+McNoodlesoSUS — 6/2/25, 2:33 PMMonday, June 2, 2025 at 2:33 PM
+
+launch control xl 3 looks like it could be a contender but I think i'm leaning to the intech modules to keep it all in one case
+
+Jodok31283TOC — 6/2/25, 2:34 PMMonday, June 2, 2025 at 2:34 PM
+
+@thorinside why not do it with an app like the nt helper, an app called NT controller, should be doable with OSC/MIDI commands
+
+@Jodok31283TOC
+
+@thorinside why not do it with an app like the nt helper, an app called NT controller,  should be doable with OSC/MIDI commands
+
+thorinside — 6/2/25, 2:36 PMMonday, June 2, 2025 at 2:36 PM
+
+Also a possibility, but I sort of wanted to have NT do the messaging because there all of the algorithm parameters and so on are available without doing more messaging.
+
+1
+
+1
+
+[2:37 PM]Monday, June 2, 2025 at 2:37 PM
+
+Anyway, I have to stop obsessing and do my day job too.
+
+Jodok31283TOC — 6/2/25, 2:37 PMMonday, June 2, 2025 at 2:37 PM
+
+I still don't completely understand what you want to do with the oxi one
+
+thorinside — 6/2/25, 2:38 PMMonday, June 2, 2025 at 2:38 PM
+
+Turn it into an NT controlled control surface.
+
+[2:38 PM]Monday, June 2, 2025 at 2:38 PM
+
+Basically a Remote Control.
+
+Jodok31283TOC — 6/2/25, 2:39 PMMonday, June 2, 2025 at 2:39 PM
+
+A remote control for what? For the NT?
+
+thorinside — 6/2/25, 2:39 PMMonday, June 2, 2025 at 2:39 PM
+
+Yes.
+
+Jodok31283TOC — 6/2/25, 2:41 PMMonday, June 2, 2025 at 2:41 PM
+
+Ah and why not use a midi controller? It seems complicated what you want to do, at least reading the chat it seems a lot of work, and I don't know why not use a midi controller instead, or as suggested an app
+
+thorinside — 6/2/25, 2:42 PMMonday, June 2, 2025 at 2:42 PM
+
+Oxi is great as a midi controller. But imagine controlling something like the Step Sequencer inside an NT Preset by pushing grid buttons.
+
+Jodok31283TOC — 6/2/25, 2:43 PMMonday, June 2, 2025 at 2:43 PM
+
+I'm using the NI Komplete Kontrol mk1 to remote control the NT, but most of the time I try to get things the way I don't need to control much of it, a sort of set and forget setup
+
+@thorinside
+
+Oxi is great as a midi controller. But imagine controlling something like the Step Sequencer inside an NT Preset by pushing grid buttons.
+
+Jodok31283TOC — 6/2/25, 2:43 PMMonday, June 2, 2025 at 2:43 PM
+
+Ahaaa well that could be interesting of course...
+
+snailed — 6/2/25, 3:18 PMMonday, June 2, 2025 at 3:18 PM
+
+@Jodok31283 are the input numbers like I imagined? Inputs 1 - 12, then Outputs 1 - 8, then aux 1 - 8?
+
+[3:18 PM]Monday, June 2, 2025 at 3:18 PM
+
+just trying to figure out what's what, i appreciate your work
+
+1
+
+Jodok31283TOC — 6/2/25, 3:18 PMMonday, June 2, 2025 at 3:18 PM
+
+Yes exactly
+
+snailed — 6/2/25, 3:18 PMMonday, June 2, 2025 at 3:18 PM
+
+ok, i think i can make sense of that in the meantime but definitely would be easier if it stuck to the naming convention elsewhere. thank you, about to try it this afternoon
+
+thorinside started a thread: Oxi One Remote Controller Plugin. See all threads. — 6/2/25, 4:44 PMMonday, June 2, 2025 at 4:44 PM
+
+ThreadOxi One Remote Controller Plugin8 Messages ›
+
+There are no recent messages in this thread.
+
+@snailed
+
+ok, i think i can make sense of that in the meantime but definitely would be easier if it stuck to the naming convention elsewhere. thank you, about to try it this afternoon 
+
+Jodok31283TOC — 6/2/25, 5:14 PMMonday, June 2, 2025 at 5:14 PM
+
+Ok let me know if you have suggestions, comments, critics about the plug-in
+
+snailed — 6/2/25, 5:15 PMMonday, June 2, 2025 at 5:15 PM
+
+awesome, i'll make a patch tonight or later on. got caught up with DROID for a moment
+
+[5:15 PM]Monday, June 2, 2025 at 5:15 PM
+
+thanks for contributingAgentTerror — 6/24/25, 11:42 AMTuesday, June 24, 2025 at 11:42 AM
+
+I think
+
+os — 6/24/25, 11:42 AMTuesday, June 24, 2025 at 11:42 AM
+
+Yes, just saw that.
+
+[11:42 AM]Tuesday, June 24, 2025 at 11:42 AM
+
+I'll do the same.
+
+[11:47 AM]Tuesday, June 24, 2025 at 11:47 AM
+
+Fixed. (edited)Tuesday, June 24, 2025 at 11:47 AM
+
+1
+
+June 26, 2025
+
+os — 6/26/25, 3:58 AMThursday, June 26, 2025 at 3:58 AM
+
+@tsarpf Taking technical discussion over here. I see in your plug-in you made a little heap manager so you could call new and malloc. Is that not going to fail if people instantiate the plug-in more than once? Since they'll all share the same heap. I'm curious also about why you needed to do that.
+
+@os
+
+@tsarpf Taking technical discussion over here.  I see in your plug-in you made a little heap manager so you could call new and malloc. Is that not going to fail if people instantiate the plug-in more than once? Since they'll all share the same heap.  I'm curious also about why you needed to do that.
+
+tsarpf — 6/26/25, 4:44 AMThursday, June 26, 2025 at 4:44 AM
+
+If i remember correctly, it was because of faust using malloc for something? But if your faust pipeline doesn’t need that, then it’s completely unnecessary and I should remove it. Anyway its sketchy and I didn’t realize to check if multiple instances work, … And to be honest that part was completely generated by openai codex to which I just gave the task ”make it build” , and checking if it is really required was left to TODO. Unfortunately I ran out of time for now, going for a few days hike today, so can’t fix it yet.
+
+os — 6/26/25, 4:46 AMThursday, June 26, 2025 at 4:46 AM
+
+You could keep the heap, for ease of compilation, but take it from a buffer you get from the system in calculateRequirements/construct, rather than a static global array. That way each plug-in will get its own heap.
+
+1
+
+AgentTerror — 6/26/25, 12:04 PMThursday, June 26, 2025 at 12:04 PM
+
+Could specifications get enumStrings like parameters? So that we could choose a type of behavior from some options at the beginning?
+
+[12:07 PM]Thursday, June 26, 2025 at 12:07 PM
+
+In my case, I'm thinking that as I have 32 cells that each carry 13 values, since I can't expose them all as parameters, I might be able to create say 2 banks of 32 parameters, then pick what they actually control at when making the specification
+
+[12:08 PM]Thursday, June 26, 2025 at 12:08 PM
+
+and each of those 13 values have their own min/max/etc, so I could then build the params based on that specification
+
+os — 6/26/25, 12:09 PMThursday, June 26, 2025 at 12:09 PM
+
+That sounds a bit mad to me.
+
+[12:09 PM]Thursday, June 26, 2025 at 12:09 PM
+
+(The reason for the request, not the request as such.)
+
+[12:10 PM]Thursday, June 26, 2025 at 12:10 PM
+
+Maybe these are plug-in variants, sharing the same code but with different constructors?
+
+AgentTerror — 6/26/25, 12:11 PMThursday, June 26, 2025 at 12:11 PM
+
+well my thinking is out of all those values, I probably only would want to cv control a handful at any time, but that handful might change on a case by case basis, so it seems a good way for a user to pick what they want to target to me. =/
+
+[12:17 PM]Thursday, June 26, 2025 at 12:17 PM
+
+my other thought was the sidecar approach, where I would have different sidecars that offered up parameters like "Cell 1-32 Direction", "Cell 1-32 Probability", "Cell 1-32 Ratchet Count" etc etc, which would come to 13 different possible sidecars, but with an approach like the above I could just have 2 banks on my main algo that could "target" any of those 13 options, which I think is less mad.
+
+1
+
+os — 6/26/25, 12:21 PMThursday, June 26, 2025 at 12:21 PM
+
+Could you perhaps have 'meta parameters' in the plug-in, which are your mapping targets, and then parameters which determine what those actually affect?
+
+AgentTerror — 6/26/25, 12:25 PMThursday, June 26, 2025 at 12:25 PM
+
+I did think of that, but then that would mean I would have to swap out parameter definitions after the fact based on what was being targeted (like a probabability vs # of ratchets would have a different useful domain) and I don't think that would work... or settle on say a common percentage system for everything and them just map that way I suppose. that's when I thought about specifications, because I could use those to build the parameter definitions as needed.
+
+[12:28 PM]Thursday, June 26, 2025 at 12:28 PM
+
+I mean I should be able to do this approach without the enums I think, but would be nice if I could give names to them when selecting rather than just numbers. Anyway, for your consideration.
+
+AgentTerror — 6/26/25, 9:30 PMThursday, June 26, 2025 at 9:30 PM
+
+@os could you add strcat/strncat? coded my own for now, but would be good to have those
+
+1
+
+thorinside — 6/26/25, 9:49 PMThursday, June 26, 2025 at 9:49 PM
+
+It might be nice to have a symbol support list, so we know what is supported. Extern C in the header maybe?
+
+June 27, 2025
+
+@thorinside
+
+It might be nice to have a symbol support list, so we know what is supported. Extern C in the header maybe?
+
+os — 6/27/25, 3:50 AMFriday, June 27, 2025 at 3:50 AM
+
+I worry that would encourage people to use only those symbols, whereas what I want is the reverse - for people to ask for what they need.
+
+1
+
+@AgentTerror
+
+@os  could you add strcat/strncat?  coded my own for now, but would be good to have those
+
+os — 6/27/25, 3:55 AMFriday, June 27, 2025 at 3:55 AM
+
+Done for next beta.
+
+1
+
+trevormeier — 6/27/25, 9:23 AMFriday, June 27, 2025 at 9:23 AM
+
+Just created a little plugin using Faust that has no parameters. I get this warning when I compile it: 
+
+../faust2distingnt quadMSEncode.dsp plugins/quadMSEncode.o
+In function 'void parameterChanged(_NT_algorithm*, int)',
+    inlined from 'void parameterChanged(_NT_algorithm*, int)' at plugins/quadMSEncode.o.cpp:440:6:
+plugins/quadMSEncode.o.cpp:448:42: warning: array subscript -1 is below array bounds of '_NT_parameter [12]' [-Warray-bounds=]
+  448 |         switch ( pThis->parameterDefs[ p ].scaling )
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~^
+plugins/quadMSEncode.o.cpp: In function 'void parameterChanged(_NT_algorithm*, int)':
+plugins/quadMSEncode.o.cpp:344:25: note: while referencing '_fauseAlgorithm::parameterDefs'
+  344 |         _NT_parameter   parameterDefs[ FAUST_ACTIVES + FAUST_INPUTS + 2 * FAUST_OUTPUTS ];
+      |                         ^~~~~~~~~~~~~ 
+
+[9:23 AM]Friday, June 27, 2025 at 9:23 AM
+
+Looks like it might be an edge case for counting parameters in the conversion script?
+
+os — 6/27/25, 9:27 AMFriday, June 27, 2025 at 9:27 AM
+
+Yeah. That function should really take uint32_t p instead of int.
+
+[9:28 AM]Friday, June 27, 2025 at 9:28 AM
+
+Give your dsp file and I'll adjust the scripts to make it work.
+
+Lamarcph — 6/27/25, 11:31 AMFriday, June 27, 2025 at 11:31 AM
+
+Hi, I ported Befaco Oneiroi to the NT. It kinda works, but it will have bugs and might, some times, overload the CPU (mainly when I have too much fun with the Resonators at high feedback level). There is no external input or external clock support yet. I don't have a Oneiroi, or the VCV rack version, so I can't tell if it sounds off... Most of the params are % but they really go from 0 to 1. The filter cutoff is in hz, but the number of the screen is meaningless. https://github.com/lamarcph/NTUmbrella/tree/main/Oneiroi (edited)Friday, June 27, 2025 at 1:19 PM
+
+GitHub
+
+NTUmbrella/Oneiroi at main · lamarcph/NTUmbrella
+
+Contribute to lamarcph/NTUmbrella development by creating an account on GitHub.
+
+7
+
+2
+
+1
+
+1
+
+1
+
+Lamarcph
+
+Hi, I ported Befaco Oneiroi to the NT. It kinda works, but it will have bugs and might, some times, overload the CPU (mainly when I have too much fun with the Resonators at high feedback level). There is no external input or external clock support yet. I don't have a Oneiroi, or the VCV rack version, so I can't tell if it sounds off...  Most of the params are % but they really go from 0 to 1. The filter cutoff is in hz, but the number of the screen is meaningless.   https://github.com/lamarcph/NTUmbrella/tree/main/Oneiroi (edited)Friday, June 27, 2025 at 1:19 PM
+
+Lamarcph — 6/27/25, 11:32 AMFriday, June 27, 2025 at 11:32 AM
+
+this is the plugin built with V8 api (the one for firmware V1.9.0 if I undestand correctly)
+
+Oneiroi.o
+
+115.10 KB
+
+Download
+
+trevormeier — 6/27/25, 8:27 PMFriday, June 27, 2025 at 8:27 PM
+
+I'm having trouble with this error when testing Faust plugins (built with the NT github script): "insufficient memory for static initalization". It seems to be related to the use of double-precision in some of the maths (ma.) library. For example, if I use ma.PI in an otherwise working plugin, I'll get this error.
+
+[8:28 PM]Friday, June 27, 2025 at 8:28 PM
+
+It doesn't appear to be related to the regular memory usage of the plugin. There's several other of the examples that work fine with much higher ITC DTC and DRAM figures in the Plug-in info window
+
+[8:28 PM]Friday, June 27, 2025 at 8:28 PM
+
+Any tips are appreciated!
+
+Jodok31283TOC — 6/27/25, 8:37 PMFriday, June 27, 2025 at 8:37 PM
+
+Have you some BUFFERSIZE inside the code? Maybe reduce that.
+
+Lamarcph
+
+this is the plugin built with V8 api (the one for firmware V1.9.0 if I undestand correctly)
+
+Lamarcph — 6/27/25, 8:38 PMFriday, June 27, 2025 at 8:38 PM
+
+Added the inputs functionality, and if a section of Oneiroi is at 0 volume, it's doesn't use CPU, this way it's more manageable to use it with other Algos (edited)Friday, June 27, 2025 at 8:48 PM
+
+Oneiroi.o
+
+115.54 KB
+
+Download
+
+3
+
+1
+
+@trevormeier
+
+I'm having trouble with this error when testing Faust plugins (built with the NT github script): "insufficient memory for static initalization". It seems to be related to the use of double-precision in some of the maths (ma.) library. For example, if I use ma.PI in an otherwise working plugin, I'll get this error.
+
+Jodok31283TOC — 6/27/25, 8:49 PMFriday, June 27, 2025 at 8:49 PM
+
+Maybe try to define M-Pi #ifndef M_PI #define M_PI 3.14159265358979323846f #endif
+
+[8:50 PM]Friday, June 27, 2025 at 8:50 PM
+
+[8:51 PM]Friday, June 27, 2025 at 8:51 PM
+
+Probably tomorrow @os can help way better, I'm not too much into coding, I'm still in my " learning by doing journey"
+
+[8:54 PM]Friday, June 27, 2025 at 8:54 PM
+
+Also my examples are cpp not Faust but maybe if you define ma.PI it solves that issue.
+
+@trevormeier
+
+I'm having trouble with this error when testing Faust plugins (built with the NT github script): "insufficient memory for static initalization". It seems to be related to the use of double-precision in some of the maths (ma.) library. For example, if I use ma.PI in an otherwise working plugin, I'll get this error.
+
+thorinside — 6/27/25, 9:10 PMFriday, June 27, 2025 at 9:10 PM
+
+I had a similar message when using too much memory for .BSS. Os will know what is happening, send him the .o
+
+trevormeier — 6/27/25, 9:19 PMFriday, June 27, 2025 at 9:19 PM
+
+Defining ma.PI solves it for that case, but I’m having the issue in several places. It’s a fairly simple plugin - two LFOs, two smooth random and some math for a quad panner. One input, one parameter and four outputs. No buffers … so it shouldn’t be too much of a stretch for the NT
+
+[9:20 PM]Friday, June 27, 2025 at 9:20 PM
+
+It takes a long time to debug this way. I found ma.PI easily enough, but it takes a long time to track down each case that’s causing the error. It’d be nice if there were some way to know in advance where I might have an issue (or avoid it altogether)
+
+Jodok31283TOC — 6/27/25, 9:21 PMFriday, June 27, 2025 at 9:21 PM
+
+Random maybe.... try to make it simple in c++ rand function was heavy. But I used it to create white noise, but it made the plug-in too heavy so I used lighter functions...see picture, in the link the code, where you can find also how I created pink and blue noise and other stuff instead of using rand function (edited)Friday, June 27, 2025 at 9:29 PM
+
+[9:23 PM]Friday, June 27, 2025 at 9:23 PM
+
+[9:24 PM]Friday, June 27, 2025 at 9:24 PM
+
+https://github.com/FabianMartinez83/Handpan-for-NT/blob/main/handpan_ext.cpp
+
+GitHub
+
+Handpan-for-NT/handpan_ext.cpp at main · FabianMartinez83/Handpan-...
+
+Contribute to FabianMartinez83/Handpan-for-NT development by creating an account on GitHub.
+
+@trevormeier
+
+It takes a long time to debug this way. I found ma.PI easily enough, but it takes a long time to track down each case that’s causing the error. It’d be nice if there were some way to know in advance where I might have an issue (or avoid it altogether)
+
+thorinside — 6/27/25, 9:25 PMFriday, June 27, 2025 at 9:25 PM
+
+Yeah, I have added makefile checks for missing symbols.
+
+Jodok31283TOC — 6/27/25, 9:27 PMFriday, June 27, 2025 at 9:27 PM
+
+Faust is heavier than cpp so it has to be as much optimized as possible.
+
+[9:33 PM]Friday, June 27, 2025 at 9:33 PM
+
+But I made only a few Faust plug-ins for NT. Soon I preferred the (a little bit harder) way of trying out c++. With the help of CopilotAI in VS Code.
+
+June 28, 2025
+
+os — 6/28/25, 5:16 AMSaturday, June 28, 2025 at 5:16 AM
+
+I'll repeat here what I sent to @trevormeier in reply to his DM. In these cases it helps to comment out rm $temp in faust2distingnt and examine the .cpp code. static void classInit(int sample_rate) { mydspSIG0* sig0 = newmydspSIG0(fManager); ftbl0mydspSIG0 = static_cast<float>(fManager->allocate(262144)); sig0->instanceInitmydspSIG0(sample_rate); sig0->fillmydspSIG0(65536, ftbl0mydspSIG0); mydspSIG1 sig1 = newmydspSIG1(fManager); ftbl1mydspSIG1 = static_cast<float*>(fManager->allocate(262144)); sig1->instanceInitmydspSIG1(sample_rate); sig1->fillmydspSIG1(65536, ftbl1mydspSIG1); deletemydspSIG0(sig0, fManager); deletemydspSIG1(sig1, fManager); } Each LFO is allocating a 256kb sine table! Which is madness.
+
+trevormeier — 6/28/25, 12:44 PMSaturday, June 28, 2025 at 12:44 PM
+
+I was able to get the plug-in working using a smaller table using this sample code from the Faust Syntax documentation: 
+
+tableSize = 1 << 8;
+sineWave(tablesize) = float(ba.time)*(2.0*ma.PI)/float(tablesize) : sin;
+sineOsc(f) = tableSize,sineWave(tableSize),int(os.phasor(tableSize,f)) : rdtable;
+
+ But wow... it's really inefficient. I have a basic version of this plugin (also made in Faust) that just exposes two parameters for external modulation. It uses ~5% CPU on the NT. Adding the sine LFOs and smooth random modulation in Faust to modulate those same two parameters, plugin jumps to ~30% CPU. Faust is an easy way into programming DSP (I don't think I could ever make the leap to C++ for example) but if Faust is this inefficient it won't be usable for much
+
+@trevormeier
+
+I was able to get the plug-in working using a smaller table using this sample code from the Faust Syntax documentation:    tableSize = 1 << 8; sineWave(tablesize) = float(ba.time)*(2.0*ma.PI)/float(tablesize) : sin; sineOsc(f) = tableSize,sineWave(tableSize),int(os.phasor(tableSize,f)) : rdtable;   But wow... it's really inefficient. I have a basic version of this plugin (also made in Faust) that just exposes two parameters for external modulation. It uses ~5% CPU on the NT. Adding the sine LFOs and smooth random modulation in Faust to modulate those same two parameters, plugin jumps to ~30% CPU.   Faust is an easy way into programming DSP (I don't think I could ever make the leap to C++ for example) but if Faust is this inefficient it won't be usable for much
+
+Lamarcph — 6/28/25, 1:07 PMSaturday, June 28, 2025 at 1:07 PM
+
+I realized something: i have a Faust app with 6 osc ( sineVoice = os.osc(pitchEnv).15(1-harmonics/2), par(i,5,os.osc(pitchEnv(1+(iharmonics)))*1/6) :> ef.cubicnl(drive, drive/8); ) and it uses only 6-7% CPU usage
+
+[1:08 PM]Saturday, June 28, 2025 at 1:08 PM
+
+but then, I opened a other Faust drum thing i did, and realized it was not the right one. Tried to load the right one, had the same error as you, then I powered the case, powered it on, added it, and it works.
+
+[1:13 PM]Saturday, June 28, 2025 at 1:13 PM
+
+ok, when i am using it to make sound it uses about 11%. not too bad i guess for 6 crossmod fm ocs + noise and filters. But, i can only load one. I can add 2 of them, as long as it is an another instance of the same plugin, but i can't add a different Faust plugin that also use os.osc. (edited)Saturday, June 28, 2025 at 1:24 PM
+
+June 29, 2025
+
+AgentTerror — 6/29/25, 6:44 PMSunday, June 29, 2025 at 6:44 PM
+
+@os Would we be able to get access to a version of alg->v[] that contains the base parameter values, unmodified by mappings (the number on the left when viewing a mapped param)? I have scenarios where I want to store/retrieve the values, and if I can only access the modified value as in ->v[], then I don't think I have a way to restore it back to it's original value. I also rely on the current value when updating a value as a result of a pot. In both cases, I need the unmapped value.
+
+[6:46 PM]Sunday, June 29, 2025 at 6:46 PM
+
+Additionally, it would be good if parameterChanged gave us similar info, so that we could determine was this change a result of the base value changing, or as a result of the mapping being applied on top, or a combination of both.
+
+June 30, 2025
+
+@AgentTerror
+
+@os Would we be able to get access to a version of alg->v[] that contains the base parameter values, unmodified by mappings (the number on the left when viewing a mapped param)?  I have scenarios where I want to store/retrieve the values, and if I can only access the modified value as in ->v[], then I don't think I have a way to restore it back to it's original value.  I also rely on the current value when updating a value as a result of a pot.  In both cases, I need the unmapped value.
+
+os — 6/30/25, 4:38 AMMonday, June 30, 2025 at 4:38 AM
+
+You can get that via the _NT_slot interface.
+
+@AgentTerror
+
+Additionally, it would be good if parameterChanged gave us similar info, so that we could determine was this change a result of the base value changing, or as a result of the mapping being applied on top, or a combination of both.
+
+os — 6/30/25, 4:39 AMMonday, June 30, 2025 at 4:39 AM
+
+Hmm maybe, but the fact that none of the built-in algorithms has that information makes me question whether it's actually required.
+
+AgentTerror — 6/30/25, 7:24 AMMonday, June 30, 2025 at 7:24 AM
+
+Ahh ok yes I see... I will give that a shot, thanks! The parameterChanged part was more of an afterthought, you might be right, I can probably make due without given that I have access to the raw value in _NT_slot
+
+Andras Eichstaedt — 6/30/25, 11:25 AMMonday, June 30, 2025 at 11:25 AM
+
+I wrote a plugin that generates random midi CC and note sequences to send midi to the FH-2 and the notes are 16ms late compared to the NTs internal clock that clock the plugin and the rest of my patch. What can be the cause of this can I share the code here?
+
+os — 6/30/25, 11:26 AMMonday, June 30, 2025 at 11:26 AM
+
+Sure.
+
+Andras Eichstaedt — 6/30/25, 11:29 AMMonday, June 30, 2025 at 11:29 AM
+
+#include "distingnt/api.h"
+#include <new>
+#include <cstdlib>  // rand
+#include <cstring>  // memset
+
+#define MAX_SEQS   16
+
+Expand
+
+Expand (342 lines)
+
+View whole file
+
+message.txtmessage.txt (14 KB)14 KBmessage.txt (14 KB)Download message.txt (14 KB)Change language
+
+os — 6/30/25, 11:31 AMMonday, June 30, 2025 at 11:31 AM
+
+You don't need line 289     memset(p, 0, sizeof(Plugin))
+
+[11:31 AM]Monday, June 30, 2025 at 11:31 AM
+
+Or line 313 alg->v              = alg->vIncludingCommon + NT_parameterOffset();
+
+[11:34 AM]Monday, June 30, 2025 at 11:34 AM
+
+How is the MIDI going out? Over USB or the breakout?
+
+Andras Eichstaedt — 6/30/25, 11:45 AMMonday, June 30, 2025 at 11:45 AM
+
+breakout
+
+os — 6/30/25, 11:47 AMMonday, June 30, 2025 at 11:47 AM
+
+OK so each MIDI message takes about 1ms to send. 16 messages is 16ms.
+
+Andras Eichstaedt — 6/30/25, 11:49 AMMonday, June 30, 2025 at 11:49 AM
+
+I see so this is as good as it gets if I send 16 messages exactly at the same time right?
+
+os — 6/30/25, 11:50 AMMonday, June 30, 2025 at 11:50 AM
+
+yup
+
+[11:50 AM]Monday, June 30, 2025 at 11:50 AM
+
+This is why CV is better
+
+Andras Eichstaedt — 6/30/25, 11:55 AMMonday, June 30, 2025 at 11:55 AM
+
+thank you!
+
+Andras Eichstaedt — 6/30/25, 12:10 PMMonday, June 30, 2025 at 12:10 PM
+
+I reversed the order of sending ccs and notes and the notes are now in time CCs 16ms late don't bother me as much so far.
+
+[12:10 PM]Monday, June 30, 2025 at 12:10 PM
+
+Thank you for the insight!
+
+1
+
+July 1, 2025
+
+Andras Eichstaedt — 7/1/25, 1:01 AMTuesday, July 1, 2025 at 1:01 AM
+
+Can I add a functionality to a plugin I made with the api that takes snapshots of the plugins parameters andmorphs between them? The part where I dont see how it would work is keeping the snapshots through power cycles, and addressing the plugins parameters to change from within the plugin.
+
+thorinside — 7/1/25, 1:04 AMTuesday, July 1, 2025 at 1:04 AM
+
+There's a serialisation API available, so you could save banks of parameters using that. The NT already restores the parameters by default when you save a preset, but Serialisation let's you save JSON as well.
+
+[1:05 AM]Tuesday, July 1, 2025 at 1:05 AM
+
+There are examples of how to set parameters from inside the plugin, usually in response to moving the pots and encoders.
+
+Andras Eichstaedt — 7/1/25, 1:07 AMTuesday, July 1, 2025 at 1:07 AM
+
+thank you where can i find the api?
+
+[1:08 AM]Tuesday, July 1, 2025 at 1:08 AM
+
+Aslo would doing this be possible or even better with lua?
+
+Andras Eichstaedt — 7/1/25, 1:27 AMTuesday, July 1, 2025 at 1:27 AM
+
+I think I found it (serialisation.h) I give it a go thank you!
+
+Andras Eichstaedt — 7/1/25, 5:38 AMTuesday, July 1, 2025 at 5:38 AM
+
+How do I create _NT_jsonStream and _NT_jsonParse objects for file I/O? What are the factory functions I should use?
+
+os — 7/1/25, 5:48 AMTuesday, July 1, 2025 at 5:48 AM
+
+You don't. You get them as arguments in serialise and deserialise.
+
+Kreme 618 — 7/1/25, 7:15 AMTuesday, July 1, 2025 at 7:15 AM
+
+What's the best way to download c++ plugins (specifically air windows), for some reason I'm not allowed access disting nt api github and won't let me clone the web link. Sure I'm doing something silly.
+
+os — 7/1/25, 7:24 AMTuesday, July 1, 2025 at 7:24 AM
+
+Download the release zip. (edited)Tuesday, July 1, 2025 at 7:24 AM
+
+[7:25 AM]Tuesday, July 1, 2025 at 7:25 AM
+
+https://github.com/expertsleepersltd/distingNT_API/releases
+
+GitHub
+
+Releases · expertsleepersltd/distingNT_API
+
+C++ API for the disting NT Eurorack module. Contribute to expertsleepersltd/distingNT_API development by creating an account on GitHub.
+
+1
+
+Kreme 618 — 7/1/25, 7:32 AMTuesday, July 1, 2025 at 7:32 AM
+
+cheers
+
+AgentTerror
+
+Could specifications get enumStrings like parameters?  So that we could choose a type of behavior from some options at the beginning?
+
+AgentTerror — 7/1/25, 7:38 AMTuesday, July 1, 2025 at 7:38 AM
+
+@os After some fiddling around, I think my approach of using specifications to choose my modulation targets is working out... so was hoping to renew this request for enum strings on them to give the choices proper names.
+
+os — 7/1/25, 7:39 AMTuesday, July 1, 2025 at 7:39 AM
+
+Noted.
+
+AgentTerror — 7/1/25, 8:10 AMTuesday, July 1, 2025 at 8:10 AM
+
+One other (small) thing I've noticed when dealing with parameter mappings is that the "Delta" values don't take the scaling value into consideration on the display... so when mapping you see: Volts: 5 Delta: 2000 400.00/V when in reality, due to the scaling of the parameter, I expected to see: Volts: 5 Delta: 2.000 0.400/V I'm not sure if this specific to just plug-ins or not... but it means a user needs to know the scaling of a parameter and do some mental math to make sense of those numbers
+
+@AgentTerror
+
+One other (small) thing I've noticed when dealing with parameter mappings is that the "Delta" values don't take the scaling value into consideration on the display...  so when mapping you see:  Volts: 5 Delta: 2000             400.00/V  when in reality, due to the scaling of the parameter, I expected to see:  Volts: 5 Delta: 2.000             0.400/V  I'm not sure if this specific to just plug-ins or not...  but it means a user needs to know the scaling of a parameter and do some mental math to make sense of those numbers
+
+os — 7/1/25, 8:12 AMTuesday, July 1, 2025 at 8:12 AM
+
+Fair point. It's not specific to plug-ins.
+
+@AgentTerror
+
+@os After some fiddling around, I think my approach of using specifications to choose my modulation targets is working out...  so was hoping to renew this request for enum strings on them to give the choices proper names.
+
+os — 7/1/25, 8:12 AMTuesday, July 1, 2025 at 8:12 AM
+
+Still not convinced this is an appropriate use for a specification. Does it actually change what you return in calculateRequirements()?
+
+AgentTerror — 7/1/25, 8:14 AMTuesday, July 1, 2025 at 8:14 AM
+
+no, but it does change what I do in construct (i.e. the type of parameters I create)
+
+[8:17 AM]Tuesday, July 1, 2025 at 8:17 AM
+
+I suppose theoretically it could also change calculateRequirements if I wanted to have a "None" target, in which case that would reduce the number of parameters, but I didn't plan that or even think of it until just looking
+
+os — 7/1/25, 8:20 AMTuesday, July 1, 2025 at 8:20 AM
+
+So you could in fact have this as a parameter, and when it changes, reconfigure all your "mapping" parameters.
+
+AgentTerror — 7/1/25, 8:22 AMTuesday, July 1, 2025 at 8:22 AM
+
+would that work? I was under the impression there were "locked in" once I specify them in construct... but if you're saying I could change the parameter config of a group of parameters based on another, then that might work also.
+
+[8:23 AM]Tuesday, July 1, 2025 at 8:23 AM
+
+I would need to change min/max/scaling of other parameters based on that selection
+
+os — 7/1/25, 8:26 AMTuesday, July 1, 2025 at 8:26 AM
+
+Yes, you can change them arbitrarily. Some built-in algorithms do this - most obviously things like sample or wavetable selection where the maximum values depends on the folder.
+
+AgentTerror — 7/1/25, 8:31 AMTuesday, July 1, 2025 at 8:31 AM
+
+hmm ok I will give that a go then, that should work. I guess I just had an assumption about the internals that was not correct.
+
+July 3, 2025
+
+Jodok31283TOC — 7/3/25, 12:35 AMThursday, July 3, 2025 at 12:35 AM
+
+I love the idea that @rthorntn had about the CellularAutomata and ask you guys that are more into the coding what do you think about that idea maybe I open a thread for that specific theme
+
+ThreadCA development?101 Messages ›
+
+There are no recent messages in this thread.
+
+Nate — 7/3/25, 3:49 PMThursday, July 3, 2025 at 3:49 PM
+
+Is there a limit to the number of specifications an algorithm can have? More than 3 don't seem to show up .. (of course I may be doing something wrong)
+
+July 4, 2025
+
+rthorntn — 7/4/25, 6:11 AMFriday, July 4, 2025 at 6:11 AM
+
+can api users control the port leds... on/off and colour, if so, how many colours? (edited)Friday, July 4, 2025 at 6:13 AM
+
+@rthorntn
+
+can api users control the port leds... on/off and colour, if so, how many colours? (edited)Friday, July 4, 2025 at 6:13 AM
+
+thorinside — 7/4/25, 8:23 AMFriday, July 4, 2025 at 8:23 AM
+
+No. Inputs show red for positive voltage and blue for negative voltage. That is not under software control.
+
+1
+
+[8:30 AM]Friday, July 4, 2025 at 8:30 AM
+
+@os the SysEX add algorithm on plugins is able to create an algorithm that has no specifications set. It sort of makes sense, since the algorithms aren't loaded yet, we can't know their specifications. What do you suggest?
+
+July 5, 2025
+
+@os
+
+Yes, you can change them arbitrarily. Some built-in algorithms do this - most obviously things like sample or wavetable selection where the maximum values depends on the folder.
+
+AgentTerror — 7/5/25, 5:47 PMSaturday, July 5, 2025 at 5:47 PM
+
+Finally getting to this, and I am not finding it to be the case that I can alter parameter definitions after they are configured... here's a version of gain.cpp where I added a "Test" parameter, and when it's changed, it should alter the gain parameter to have a min of 25 and a max of 50, but doesn't seem to do that.
+
+
+#include <math.h>
+#include <new>
+#include <distingnt/api.h>
+
+struct _gainAlgorithm : public _NT_algorithm
+
+Expand
+
+Expand (134 lines)
+
+View whole file
+
+gain.cppgain.cpp (4 KB)4 KBgain.cpp (4 KB)Download gain.cpp (4 KB)Change language
+
+July 6, 2025
+
+Jodok31283TOC — 7/6/25, 9:18 AMSunday, July 6, 2025 at 9:18 AM
+
+flux and ott give me incompatible API version error why?
+
+Jodok31283TOC — 7/6/25, 9:49 AMSunday, July 6, 2025 at 9:49 AM
+
+Tried to load the beta from 30June sometimes the ott shows up sometimes the flux, sometimes it says that VitalRev hasn't enough memory....pffff what's happening there?
+
+thorinside — 7/6/25, 9:52 AMSunday, July 6, 2025 at 9:52 AM
+
+I suspect there are limited resources for loading plugins. And you have to reboot to clear them. We are loading and trying out plugins and can't clear those resources without a reboot.
+
+Jodok31283TOC — 7/6/25, 9:53 AMSunday, July 6, 2025 at 9:53 AM
+
+Ah okay....hmmmm...
+
+thorinside — 7/6/25, 9:56 AMSunday, July 6, 2025 at 9:56 AM
+
+I've been trying out a bunch of airwindows plugins and often need to soft reboot before I can get the next one to load. Not enough .text memory.
+
+Jodok31283TOC — 7/6/25, 11:18 AMSunday, July 6, 2025 at 11:18 AM
+
+that sucks...mpffff anyway now I have to do other stuff leaved behind (edited)Sunday, July 6, 2025 at 11:18 AM
+
+July 7, 2025
+
+Lamarcph
+
+Added the inputs functionality, and if a section of Oneiroi is at 0 volume, it's doesn't use CPU, this way it's more manageable to use it with other Algos (edited)Friday, June 27, 2025 at 8:48 PM
+
+Lamarcph — 7/7/25, 11:22 AMMonday, July 7, 2025 at 11:22 AM
+
+Does anyone have experience with the Oneiroi (the physical module or the VCV rack one)? I am trying to understand how the SuperSaw is 'stereo'. L and R seems to be an exact copy of the same thing, calculated twice. I could probably save a few cpu cycle by not doing that, but maybe I am missing something. On the real module can we hear the SuperSaw accross the stereo space?
+
+Jodok31283TOC — 7/7/25, 12:08 PMMonday, July 7, 2025 at 12:08 PM
+
+I don't know the Oneiroi but a supersaw in a mono synth gives the "stereo effect" because of wave beating that's what I know...
+
+Lamarcph — 7/7/25, 1:02 PMMonday, July 7, 2025 at 1:02 PM
+
+I tested it in actual stereo and it's a lot better. I will piggyback on the unison param to make it actually stereo when we it's non-zero
+
+July 14, 2025
+
+warm_tonesWGLR — 7/14/25, 11:14 PMMonday, July 14, 2025 at 11:14 PM
+
+Hi everyone, first of all, I'm not a programmer and possess 0 coding skills currently. I've used claude AI to recreate the functionality from the ADDAC swell physics module that apparently simulates gerstner waves and outputs CV. The Disting NT version displayes the waves on screen along with visualisation of the "buoys". Unfortunately the speed setting is currently broken and the values are crazy like 0-32000%. If anyone is interested in my janky plugin, let me know
+
+1
+
+@warm_tonesWGLR
+
+Hi everyone, first of all, I'm not a programmer and possess 0 coding skills currently.  I've used claude AI to recreate the functionality from the ADDAC swell physics module that apparently simulates gerstner waves and outputs CV. The Disting NT version displayes the waves on screen along with visualisation of the "buoys". Unfortunately the speed setting is currently broken and the values are crazy like 0-32000%. If anyone is interested in my janky plugin, let me know
+
+j4s0n — 7/14/25, 11:22 PMMonday, July 14, 2025 at 11:22 PM
+
+Sounds fun! It's probably just one variable range that needs to be changed...
+
+July 15, 2025
+
+warm_tonesWGLR — 7/15/25, 12:07 AMTuesday, July 15, 2025 at 12:07 AM
+
+Here it is with some fixes. Speed doesn't go low enough but still functional. Not sure if I will keep working on it but it was a fun experiment
+
+SwellPhysics.o
+
+6.77 KB
+
+Download
+
+#include <cmath>
+#include <cstdio>
+#include <new>
+#include <distingnt/api.h>
+
+#ifndef M_PI
+
+Expand
+
+Expand (435 lines)
+
+View whole file
+
+SwellPhysics.cppSwellPhysics.cpp (16 KB)16 KBSwellPhysics.cpp (16 KB)Download SwellPhysics.cpp (16 KB)Change language
+
+1
+
+FengHuang — 7/15/25, 11:42 AMTuesday, July 15, 2025 at 11:42 AM
+
+Hi everyone, Newbee alert I’m a new user of the DistingNT and so far I love it. But I can’t get my head around the api plugins. I downloaded the example files from GitHub. But where do I put the .cpp files so I can load them.
+
+Jodok31283TOC — 7/15/25, 11:44 AMTuesday, July 15, 2025 at 11:44 AM
+
+You can't put the cpp files on the SD card, you need to compile them first.
+
+[11:45 AM]Tuesday, July 15, 2025 at 11:45 AM
+
+If you have VS Code, go to terminal and use cd [path of the examples] than enter, after that type make and it transforms your cpp files into .o files those can be used
+
+1
+
+FengHuang — 7/15/25, 11:53 AMTuesday, July 15, 2025 at 11:53 AM
+
+Oohh I couldn’t find any video about how to use the c++ api. I have Mac so can I do it with terminal ? Where do input the .o files then on the sdcard so I can load them.
+
+Jodok31283TOC — 7/15/25, 12:02 PMTuesday, July 15, 2025 at 12:02 PM
+
+On mac you open your terminal and write cd [your examples path] then enter, after this type make and it will create the .o files. Once that is done the .o files go to SD card/programs/plug-ins
+
+@Jodok31283TOC
+
+On mac you open your terminal and write cd [your examples path] then enter, after this type make and it will create the .o files. Once that is done the .o files go to SD card/programs/plug-ins
+
+FengHuang — 7/15/25, 12:04 PMTuesday, July 15, 2025 at 12:04 PM
+
+Thanks I’m going to try this. Maybe you can help me out of another question: can I use the distingNT with vcv rack 2 ?
+
+Jodok31283TOC — 7/15/25, 12:07 PMTuesday, July 15, 2025 at 12:07 PM
+
+I actually dont use VCV rack maybe others in the community can help woth that topic.
+
+@Jodok31283TOC
+
+I actually dont use VCV rack maybe others in the community can help woth that topic.
+
+FengHuang — 7/15/25, 12:30 PMTuesday, July 15, 2025 at 12:30 PM
+
+I tried what you suggested but that doesn’t work. So I did the following. gg+ -c [file] -o [file] This was generated an error that was saying that i needed the code change . In the code is: #include <distingnt/api> I get the answer from terminal that the <> needed to change to “” so I did. Then the file was made with no errors. I put it on sdcard in de directory you suggested. Started the distingNT and I was getting errors on the startup display. If I go to - misc > Plugin-ins then the file is there with a big Failed.
+
+July 16, 2025
+
+Jodok31283TOC — 7/16/25, 2:37 AMWednesday, July 16, 2025 at 2:37 AM
+
+I see, have you installed the last 1.10 beta?
+
+@FengHuang
+
+Oohh  I couldn’t find any video about how to use the c++ api. I have Mac so can I do it with terminal ? Where do input the .o files then on the sdcard so I can load them.
+
+warm_tonesWGLR — 7/16/25, 2:43 AMWednesday, July 16, 2025 at 2:43 AM
+
+You can use ChatGPT or Claude AI to help you set up the compiler and API, that’s what I did. You will also need the arm toolchain. (Might be different on osx) (edited)Wednesday, July 16, 2025 at 2:46 AM
+
+@FengHuang
+
+I tried what you suggested but that doesn’t work. So I did the following.  gg+ -c [file] -o [file] This was generated an error that was saying  that i needed the code  change . In the code is: #include <distingnt/api> I get the answer from terminal that the <> needed to change to “” so I did. Then the file was made with no errors. I put it on sdcard in de directory you suggested.  Started the distingNT and I was getting errors on the startup display. If I go to - misc > Plugin-ins then the file is there with a big Failed.
+
+McNoodlesoSUS — 7/16/25, 6:59 AMWednesday, July 16, 2025 at 6:59 AM
+
+Unless you're compiling things, you shouldn't need to worry about the api. Use @thorinside 's nt-helper app. its on the ios & play stores. See the text channel on the left for info You can access the community scripts & plugins from there.
+
+@warm_tonesWGLR
+
+You can use ChatGPT or Claude AI to help you set up the compiler and API, that’s what I did. You will also need the arm toolchain. (Might be different on osx) (edited)Wednesday, July 16, 2025 at 2:46 AM
+
+FengHuang — 7/16/25, 10:02 AMWednesday, July 16, 2025 at 10:02 AM
+
+I did ask chatGPT but that isn’t workout for me
+
+@FengHuang
+
+Thanks  I’m going to try this. Maybe you can help me out of another question: can I use the distingNT with vcv rack 2 ?
+
+j4s0n — 7/16/25, 10:13 AMWednesday, July 16, 2025 at 10:13 AM
+
+Of course. You can use NT with VCV. Just plug it in with USB. It will show up as a MIDI in/out and a multi channel audio in/out device.
+
+ThreadOf course. You can use NT with VCV. Just3 Messages ›
+
+There are no recent messages in this thread.
+
+j4s0n started a thread: Of course. You can use NT with VCV. Just. See all threads. — 7/16/25, 11:01 AMWednesday, July 16, 2025 at 11:01 AM
+
+July 18, 2025
+
+Jodok31283TOC — 7/18/25, 1:09 PMFriday, July 18, 2025 at 1:09 PM
+
+https://www.youtube.com/watch?v=N-OUEGLZV08
+
+YouTube
+
+Fabian Martinez
+
+HANDPAN XT2 DEMO
+
+2
+
+1
+
+July 21, 2025
+
+thorinside — 7/21/25, 12:05 AMMonday, July 21, 2025 at 12:05 AM
+
+I started something a bit ambitious:
+
+6
+
+2
+
+3
+
+1
+
+2
+
+1
+
+1
+
+2
+
+1
+
+1
+
+@thorinside
+
+I started something a bit ambitious:
+
+Lamarcph — 7/21/25, 9:48 AMMonday, July 21, 2025 at 9:48 AM
+
+As long as you provide an plug-in for it on the physical NT!
+
+thorinside — 7/21/25, 10:06 AMMonday, July 21, 2025 at 10:06 AM
+
+@Lamarcph There is, the firmware...
+
+@thorinside
+
+I started something a bit ambitious:
+
+Chris | S1gns Of L1fe — 7/21/25, 11:58 AMMonday, July 21, 2025 at 11:58 AM
+
+This is HUGE news! Wow. We're rooting for you my friend! Keep going...
+
+July 22, 2025
+
+@thorinside
+
+I started something a bit ambitious:
+
+McNoodlesoSUS — 7/22/25, 6:04 AMTuesday, July 22, 2025 at 6:04 AM
+
+...it begins...
+
+thorinside — 7/22/25, 5:46 PMTuesday, July 22, 2025 at 5:46 PM
+
+First signal:
+
+2
+
+2
+
+1
+
+1
+
+snailed — 7/22/25, 7:07 PMTuesday, July 22, 2025 at 7:07 PM
+
+siiiiiick
+
+thorinside — 7/22/25, 7:08 PMTuesday, July 22, 2025 at 7:08 PM
+
+It's meant for testing plugins, it's not a disting NT clone or anything.
+
+snailed — 7/22/25, 7:08 PMTuesday, July 22, 2025 at 7:08 PM
+
+nice, good idea
+
+[7:08 PM]Tuesday, July 22, 2025 at 7:08 PM
+
+yeah i wasn't sure
+
+thorinside — 7/22/25, 7:09 PMTuesday, July 22, 2025 at 7:09 PM
+
+It lets a developer compile their plugin for MacOS (maybe others but I'm on a mac) load it into this 'shell' and hook up VCV modules to the inputs and outputs. I'm working on midi support, and then I'll see if I can get the display working.
+
+[7:10 PM]Tuesday, July 22, 2025 at 7:10 PM
+
+The idea being if it works in there, it'll load on NT and work there too.
+
+[7:11 PM]Tuesday, July 22, 2025 at 7:11 PM
+
+And I want the DSP to work properly too. So far it look like it will.
+
+Lamarcph — 7/22/25, 7:30 PMTuesday, July 22, 2025 at 7:30 PM
+
+Will it be faster? You can just reload the plugin with a right-click or something on the VCV module?
+
+thorinside — 7/22/25, 7:31 PMTuesday, July 22, 2025 at 7:31 PM
+
+Yeah, loading and unloading is working. I want hot-reload. We'll see if I can get there.
+
+j4s0n — 7/22/25, 8:53 PMTuesday, July 22, 2025 at 8:53 PM
+
+@thorinside I'd suggest not naming it the way you have and maybe add the extra 2 outputs that are available. You could make it even less HP if you put the outputs below the inputs...
+
+thorinside — 7/22/25, 8:54 PMTuesday, July 22, 2025 at 8:54 PM
+
+Yeah, it's probably going to be nt_emu don't worry I'd never release anything with ES brand names. That's be silly.
+
+1
+
+j4s0n — 7/22/25, 8:55 PMTuesday, July 22, 2025 at 8:55 PM
+
+but def add the extra 2 outputs
+
+[8:55 PM]Tuesday, July 22, 2025 at 8:55 PM
+
+or an "expander" like TMB but that seems like BS (edited)Tuesday, July 22, 2025 at 8:56 PM
+
+thorinside — 7/22/25, 8:57 PMTuesday, July 22, 2025 at 8:57 PM
+
+Yeah, having out 7 and 8 makes sense for sure. I just got midi working and will have a couple of LEDs for the in and out activity.
+
+[8:57 PM]Tuesday, July 22, 2025 at 8:57 PM
+
+The panel layout is not final, thanks for the suggestions.
+
+1
+
+clc — 7/22/25, 10:17 PMTuesday, July 22, 2025 at 10:17 PM
+
+Hi thorinside (or anyone who knows of course), when I submit a plug-in I have this warning: "C++ plugin must include a GUID or be marked as collection". My source includes static const _NT_factory songSequencerFactory = { NT_MULTICHAR('C', 'L', 'C', '2'), // guid". Is something else needed? (edited)Tuesday, July 22, 2025 at 10:18 PM
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+thorinside — 7/22/25, 10:25 PMTuesday, July 22, 2025 at 10:25 PM
+
+@clc You have to put a .o in your release, or zip up your .o I think. It looks for releases. So on GitHub, tag your repo, and make a release from the tag, then drag the .o into the release.
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+[10:26 PM]Tuesday, July 22, 2025 at 10:26 PM
+
+It reads your .o and make sure to warn you if there is a guid conflict.
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+clc — 7/22/25, 10:27 PMTuesday, July 22, 2025 at 10:27 PM
+
+Thanks - that help
+
+July 22, 2025
+
+thorinside — 7/22/25, 10:26 PMTuesday, July 22, 2025 at 10:26 PM
+
+It reads your .o and make sure to warn you if there is a guid conflict.
+
+clc — 7/22/25, 10:27 PMTuesday, July 22, 2025 at 10:27 PM
+
+Thanks - that helps.
+
+1
+
+July 23, 2025
+
+Lamarcph — 7/23/25, 4:42 PMWednesday, July 23, 2025 at 4:42 PM
+
+Would anyone know how long does a trigger being outputted by the NT needs to be for it to work with most eurorack modules? Is one sample enough?
+
+ProggyBoog — 7/23/25, 4:44 PMWednesday, July 23, 2025 at 4:44 PM
+
+"most" would probably be a 10ms trigger
+
+1
+
+thorinside — 7/23/25, 4:47 PMWednesday, July 23, 2025 at 4:47 PM
+
+When I worked on nt_grids the triggers were too short and 10ms worked.
+
+Lamarcph — 7/23/25, 5:16 PMWednesday, July 23, 2025 at 5:16 PM
+
+I am trying to redo the Traffic module, we will see if it's actually usefull within the NT
+
+2
+
+July 24, 2025
+
+thorinside — 7/24/25, 11:01 PMThursday, July 24, 2025 at 11:01 PM
+
+She's not pretty, but it's progress. I have dynamic loading with symbols the plugin can access to make drawing calls. I still have work to do to make the drawing look correct, but it's a start.
+
+2
+
+1
+
+3
+
+July 25, 2025
+
+Lamarcph — 7/25/25, 10:16 AMFriday, July 25, 2025 at 10:16 AM
+
+Did anyone tried to have DPS code run internally as singed 16 bits? If you want to reduce cpu consumption to a minimum, is it worthwhile? I am aiming for noisy aliased lofi stuff.
+
+July 26, 2025
+
+@Lamarcph
+
+Did anyone tried to have DPS code run internally as singed 16 bits? If you want to reduce cpu consumption to a minimum, is it worthwhile? I am aiming for noisy aliased lofi stuff.
+
+Nate — 7/26/25, 9:26 PMSaturday, July 26, 2025 at 9:26 PM
+
+My guess is no, it won't be more efficient unless you are really savvy with low level optimization techniques.. modern floating point units are pretty fast. Admittedly my knowledge of these specific arm processors is limited so if anyone wants to correct me go ahead.
+
+July 27, 2025
+
+@Nate
+
+My guess is no, it won't be more efficient unless you are really savvy with low level optimization techniques.. modern floating point units are pretty fast. Admittedly my knowledge of these specific arm processors is limited so if anyone wants to correct me go ahead.
+
+Lamarcph — 7/27/25, 10:54 AMSunday, July 27, 2025 at 10:54 AM
+
+But the main point is that the Disting NT does have a FPU? I was able to cram 8 very crude oscillator in under 1.5% cpu usage with partly Gemini generated code. It doesn't try to do any anti-aliasing but it sounds 'nice' for what I am after. This is in 16bits. I can try do a version with internal floats and report back... The problem I am running into is that converting from float to 16bit is probably not free either. (edited)Sunday, July 27, 2025 at 10:54 AM
+
+thorinside
+
+She's not pretty, but it's progress. I have dynamic loading with symbols the plugin can access to make drawing calls. I still have work to do to make the drawing look correct, but it's a start.
+
+thorinside — 7/27/25, 11:00 AMSunday, July 27, 2025 at 11:00 AM
+
+I got drawing and fonts working. Next I'll be working on the knobs and buttons. I got specification support working too. Edit: I got most of the knobs and buttons working, just one remaining stubborn bug, then I might make an alpha. (edited)Tuesday, July 29, 2025 at 9:26 AM
+
+July 29, 2025
+
+thorinside — 7/29/25, 10:47 AMTuesday, July 29, 2025 at 10:47 AM
+
+Knocked the last bug I wanted to get rid of in the custom ui handling. For some reason the pots were all resetting whenever I pressed the knobs. Turns out the test plugin's code was incorrect in a couple of ways leading to bugs I thought were in the emulator. I slept on it and it was obvious when I started up again in the morning. There are so many things I still need to add, but just keeping you up to date with my progress.
+
+2
+
+1
+
+Lamarcph
+
+But the main point is that the Disting NT does have a FPU? I was able to cram 8 very crude oscillator in under 1.5% cpu usage with partly Gemini generated code. It doesn't try to do any anti-aliasing but it sounds 'nice' for what I am after. This is in 16bits. I can try do a version with internal floats and report back... The problem I am running into is that converting from float to 16bit is probably not free either. (edited)Sunday, July 27, 2025 at 10:54 AM
+
+Lamarcph — 7/29/25, 10:48 AMTuesday, July 29, 2025 at 10:48 AM
+
+It seems to be about 2x less expensive. But maybe it's user/coder error.
+
+@trevormeier
+
+I was able to get the plug-in working using a smaller table using this sample code from the Faust Syntax documentation:    tableSize = 1 << 8; sineWave(tablesize) = float(ba.time)*(2.0*ma.PI)/float(tablesize) : sin; sineOsc(f) = tableSize,sineWave(tableSize),int(os.phasor(tableSize,f)) : rdtable;   But wow... it's really inefficient. I have a basic version of this plugin (also made in Faust) that just exposes two parameters for external modulation. It uses ~5% CPU on the NT. Adding the sine LFOs and smooth random modulation in Faust to modulate those same two parameters, plugin jumps to ~30% CPU.   Faust is an easy way into programming DSP (I don't think I could ever make the leap to C++ for example) but if Faust is this inefficient it won't be usable for much
+
+sletz — 7/29/25, 12:54 PMTuesday, July 29, 2025 at 12:54 PM
+
+Faust developer here: if Faust is too inefficient in your use case, we have to understand why and try to improve the situation... ! (edited)Tuesday, July 29, 2025 at 12:58 PM
+
+@Lamarcph
+
+But the main point is that the Disting NT does have a FPU? I was able to cram 8 very crude oscillator in under 1.5% cpu usage with partly Gemini generated code. It doesn't try to do any anti-aliasing but it sounds 'nice' for what I am after. This is in 16bits. I can try do a version with internal floats and report back... The problem I am running into is that converting from float to 16bit is probably not free either. (edited)Sunday, July 27, 2025 at 10:54 AM
+
+Nate — 7/29/25, 1:12 PMTuesday, July 29, 2025 at 1:12 PM
+
+Does it have a FPU - Yes. Going by the compiler options in the example makefile, its an ARM cortex m7 with support for double precision (hardware) FPU with 16 registers.
+
+@Lamarcph
+
+Did anyone tried to have DPS code run internally as singed 16 bits? If you want to reduce cpu consumption to a minimum, is it worthwhile? I am aiming for noisy aliased lofi stuff.
+
+os — 7/29/25, 1:35 PMTuesday, July 29, 2025 at 1:35 PM
+
+Yes it has an FPU. My gut feeling is that most things will be faster as (single precision) float, but I don't have any stats to back that up. If you use integers, you're always faced with the final cost of converting to float to put the results in the NT's buffer. A possible exception would be if you can leverage SIMD integer ops.
+
+@sletz
+
+Faust developer here: if Faust is too inefficient in your use case, we have to understand why and try to improve the situation...  ! (edited)Tuesday, July 29, 2025 at 12:58 PM
+
+trevormeier — 7/29/25, 1:57 PMTuesday, July 29, 2025 at 1:57 PM
+
+Using the built-in oscillators to generate LFOs uses significant CPU resources. Even the lookup table version I linked above uses a fair amount. As a comparison, LFOs generated with the lookup table still use 2-3x more CPU than the NT's own LFOs, and the oscillator functions far more than that.
+
+Jodok31283TOC — 7/29/25, 2:00 PMTuesday, July 29, 2025 at 2:00 PM
+
+If the LFO is working better using the one from NT, just leave those out of the equation and add them later on the NT.
+
+@os
+
+Yes it has an FPU. My gut feeling is that most things will be faster as (single precision) float, but I don't have any stats to back that up.  If you use integers, you're always faced with the final cost of converting to float to put the results in the NT's buffer.  A possible exception would be if you can leverage SIMD integer ops.
+
+Lamarcph — 7/29/25, 2:26 PMTuesday, July 29, 2025 at 2:26 PM
+
+I started a project using all fixed-point DSP, and it seems lower cpu, including the conversion to float. However, maybe my float DSP is bad and not efficient ! Anyway, it's interesting to do.
+
+sletz — 7/29/25, 2:34 PMTuesday, July 29, 2025 at 2:34 PM
+
+Ok then we should compare the code:
+
+[2:34 PM]Tuesday, July 29, 2025 at 2:34 PM
+
+what is the exact Faust DSP you are using ? (the simplest you can),
+
+(edited)Tuesday, July 29, 2025 at 2:39 PM
+
+[2:35 PM]Tuesday, July 29, 2025 at 2:35 PM
+
+and where is the NT's own LFOs code ?,
+
+Lamarcph — 7/29/25, 4:46 PMTuesday, July 29, 2025 at 4:46 PM
+
+@sletz I will forward you a message from above
+
+[4:51 PM]Tuesday, July 29, 2025 at 4:51 PM
+
+I think that one of the problem we saw was the Faust allocate big sine tables for the very basic os.osc functions.
+
+sletz — 7/29/25, 6:49 PMTuesday, July 29, 2025 at 6:49 PM
+
+The size could be reduced changing in the platform.lib file, see: https://faustdoc.grame.fr/manual/optimizing/#specializing-the-dsp-code (edited)Tuesday, July 29, 2025 at 6:49 PM
+
+July 30, 2025
+
+sletz — 7/30/25, 1:56 AMWednesday, July 30, 2025 at 1:56 AM
+
+And so compiling for a fixed SR can also help in some cases, because the compiler "computes everything that depends of SR..." at compile time....
+
+AgentTerror
+
+Finally getting to this, and I am not finding it to be the case that I can alter parameter definitions after they are configured...  here's a version of gain.cpp where I added a "Test" parameter, and when it's changed, it should alter the gain parameter to have a min of 25 and a max of 50, but doesn't seem to do that.
+
+AgentTerror — 7/30/25, 8:25 AMWednesday, July 30, 2025 at 8:25 AM
+
+Welcome back @os hope you had fun wherever you were! Bumping this conversation back into view for when you have a few moments since you said you weren't going to read backwards (understandable).
+
+issey olive — 7/30/25, 9:18 AMWednesday, July 30, 2025 at 9:18 AM
+
+Why is it not working? There is an error on the start page of the Disting NT...
+
+@issey olive
+
+Why is it not working? There is an error on the start page of the Disting NT...
+
+thorinside — 7/30/25, 9:20 AMWednesday, July 30, 2025 at 9:20 AM
+
+Photo?
+
+@thorinside
+
+Photo?
+
+issey olive — 7/30/25, 9:26 AMWednesday, July 30, 2025 at 9:26 AM
+
+This is how it looks
+
+thorinside — 7/30/25, 9:29 AMWednesday, July 30, 2025 at 9:29 AM
+
+Okay, operator delete, I'll look into it. I'll get back to you.
+
+1
+
+@issey olive
+
+This is how it looks
+
+thorinside — 7/30/25, 9:58 AMWednesday, July 30, 2025 at 9:58 AM
+
+I fixed this up. It should load now.
+
+[9:58 AM]Wednesday, July 30, 2025 at 9:58 AM
+
+Version 1.0.1
+
+@thorinside
+
+I fixed this up. It should load now.
+
+issey olive — 7/30/25, 10:34 AMWednesday, July 30, 2025 at 10:34 AM
+
+Thank you. It's fixed
+
+1
+
+1
+
+@sletz
+
+The size could be reduced changing in the platform.lib file, see: https://faustdoc.grame.fr/manual/optimizing/#specializing-the-dsp-code (edited)Tuesday, July 29, 2025 at 6:49 PM
+
+trevormeier — 7/30/25, 11:16 AMWednesday, July 30, 2025 at 11:16 AM
+
+I've tested the optimizations you mentioned already. My code already reduces the tablesize as is mentioned at the link. Manually setting the samplerate doesn't improve the CPU efficiency in this case.
+
+[11:16 AM]Wednesday, July 30, 2025 at 11:16 AM
+
+Here's a basic version of the plugin so you can take a look
+
+[11:17 AM]Wednesday, July 30, 2025 at 11:17 AM
+
+ 
+import("stdfaust.lib");
+tmPI = 3.1415926535897; // Smaller definition for pi to save memory - enough for control range
+tableSize = 1 << 12; // 256 steps, enough for control range
+
+// Controls
+panCtrl = hslider("[0]Pan Control", 0, -1, 1, 0.001); // pan control -1..1
+
+// LFO wave generators (read once at initialize)
+sineWave(tablesize) = float(ba.time)*(2.0*tmPI)/float(tablesize) : sin;
+noiseWave(tablesize) = os.sinwaveform(tablesize)*(no.lfnoise(ma.SR/100))*(2.0*tmPI) : sin;
+
+// `rdtable` LFOs (to save CPU & memory)
+sineOsc(f) = tableSize,sineWave(tableSize),os.phasor(tableSize,f) : rdtable;
+noiseOsc(f) = tableSize,noiseWave(tableSize),os.phasor(tableSize,f) : rdtable;
+
+// Modulation rate
+lfoRate = 1;
+noiseRate = lfoRate/20;
+
+// LFO instantiation
+lfo1 = sineOsc(lfoRate);
+smoothRand1 = noiseOsc(noiseRate*1.1303);
+
+// Pan control curves
+noiseAmt = ma.tanh(panCtrl*-3),0 : max;
+lfoAmt = ma.tanh(panCtrl*3),0 : max;
+
+// Cartesian XY coordinates 0..1
+panX = ((lfo1*lfoAmt)+(smoothRand1*noiseAmt))*.5+.5;
+panY = ((lfo1*lfoAmt)+(smoothRand1*noiseAmt))*.5+.5;
+
+// Gain calcs
+gainL = cos(panX * tmPI / 2);
+gainR = sin(panX * tmPI / 2);
+gainF = sin(panY * tmPI / 2);
+gainB = cos(panY * tmPI / 2);
+
+// Quad pan
+gainFL = gainL*gainF;
+gainFR = gainR*gainF;
+gainBL = gainL*gainB;
+gainBR = gainR*gainB;
+
+// XY Pan
+panXY(sig) = _ <: sig*gainFL, sig*gainFR, sig*gainBL, sig*gainBR;
+
+// Main process
+process = panXY(_);
+
+
+/* Unused - library tools use huge resources for what they do
+// - `os.oscp` LFOs create 256kb  wavetables
+// - `no.lfnoise` uses 10% CPU each instance
+// - `sp.constantPowerPan` uses 5% CPU
+*/ 
+
+[11:20 AM]Wednesday, July 30, 2025 at 11:20 AM
+
+It's using rdtable phasors to do a 256-step lookup table. About as simple as an LFO can get. This version uses 6-7% percent of NT CPU per instance. The same code without the LFOs uses ~1% (uses external LFO inputs, but still including the quad pan calculations). The NT's LFO's are also around ~1% for comparison.
+
+os — 7/30/25, 12:08 PMWednesday, July 30, 2025 at 12:08 PM
+
+I would imagine a lot of it will come down to what gets run at control rate and what gets run at audio rate. If it's doing two tanh and two sin/cos every audio frame it'll get expensive quickly. Especially if it's a full quality sin etc., not an approximation.
+
+@os
+
+I would imagine a lot of it will come down to what gets run at control rate and what gets run at audio rate. If it's doing two tanh and two sin/cos every audio frame it'll get expensive quickly. Especially if it's a full quality sin etc., not an approximation.
+
+trevormeier — 7/30/25, 12:09 PMWednesday, July 30, 2025 at 12:09 PM
+
+I thought so too, but the tanh and sin/cos aren't expensive CPU-wise. If I remove the LFOs from the code but keep the tanh/sin/cos the plugin uses only ~1% CPU
+
+[12:10 PM]Wednesday, July 30, 2025 at 12:10 PM
+
+The tanh is there to provide a more appropriate control curve, so it may be running at control rate. The sin/cos are there because they're much more CPU effecient than the built-in sp.constantPowerPan function
+
+[12:12 PM]Wednesday, July 30, 2025 at 12:12 PM
+
+FWIW the reason I'm using tanh inside the plugin is because the NT currently only supports linear control mapping. If there were other mapping options it could be omitted
+
+@AgentTerror
+
+Finally getting to this, and I am not finding it to be the case that I can alter parameter definitions after they are configured...  here's a version of gain.cpp where I added a "Test" parameter, and when it's changed, it should alter the gain parameter to have a min of 25 and a max of 50, but doesn't seem to do that.
+
+os — 7/30/25, 12:13 PMWednesday, July 30, 2025 at 12:13 PM
+
+Clearly I forgot that plug-in parameters are copied to internal structures, not used directly, so editing the plug-in array won't have any affect. I'd have to add API calls so you can tell it to update them.
+
+@trevormeier
+
+I thought so too, but the tanh and sin/cos aren't expensive CPU-wise. If I remove the LFOs from the code but keep the tanh/sin/cos the plugin uses only ~1% CPU
+
+os — 7/30/25, 12:14 PMWednesday, July 30, 2025 at 12:14 PM
+
+That's probably because without the LFOs the sin etc. are run at control rate.
+
+[12:14 PM]Wednesday, July 30, 2025 at 12:14 PM
+
+You can clearly see in the generated C code what's control rate and what's not.
+
+@os
+
+You can clearly see in the generated C code what's control rate and what's not.
+
+trevormeier — 7/30/25, 12:18 PMWednesday, July 30, 2025 at 12:18 PM
+
+I can't read C, but I see what you mean. Getting sin etc. to run at control rate would probably require some way of forcing the function that's producing the LFOs os.phasor to run at control rate. I'll see if I can find something
+
+[12:20 PM]Wednesday, July 30, 2025 at 12:20 PM
+
+Side note... it's funny how this kind of creative work escalates. I built quad panners with the NT's built-in functions, but several things couldn't be done. So I learned Lua, but Lua doesn't run well at audio rate. So I learned Faust, but Faust isn't so efficient... so I guess I'll have to learn C (edited)Wednesday, July 30, 2025 at 12:20 PM
+
+os — 7/30/25, 12:21 PMWednesday, July 30, 2025 at 12:21 PM
+
+If you can read Faust, you can read C well enough to determine if something is inside a loop or outside it.
+
+@os
+
+Clearly I forgot that plug-in parameters are copied to internal structures, not used directly, so editing the plug-in array won't have any affect. I'd have to add API calls so you can tell it to update them.
+
+AgentTerror — 7/30/25, 12:23 PMWednesday, July 30, 2025 at 12:23 PM
+
+ok yeah that tracks... just as a reminder my original solution here was to use a specification to make this choice, and not a parameter, and I am perfectly happy to go that route and lock in these choices up front (or respecify).... I in fact had it working as such at one point, the only drawback is I had to choose an ordinal number to represent the choice instead of being able to supply some english enum strings to represent the choices.. I know you didn't like that approach, but it worked (minus the enum string bit).
+
+os — 7/30/25, 12:24 PMWednesday, July 30, 2025 at 12:24 PM
+
+You should be able to modify parameters after the fact though, so that's an API I can and will add.
+
+AgentTerror — 7/30/25, 12:25 PMWednesday, July 30, 2025 at 12:25 PM
+
+ok then, I will wait and have a look at what you come up with! Thanks
+
+sletz — 7/30/25, 1:03 PMWednesday, July 30, 2025 at 1:03 PM
+
+Looking at the generated code :tanh is called at control and sin/cos at sample rate. Where is the equivalent NT LFO code ? Comparing side by side will help
+
+@sletz
+
+Looking at the generated code :tanh is called at control and sin/cos at sample rate. Where is the equivalent NT LFO code ? Comparing side by side will help
+
+os — 7/30/25, 1:20 PMWednesday, July 30, 2025 at 1:20 PM
+
+It's not published, but it computes at control rate, with optional linear interpolation. It also uses a polynomial approximation to sine().
+
+sletz — 7/30/25, 2:55 PMWednesday, July 30, 2025 at 2:55 PM
+
+@trevormeier @os OK, I guess we have part of the answer.
+
+@sletz
+
+@trevormeier @os OK, I guess we have part of the answer.
+
+trevormeier — 7/30/25, 4:24 PMWednesday, July 30, 2025 at 4:24 PM
+
+Any tips on how to get the compiler to run os.phasor at control rate?
+
+July 31, 2025
+
+sletz — 7/31/25, 2:01 AMThursday, July 31, 2025 at 2:01 AM
+
+What does that mean run at control rate in this context ? What is the excat purpose ?
+
+[2:01 AM]Thursday, July 31, 2025 at 2:01 AM
+
+What is the buffer size in the NT ?
+
+[2:03 AM]Thursday, July 31, 2025 at 2:03 AM
+
+@trevormeier Read: https://faustdoc.grame.fr/manual/optimizing/#computations-done-at-control-rate
+
+os — 7/31/25, 3:35 AMThursday, July 31, 2025 at 3:35 AM
+
+It means exactly what it means in the page you linked to. Control rate data is computed at the top of compute (or step in NT speak), before the per-sample loop.
+
+[3:35 AM]Thursday, July 31, 2025 at 3:35 AM
+
+The buffer size defaults to 24 but can be adjusted.
+
+sletz — 7/31/25, 5:24 AMThursday, July 31, 2025 at 5:24 AM
+
+OK, so in Faust wan can only be done in the current language version is: (edited)Thursday, July 31, 2025 at 5:28 AM
+
+[5:25 AM]Thursday, July 31, 2025 at 5:25 AM
+
+values coming from control parameters are control rate, and computation done on them will "stay in CR domain" and be done at CR , ex with process  = 3* hslider("foo", 0.4, 0, 1, 0.01);,
+
+(edited)Thursday, July 31, 2025 at 5:46 AM
+
+[5:28 AM]Thursday, July 31, 2025 at 5:28 AM
+
+but as soon at the CR signal is "immersed" in an SR computation, then all computations move in SR, like vol = hslider("Volume", 0.5, 0, 1, 0.01) : si.smoo; process = 3 * vol; , with the smoothing done at SR.,
+
+(edited)Thursday, July 31, 2025 at 5:49 AM
+
+sletz — 7/31/25, 5:44 AMThursday, July 31, 2025 at 5:44 AM
+
+We are working on a new primitiveondemand(clock, circuit), that will allow to better control when computation are done, with the clock signal expressing when the circuit parameter has to be computed. (edited)Thursday, July 31, 2025 at 5:45 AM
+
+@sletz
+
+We are working on a new  primitiveondemand(clock, circuit), that will  allow to better control when computation are done, with the  clock signal expressing when the circuit parameter has to be computed. (edited)Thursday, July 31, 2025 at 5:45 AM
+
+trevormeier — 7/31/25, 8:17 AMThursday, July 31, 2025 at 8:17 AM
+
+Ah, that would work perfectly for what I need. I have an hslider control parameter that I'm processing to create a quad panner. The compiler puts initial computations on the hslider output in the control rate loop. Those outputs are then used to adjust the level and rate of some LFOs, which the compiler puts in the audio-rate loop. The LFOs & their computations are only needed at control rate (they control the inputs to a panner). ondemand would let me run those computations at a much slower rate.
+
+[8:18 AM]Thursday, July 31, 2025 at 8:18 AM
+
+It's all in the code I pasted above... trying to improve the efficiency of the panner control computations so the plugin runs well on the NT
+
+trevormeier — 7/31/25, 9:48 AMThursday, July 31, 2025 at 9:48 AM
+
+For now, since there isn't yet a way to get the cos/sin functions to run at control rate, I'm using the rdtable primitive to create a table approximating the two functions and si.smoo on those values to calculate pan values. A bit of a hack, but it works. Gets the whole plugin down to 2-3% of NT's CPU, as compared to more than 20% if I use the faust no.lfnoise and sp.constantPowerPan library functions (and won't even load if I try to use the os.oscp oscillators)
+
+sletz — 7/31/25, 3:22 PMThursday, July 31, 2025 at 3:22 PM
+
+OK !
+
+August 11, 2025
+
+@AgentTerror
+
+ok then, I will wait and have a look at what you come up with!  Thanks
+
+os — 8/11/25, 10:39 AMMonday, August 11, 2025 at 10:39 AM
+
+I've added NT_updateParameterDefinition()
+
+AgentTerror — 8/11/25, 11:02 AMMonday, August 11, 2025 at 11:02 AM
+
+great, thanks! I will try it out when I get a little free time!
+
+August 19, 2025
+
+@os
+
+I've added NT_updateParameterDefinition()
+
+AgentTerror — 8/19/25, 8:52 PMTuesday, August 19, 2025 at 8:52 PM
+
+taken me longer than I hoped to circle back to this, but I tried it out, and while it's working in my altered gain test, I think it (or maybe I) may have some problems.... it seems that it may be affecting more than just the current algorithm instance... I've updated my test slightly such that when I change the "Test" parameter, I restrict the gain value from 5 thru whatever I specify in test. That works. I then add a second instance of the algorithm, and it is also restricted by what I set in the first instance, which I think is incorrect.
+
+
+#include <math.h>
+#include <new>
+#include <distingnt/api.h>
+
+struct _gainAlgorithm : public _NT_algorithm
+
+Expand
+
+Expand (143 lines)
+
+View whole file
+
+gain.cppgain.cpp (4 KB)4 KBgain.cpp (4 KB)Download gain.cpp (4 KB)Change language
+
+August 20, 2025
+
+@AgentTerror
+
+taken me longer than I hoped to circle back to this, but I tried it out, and while it's working in my altered gain test, I think it (or maybe I) may have some problems....  it seems that it may be affecting more than just the current algorithm instance...  I've updated my test slightly such that when I change the "Test" parameter, I restrict the gain value from 5 thru whatever I specify in test.  That works.  I then add a second instance of the algorithm, and it is also restricted by what I set in the first instance, which I think is incorrect.
+
+os — 8/20/25, 3:18 AMWednesday, August 20, 2025 at 3:18 AM
+
+It's because  static _NT_parameter    parameters[] = { is shared between all instances - it's a static at file scope. If you want different parameters for different instances, the _NT_parameter array needs to be scoped within _gainAlgorithm or at least allocated for in calculateRequirements.
+
+AgentTerror — 8/20/25, 6:52 AMWednesday, August 20, 2025 at 6:52 AM
+
+ahh of course, I should have picked up on that from the behavior alone. In my actual use case, I do have them at the instance-level, so I will try it out in that
+
+AgentTerror — 8/20/25, 7:02 AMWednesday, August 20, 2025 at 7:02 AM
+
+well I forgot I left my code in a less than ideal state, but I altered the gain example to do that and it works just fine now. Thanks!
+
+1
+
+AgentTerror — 8/20/25, 5:58 PMWednesday, August 20, 2025 at 5:58 PM
+
+Ok made some progress getting this implemented in my plugin... but what I've noticed is that when I reconfigure parameters, any mappings I had now don't make much sense... so for instance if I have a mapping that can twiddle a parameter thru, say, 30% of it's total range, and then reconfigure the parameter to have different scale/range, I can end up with anything from no modulation happening, or extreme modulation happening, depending on the scale of the mapping compared to the new param values... whereas what I would ideally like to see is the mapping still moving the updated parameter thru 30% of its (new) total range. Would it be possible, or even make sense, to add a bool parameter to NT_updateParameterDefinition that could automatically have any mappings rescaled to the new values?
+
+August 21, 2025
+
+os — 8/21/25, 3:31 AMThursday, August 21, 2025 at 3:31 AM
+
+I don't like that. Mappings are a user thing, not something a plug-in developer should be concerning themselves with.
+
+2
+
+AgentTerror — 8/21/25, 7:06 AMThursday, August 21, 2025 at 7:06 AM
+
+That's fair, and I can certainly imagine cases where you would not want that behavior. I suppose I could on my end have my parameters that I'm retargeting to different internal values always be percentages and do that scaling myself when applying them... Or more likely, just be fine with the fact that if the user retargets parameters, they just have to fix any mappings they care about.
+
+September 30, 2025
+
+addamm — 9/30/25, 1:58 PMTuesday, September 30, 2025 at 1:58 PM
+
+gonna show my ignorance here and ask if it's possible that some of these could be converted for use with NT? Just came across it in a Mylar Melodies video and seems pretty cool. I'm guessing no if only because it seems like audio files need to be first rendered by the effect before playback. Github link at the bottom of this link https://www.composersdesktop.com/
+
+Jodok31283TOC — 9/30/25, 2:08 PMTuesday, September 30, 2025 at 2:08 PM
+
+What's that exactly?
+
+Jodok31283TOC — 9/30/25, 2:22 PMTuesday, September 30, 2025 at 2:22 PM
+
+ah found it https://www.youtube.com/watch?v=TGczsxuAm1I
+
+YouTube
+
+mylarmelodies
+
+The most insane sound design tool nobody's heard of (is free)
+
+1
+
+October 9, 2025
+
+@addamm
+
+gonna show my ignorance here and ask if it's possible that some of these could be converted for use with NT? Just came across it in a Mylar Melodies video and seems pretty cool. I'm guessing no if only because it seems like audio files need to be first rendered by the effect before playback. Github link at the bottom of this link https://www.composersdesktop.com/
+
+Nate — 10/9/25, 2:15 PMThursday, October 9, 2025 at 2:15 PM
+
+Any specific algorithm/module you are interested in? It looks like it is not really designed/optimized for real time processing .. its more like "here is a wav file, now process the whole thing into a new wave file."
+
+@Nate
+
+Any specific algorithm/module you are interested in? It looks like it is not really designed/optimized for real time processing  .. its more like "here is a wav file, now process the whole thing into a new wave file."
+
+addamm — 10/9/25, 2:53 PMThursday, October 9, 2025 at 2:53 PM
+
+I probably jumped the gun on posting this haha. I saw the github had .c files and thought it might be doable but also I have no understanding of this stuff. Like you said it's not made for real time processing. I've been messing a bit with the algorithms available through the Soundthread interface and a lot of the Distort algos are pretty interesting. It looks like some (I'm guessing more complex algos) like Blur and Combine don't seem to be available yet, unfortunately. The pitch shifting and timestretch algorithms sound pretty good to me, too.
+
+October 11, 2025
+
+@addamm
+
+I probably jumped the gun on posting this haha. I saw the github had .c files and thought it might be doable but also I have no understanding of this stuff. Like you said it's not made for real time processing. I've been messing a bit with the algorithms available through the Soundthread interface and a lot of the Distort algos are pretty interesting. It looks like some (I'm guessing more complex algos) like Blur and Combine don't seem to be available yet, unfortunately. The pitch shifting and timestretch algorithms sound pretty good to me, too.
+
+cgcgcgcgc — 10/11/25, 5:36 PMSaturday, October 11, 2025 at 5:36 PM
+
+What’s the sound thread interface?
+
+@cgcgcgcgc
+
+What’s the sound thread interface?
+
+addamm — 10/11/25, 6:32 PMSaturday, October 11, 2025 at 6:32 PM
+
+Front end for Composers Desktop https://github.com/j-p-higgins/SoundThread
+
+GitHub
+
+GitHub - j-p-higgins/SoundThread: Node based GUI for The Composers ...
+
+Node based GUI for The Composers Desktop Project. Contribute to j-p-higgins/SoundThread development by creating an account on GitHub.
+
+@addamm
+
+Front end for Composers Desktop https://github.com/j-p-higgins/SoundThread
+
+cgcgcgcgc — 10/11/25, 7:20 PMSaturday, October 11, 2025 at 7:20 PM
+
+Thanks!
+
+1
+
+October 14, 2025
+
+cgcgcgcgc — 10/14/25, 12:20 PMTuesday, October 14, 2025 at 12:20 PM
+
+when loading a new build do i need to wait until all of the samples are loaded or can i just start with my tests?
+
+@cgcgcgcgc
+
+when loading a new build do i need to wait until all of the samples are loaded or can i just start with my tests?
+
+Jodok31283TOC — 10/14/25, 12:21 PMTuesday, October 14, 2025 at 12:21 PM
+
+Dont take it as "the answer" but my answer, I would wait.
+
+os — 10/14/25, 12:22 PMTuesday, October 14, 2025 at 12:22 PM
+
+You don't need to wait, but if you don't like having all that going on every boot, just move the samples into a different folder temporarily.
+
+cgcgcgcgc — 10/14/25, 12:57 PMTuesday, October 14, 2025 at 12:57 PM
+
+good idea. i will do that. another weird thing i saw was: I loaded a preset that hasn't been loaded in weeks. I changed some parameters. I put the Disting into usb mode and looked at that preset json file It showed a time stamp of today at 8:39am. when I loaded it at 11:19am. I only did it once but it seems like the json is updating but putting in a incorrect timestamp? Another question. I have a state variable. I want to save the value of a shift register but I'm not seeing that value update in my ui. I'm trying to implement some logic that tells the Disting that it is time to save that preset. When I save is it checking for changes and only saving that if it finds any? Is it only checking the input and output parameters and doesn't know to save my internal values I would like persisted?
+
+[12:58 PM]Tuesday, October 14, 2025 at 12:58 PM
+
+correction to the steps above. i did save the preset after i changed the parameters.
+
+cgcgcgcgc — 10/14/25, 1:15 PMTuesday, October 14, 2025 at 1:15 PM
+
+also, the saved data from custom plugins are saved in the preset json file correct? and is it possible to store debug data in that preset json file.
+
+cgcgcgcgc — 10/14/25, 1:31 PMTuesday, October 14, 2025 at 1:31 PM
+
+nvm. i got it to save to the json file using kParamStateVersion
+
+os — 10/14/25, 1:40 PMTuesday, October 14, 2025 at 1:40 PM
+
+If you want to serialise custom data, use the serialise/deserialise APIs.
+
+[1:40 PM]Tuesday, October 14, 2025 at 1:40 PM
+
+https://github.com/expertsleepersltd/distingNT_API/blob/04cc0fcf861f3e2a5425f220cb7460883c6bb61d/include/distingnt/api.h#L443
+
+GitHub
+
+distingNT_API/include/distingnt/api.h at 04cc0fcf861f3e2a5425f220cb...
+
+C++ API for the disting NT Eurorack module. Contribute to expertsleepersltd/distingNT_API development by creating an account on GitHub.
+
+cgcgcgcgc — 10/14/25, 1:42 PMTuesday, October 14, 2025 at 1:42 PM
+
+i just saved a preset again and now the timestamp says "Tomorrow 7:39 am" maybe the issue is with my mac displaying the timestamp.
+
+os — 10/14/25, 1:58 PMTuesday, October 14, 2025 at 1:58 PM
+
+The disting NT's realtime clock (RTC) isn't preserved between power cycles. If you want an accurate datestamp, connect the preset editor tool, which sets it from your computer.
+
+[1:59 PM]Tuesday, October 14, 2025 at 1:59 PM
+
+I don't know if the NT Helper does the same.
+
+[1:59 PM]Tuesday, October 14, 2025 at 1:59 PM
+
+You can see what time/date the module thinks it is via the settings menu.
+
+@os
+
+I don't know if the NT Helper does the same.
+
+thorinside — 10/14/25, 2:12 PMTuesday, October 14, 2025 at 2:12 PM
+
+It does.
+
+:sparkling_heart:
+
+Click to react
+
+:fire:
+
+Click to react
+
+:heart:
+
+Click to react
+
+Add Reaction
+
+Reply
+
+Forward
+
+More
+
+cgcgcgcgc — 10/14/25, 3:31 PMTuesday, October 14, 2025 at 3:31 PM
+
+Cool. Thanks

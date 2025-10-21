@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cmath>
 
+#define VFADER_BUILD 16  // Increment with each build
+
 // VFader: 64 virtual faders (params). I2C mappings set params. On change, emit 14-bit CC pairs over USB.
 // UI: 8 columns per page (8 pages), encL = page, encR = selection, pots L/C/R = left/selected/right faders.
 
@@ -36,11 +38,20 @@ enum {
     kParamCCOrder,           // enum: High first, Low first
     kParamSendBudget,        // 1..32, default 8
     kParamFaderBase,         // 64 params follow: Fader 1..64 (0..1 scaled by 1000)
-    kNumParameters = kParamFaderBase + 64
+    kParamCVDestBase = kParamFaderBase + 64,  // 64 CV destination params follow
+    kNumParameters = kParamCVDestBase + 64
 };
 
 static const char* const destStrings[] = { "Breakout", "USB", "Both", "Internal", "Select Bus", "All", NULL };
 static const char* const orderStrings[] = { "High first", "Low first", NULL };
+static const char* const cvDestStrings[] = { 
+    "Off", 
+    "Input 1", "Input 2", "Input 3", "Input 4", "Input 5", "Input 6", "Input 7", "Input 8",
+    "Input 9", "Input 10", "Input 11", "Input 12",
+    "Output 1", "Output 2", "Output 3", "Output 4", "Output 5", "Output 6", "Output 7", "Output 8",
+    "Aux 1", "Aux 2", "Aux 3", "Aux 4", "Aux 5", "Aux 6", "Aux 7", "Aux 8",
+    NULL 
+};
 
 static _NT_parameter parameters[kNumParameters] = {
     { .name = "MIDI channel", .min = 1, .max = 16, .def = 1, .unit = kNT_unitNone, .scaling = kNT_scalingNone, .enumStrings = NULL },
@@ -51,6 +62,8 @@ static _NT_parameter parameters[kNumParameters] = {
 
 // Fader names for mapping pages
 static char faderNames[64][12];
+// CV destination names
+static char cvDestNames[64][16];
 
 // Initialize fader parameter definitions
 static void initFaderParameters() {
@@ -65,36 +78,68 @@ static void initFaderParameters() {
         parameters[idx].scaling = kNT_scaling1000;
         parameters[idx].enumStrings = NULL;
     }
+    
+    // Initialize CV destination parameters
+    for (int i = 0; i < 64; ++i) {
+        int idx = kParamCVDestBase + i;
+        snprintf(cvDestNames[i], sizeof(cvDestNames[i]), "F%02d CV Dest", i + 1);
+        parameters[idx].name = cvDestNames[i];
+        parameters[idx].min = 0;
+        parameters[idx].max = 28;  // 0=Off, 1-12=Input1-12, 13-20=Output1-8, 21-28=Aux1-8
+        parameters[idx].def = 0;   // Default to Off
+        parameters[idx].unit = kNT_unitEnum;
+        parameters[idx].scaling = kNT_scalingNone;
+        parameters[idx].enumStrings = cvDestStrings;
+    }
 }
 
-// Pages: one page for core MIDI settings + 8 pages exposing faders for I2C mapping
+// Pages: one page for core MIDI settings + 8 pages exposing faders for I2C mapping + 8 pages for CV routing
 static const uint8_t page_config_params[] = { kParamMidiChannel, kParamMidiDest, kParamCCOrder, kParamSendBudget };
 static uint8_t faderPages[8][8];
-static _NT_parameterPage page_array[9];
+static uint8_t cvDestPages[8][8];
+static _NT_parameterPage page_array[17];  // 1 config + 8 fader + 8 CV dest
 static _NT_parameterPages pages;
 
 static void initPages() {
+    int pageIdx = 0;
+    
     // config page first
-    page_array[0].name = "VFADER";
-    page_array[0].numParams = (uint8_t)ARRAY_SIZE(page_config_params);
-    page_array[0].params = page_config_params;
+    page_array[pageIdx].name = "VFADER";
+    page_array[pageIdx].numParams = (uint8_t)ARRAY_SIZE(page_config_params);
+    page_array[pageIdx].params = page_config_params;
+    pageIdx++;
+    
     // 8 fader pages
-    static char pageNames[8][12];
+    static char faderPageNames[8][12];
     for (int p = 0; p < 8; ++p) {
         for (int i = 0; i < 8; ++i) {
             faderPages[p][i] = (uint8_t)(kParamFaderBase + p * 8 + i);
         }
-        char* name;
-        // short static names like "FDR 01-08"
         int start = p * 8 + 1;
-        int end = start + 7;
-        snprintf(pageNames[p], sizeof(pageNames[p]), "FDR %02d-%02d", start, end);
-        name = pageNames[p];
-        page_array[p + 1].name = name;
-        page_array[p + 1].numParams = 8;
-        page_array[p + 1].params = faderPages[p];
+        int end = p * 8 + 8;
+        snprintf(faderPageNames[p], sizeof(faderPageNames[p]), "FDR %02d-%02d", start, end);
+        page_array[pageIdx].name = faderPageNames[p];
+        page_array[pageIdx].numParams = 8;
+        page_array[pageIdx].params = faderPages[p];
+        pageIdx++;
     }
-    pages.numPages = 9;
+    
+    // 8 CV destination pages
+    static char cvDestPageNames[8][12];
+    for (int p = 0; p < 8; ++p) {
+        for (int i = 0; i < 8; ++i) {
+            cvDestPages[p][i] = (uint8_t)(kParamCVDestBase + p * 8 + i);
+        }
+        int start = p * 8 + 1;
+        int end = p * 8 + 8;
+        snprintf(cvDestPageNames[p], sizeof(cvDestPageNames[p]), "CV %02d-%02d", start, end);
+        page_array[pageIdx].name = cvDestPageNames[p];
+        page_array[pageIdx].numParams = 8;
+        page_array[pageIdx].params = cvDestPages[p];
+        pageIdx++;
+    }
+    
+    pages.numPages = pageIdx;
     pages.pages = page_array;
 }
 
@@ -148,13 +193,48 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
 }
 
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
-    (void)busFrames; (void)numFramesBy4;
     VFader* a = (VFader*)self;
+    int numFrames = numFramesBy4 * 4;
     
     // advance step counter and keep minimal uiActive ticking
     a->stepCounter++;
     if (a->uiActiveTicks > 0) { a->uiActive = true; --a->uiActiveTicks; }
     else { a->uiActive = false; }
+    
+    // CV Output: write fader values to configured output channels
+    for (int i = 0; i < 64; ++i) {
+        int cvDest = self->v[kParamCVDestBase + i];
+        if (cvDest > 0 && cvDest <= 28) {
+            // cvDest: 1-12=Input1-12, 13-20=Output1-8, 21-28=Aux1-8
+            // Simple lookup table - map each destination to its physical bus
+            // Determined by systematic oscilloscope testing
+            
+            // HARDCODED EXACT MAPPING from build 14 test
+            // Build 14 used buses: In7=18, In8=19, In9=6, In10=7, In11=8, In12=9, Out1=10, Out2=11, Out3=12, Out4=13, Out5=14, Out6=15, Out7=16, Out8=17
+            // Test results: In7→Out7, In8→Out8, In9→In7, In10→In8, In11→In9, In12→In10, Out1→In11, Out2→In12, Out3→Out1, Out4→Out2, Out5→Out3, Out6→Out4, Out7→Out5, Out8→Out6
+            // Reverse mapping: In7 needs bus from In9(6), In8 needs bus from In10(7), In9 needs bus from In11(8), In10 needs bus from In12(9), In11 needs bus from Out1(10), In12 needs bus from Out2(11)
+            //                  Out1 needs bus from Out3(12), Out2 needs bus from Out4(13), Out3 needs bus from Out5(14), Out4 needs bus from Out6(15), Out5 needs bus from Out7(16), Out6 needs bus from Out8(17), Out7 needs bus from In7(18), Out8 needs bus from In8(19)
+            static const int busMap[29] = {
+                -1,  // 0: unused
+                0, 1, 2, 3, 4, 5,  // 1-6: Input 1-6 (PASS)
+                6, 7, 8, 9, 10, 11,  // 7-12: In7, In8, In9, In10, In11, In12
+                12, 13, 14, 15, 16, 17, 18, 19,  // 13-20: Out1, Out2, Out3, Out4, Out5, Out6, Out7, Out8
+                20, 21, 22, 23, 24, 25, 26, 27  // 21-28: Aux 1-8 (PASS)
+            };
+            
+            int busIndex = busMap[cvDest];
+            
+            if (busIndex < 28) {  // Total 28 busses
+                // Get fader value (0.0-1.0) and scale to voltage (0-10V)
+                float voltage = a->last[i] * 10.0f;
+                
+                // Write to all frames in this buffer
+                for (int frame = 0; frame < numFrames; ++frame) {
+                    busFrames[busIndex * numFrames + frame] = voltage;
+                }
+            }
+        }
+    }
     
     // Deferred MIDI sending: process dirty faders, throttled by sendBudgetPerStep
     // TEMPORARILY DISABLED to test UI
@@ -181,20 +261,14 @@ bool draw(_NT_algorithm* self) {
     VFader* a = (VFader*)self;
     a->uiActive = true;
     a->uiActiveTicks = 2; // keep active for a couple of steps to capture immediate controls
-    // header (defensive clamp + safe formatting; omit page number to avoid confusion)
+    // header
     if (a->page < 1 || a->page > 8) a->page = clampU8(a->page, 1, 8);
     if (a->sel < 1 || a->sel > 64) a->sel = clampU8(a->sel, 1, 64);
     int sel = a->sel;
-    int msbCC = sel;
-    int lsbCC = (sel <= 32) ? (31 + sel) : (63 + sel);
-    int chDisp = (int)clampU8(self->v[kParamMidiChannel], 1, 16);
     char header[96];
     int off = 0;
-    off += snprintf(header + off, (size_t)(sizeof(header) - off), "F%02d  CC %d/", sel, msbCC);
-    off += snprintf(header + off, (size_t)(sizeof(header) - off), "%d  Ch ", lsbCC);
-    off += snprintf(header + off, (size_t)(sizeof(header) - off), "%d", chDisp);
-    // diagnostics: queue size and budget (qS forced 0 in minimal mode)
-    off += snprintf(header + off, (size_t)(sizeof(header) - off), "  qS %u b %u", 0u, (unsigned)a->sendBudgetPerStep);
+    off += snprintf(header + off, (size_t)(sizeof(header) - off), "VF.%03d  ", VFADER_BUILD);
+    off += snprintf(header + off, (size_t)(sizeof(header) - off), "Fader %02d", sel);
     NT_drawText(8, 8, header);
 
     // page indicators: draw shorter boxes

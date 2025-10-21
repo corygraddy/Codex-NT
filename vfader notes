@@ -1,0 +1,95 @@
+🎵 F8R Dynamic Hybrid Sequencer: Functionality Outline
+
+This script is a highly specialized Lua algorithm for the Disting NT that converts your 8 physical faders (F8R) into a massive 64-step assignment matrix used for both sequencing and continuous MIDI control.
+
+1. Core Structure and Memory Management
+
+Feature
+
+Description
+
+Total Assignments
+
+The script manages 64 Virtual Faders which are organized into 8 Pages (8 faders per page).
+
+Value Storage
+
+The script maintains a memory array (self.FaderValues) that stores the last known value (0.0–1.0) of all 64 virtual faders, ensuring state is preserved when you switch pages.
+
+Page Naming
+
+The custom UI displays simplified numerical names for easy reference: PAGE 1 through PAGE 8.
+
+2. Dynamic Hybrid Control Logic
+
+The script's main role is to check the desired sequence length and dynamically determine the output duty of the first 8 physical faders.
+
+Fader Role
+
+Controlled by
+
+Output Destination
+
+Sequencer Steps (Pitch/CV)
+
+If Virtual Fader Index $\le$ SequenceLength (Input 13)
+
+CV Out (Output 1) for Pitch & Gate Out (Output 2) for Triggers.
+
+MIDI CC Faders (Modulation)
+
+If Virtual Fader Index $>$ SequenceLength
+
+MIDI CC Send (Sends CC 8–63 based on the current page) & Mod CV Out (Output 3).
+
+3. Sequencing and Timing Controls
+
+The sequence is driven by dedicated external inputs. The maximum sequence length is 64 steps, spanning all 8 pages.
+
+Input / Parameter
+
+Functionality
+
+Output
+
+Input 2 (Clock In)
+
+Reads the external clock trigger. A rising edge advances the sequence.
+
+Gate Out (Output 2)
+
+Input 13 (Seq Length)
+
+Sets the Total Sequence Length (1 to 64 steps). This input determines the length of the pattern that the sequencer will loop.
+
+N/A
+
+Input 3 (Direction CV)
+
+Controls the Sequence Direction. A CV signal is read and quantized to select one of 8 distinct playback modes (e.g., Forward, Reverse, Random).
+
+N/A
+
+Output 1 (Pitch CV)
+
+Outputs the value (0–10V) of the current active step in the sequence.
+
+Pitch CV
+
+4. Usability and Lock Mechanisms
+
+Feature
+
+Functionality
+
+Paging (Input 1)
+
+A continuous CV input is used to linearly select and display the active bank (Page 1–8).
+
+Takeover Logic
+
+When the page is changed, the output of the 8 physical faders is locked (self.FaderTakeover). The physical fader must be moved to match the last saved value (within a 2% threshold) before it regains control, preventing abrupt jumps in the CV/CC signal.
+
+Custom UI (draw())
+
+Provides real-time visualization of the entire state, including the Page Name, the Current Step, the Step Count, and the Lock/Takeover status for each fader.
