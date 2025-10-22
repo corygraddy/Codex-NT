@@ -483,28 +483,34 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         a->sel = (uint8_t)((a->page - 1) * 8 + newCol + 1);
     }
     
-    // Handle pots - directly update internal faders
+    // Handle pots - write to FADER parameters to trigger pickup mode logic
     int pageBase = (a->page - 1) * 8;   // 0, 8, 16, ... 56
     int colInPage = (a->sel - 1) - pageBase;  // 0-7 column within current page
+    
+    uint32_t algIndex = NT_algorithmIndex(self);
+    uint32_t paramOffset = NT_parameterOffset();
     
     // Left pot controls fader to the LEFT of selected (or first on page if selected is first)
     if (data.controls & kNT_potL) {
         int targetCol = (colInPage > 0) ? (colInPage - 1) : 0;
-        int internalIdx = pageBase + targetCol;
-        a->internalFaders[internalIdx] = data.pots[0];
+        int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+        int16_t value = (int16_t)(data.pots[0] * 1000.0f + 0.5f);  // Scale to 0-1000
+        NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
     }
     
     // Center pot always controls the SELECTED fader's column
     if (data.controls & kNT_potC) {
-        int internalIdx = pageBase + colInPage;
-        a->internalFaders[internalIdx] = data.pots[1];
+        int faderParam = colInPage;  // FADER 1-8 maps to 0-7
+        int16_t value = (int16_t)(data.pots[1] * 1000.0f + 0.5f);  // Scale to 0-1000
+        NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
     }
     
     // Right pot controls fader to the RIGHT of selected (or last on page if selected is last)
     if (data.controls & kNT_potR) {
         int targetCol = (colInPage < 7) ? (colInPage + 1) : 7;
-        int internalIdx = pageBase + targetCol;
-        a->internalFaders[internalIdx] = data.pots[2];
+        int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+        int16_t value = (int16_t)(data.pots[2] * 1000.0f + 0.5f);  // Scale to 0-1000
+        NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
     }
 }
 
