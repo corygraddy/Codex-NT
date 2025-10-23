@@ -109,6 +109,41 @@ struct VFader : public _NT_algorithm {
         }
         buffer[idx] = '\0';
     }
+    
+    // Helper: Snap fader value to active note in chromatic scale
+    // Returns the MIDI note number to display/send
+    int snapToActiveNote(float faderValue, const FaderNoteSettings& settings) {
+        // Build list of active MIDI notes in range
+        int activeNotes[128];
+        int numActive = 0;
+        
+        for (int midi = settings.bottomMidi; midi <= settings.topMidi && midi <= 127; midi++) {
+            int noteInOctave = midi % 12;
+            if (settings.chromaticScale[noteInOctave] == 1) {
+                activeNotes[numActive++] = midi;
+            }
+        }
+        
+        if (numActive == 0) return settings.bottomMidi; // Safety fallback
+        if (numActive == 1) return activeNotes[0];      // Only one note
+        
+        // More aggressive handling for extremes - expand the edge zones
+        // Bottom 5% always maps to first note, top 5% always maps to last note
+        if (faderValue <= 0.05f) return activeNotes[0];
+        if (faderValue >= 0.95f) return activeNotes[numActive - 1];
+        
+        // Map fader value to index in active notes array
+        // Adjust the range to account for the edge zones we handled above
+        // Map 0.05-0.95 range to 0-(numActive-1) indices
+        float adjustedValue = (faderValue - 0.05f) / 0.9f;  // Normalize 0.05-0.95 to 0-1
+        float floatIndex = adjustedValue * (numActive - 1);
+        int index = (int)(floatIndex + 0.5f);  // Round to nearest
+        
+        if (index < 0) index = 0;
+        if (index >= numActive) index = numActive - 1;
+        
+        return activeNotes[index];
+    }
 
     // Pot throttling and deadband
     float potLast[3] = { -1.0f, -1.0f, -1.0f };
@@ -618,12 +653,25 @@ bool draw(_NT_algorithm* self) {
             }
         }
         
-        // Value at TOP - 1px above fader bar (normal size, same as letters, moved 3px to right)
-        int valuePct = (int)(v * 100.0f + 0.5f);
-        char valBuf[4];
-        snprintf(valBuf, sizeof(valBuf), "%d", valuePct);
+        // Value at TOP - 1px above fader bar
         int nameColor = isSel ? 15 : 7;
-        NT_drawText(xCenter + 3, faderTop - 2, valBuf, nameColor, kNT_textCentre, kNT_textNormal);
+        VFader::FaderNoteSettings& faderSettings = a->faderNoteSettings[idx - 1];
+        
+        if (faderSettings.displayMode == 1) {
+            // Note mode - display note name with scale snapping
+            int midiNote = a->snapToActiveNote(v, faderSettings);
+            
+            // Get note name
+            char noteBuf[8];
+            a->getMidiNoteName(midiNote, faderSettings.sharpFlat, noteBuf, sizeof(noteBuf));
+            NT_drawText(xCenter + 3, faderTop - 2, noteBuf, nameColor, kNT_textCentre, kNT_textNormal);
+        } else {
+            // Number mode - display percentage
+            int valuePct = (int)(v * 100.0f + 0.5f);
+            char valBuf[4];
+            snprintf(valBuf, sizeof(valBuf), "%d", valuePct);
+            NT_drawText(xCenter + 3, faderTop - 2, valBuf, nameColor, kNT_textCentre, kNT_textNormal);
+        }
         
         // Pickup mode indicator - small line sticking out right side at locked value position (2px long, 3px tall)
         // Only show if there's actually a mismatch (physical != internal)
