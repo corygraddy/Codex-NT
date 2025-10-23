@@ -68,6 +68,7 @@ struct VFader : public _NT_algorithm {
         uint8_t bottomValue;         // 0-100 (for Number mode)
         uint8_t topValue;            // 0-100 (for Number mode)
         uint8_t chromaticScale[12];  // 0=off, 1=on for each note (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
+        uint8_t controlAll;          // 0=Off, 1=On - if enabled, this fader controls all others
     };
     FaderNoteSettings faderNoteSettings[32];  // Settings for all 32 faders
     
@@ -628,19 +629,19 @@ bool draw(_NT_algorithm* self) {
             int yStep = 10;
             
             // Display Mode
-            NT_drawText(xLabel, yPos, "Display", (a->nameEditSettingPos == 0) ? 15 : 7);
+            NT_drawText(xLabel, yPos, "Display", (a->nameEditSettingPos == 0) ? 15 : 5);
             const char* displayStr = (settings.displayMode == 0) ? "Number" : "Note";
-            NT_drawText(xValue, yPos, displayStr, (a->nameEditSettingPos == 0) ? 15 : 10);
+            NT_drawText(xValue, yPos, displayStr, (a->nameEditSettingPos == 0) ? 15 : 5);
             yPos += yStep;
             
             // Sharp/Flat
-            NT_drawText(xLabel, yPos, "Accidental", (a->nameEditSettingPos == 1) ? 15 : 7);
+            NT_drawText(xLabel, yPos, "Accidental", (a->nameEditSettingPos == 1) ? 15 : 5);
             const char* sharpFlatStr = (settings.sharpFlat == 0) ? "Sharp" : "Flat";
-            NT_drawText(xValue, yPos, sharpFlatStr, (a->nameEditSettingPos == 1) ? 15 : 10);
+            NT_drawText(xValue, yPos, sharpFlatStr, (a->nameEditSettingPos == 1) ? 15 : 5);
             yPos += yStep;
             
             // Top Value (displays as note name in Note mode, number in Number mode)
-            NT_drawText(xLabel, yPos, "Top Value", (a->nameEditSettingPos == 2) ? 15 : 7);
+            NT_drawText(xLabel, yPos, "Top Value", (a->nameEditSettingPos == 2) ? 15 : 5);
             char topValStr[8];
             if (settings.displayMode == 1) {
                 // Note mode: show note name
@@ -649,11 +650,11 @@ bool draw(_NT_algorithm* self) {
                 // Number mode: show value 0-100
                 snprintf(topValStr, sizeof(topValStr), "%d", settings.topValue);
             }
-            NT_drawText(xValue, yPos, topValStr, (a->nameEditSettingPos == 2) ? 15 : 10);
+            NT_drawText(xValue, yPos, topValStr, (a->nameEditSettingPos == 2) ? 15 : 5);
             yPos += yStep;
             
             // Bottom Value (displays as note name in Note mode, number in Number mode)
-            NT_drawText(xLabel, yPos, "Bottom Value", (a->nameEditSettingPos == 3) ? 15 : 7);
+            NT_drawText(xLabel, yPos, "Bottom Value", (a->nameEditSettingPos == 3) ? 15 : 5);
             char botValStr[8];
             if (settings.displayMode == 1) {
                 // Note mode: show note name
@@ -662,7 +663,7 @@ bool draw(_NT_algorithm* self) {
                 // Number mode: show value 0-100
                 snprintf(botValStr, sizeof(botValStr), "%d", settings.bottomValue);
             }
-            NT_drawText(xValue, yPos, botValStr, (a->nameEditSettingPos == 3) ? 15 : 10);
+            NT_drawText(xValue, yPos, botValStr, (a->nameEditSettingPos == 3) ? 15 : 5);
             
             // Right side: Note Mask (3 rows of 4 notes)
             static const char* noteNamesSharp[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
@@ -687,9 +688,9 @@ bool draw(_NT_algorithm* self) {
                     bool isSelected = (a->nameEditSettingPos == 4 + noteIdx);  // Mask starts at position 4
                     
                     if (isActive) {
-                        NT_drawText(x, y, noteNames[noteIdx], isSelected ? 15 : 10);
+                        NT_drawText(x, y, noteNames[noteIdx], isSelected ? 15 : 5);
                     } else {
-                        NT_drawText(x, y, "-", isSelected ? 15 : 7);
+                        NT_drawText(x, y, "-", isSelected ? 15 : 5);
                     }
                 }
             }
@@ -697,8 +698,8 @@ bool draw(_NT_algorithm* self) {
         
         // Page indicator and exit on right side, close together
         const char* pageStr = (a->nameEditPage == 0) ? "Page 1/2" : "Page 2/2";
-        NT_drawText(250, 61, pageStr, 7, kNT_textRight, kNT_textTiny);
-        NT_drawText(250, 55, "R:Exit", 7, kNT_textRight, kNT_textTiny);
+        NT_drawText(250, 61, pageStr, 5, kNT_textRight, kNT_textTiny);
+        NT_drawText(250, 55, "R:Exit", 5, kNT_textRight, kNT_textTiny);
         
         return true;
     }

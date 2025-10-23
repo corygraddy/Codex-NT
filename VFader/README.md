@@ -4,7 +4,7 @@
 
 ## Overview
 
-VFader is a Disting NT algorithm that provides 32 virtual faders organized into 4 pages of 8 faders each. Each fader can be controlled via the three pots (L, C, R) and outputs MIDI CC messages in either 7-bit or 14-bit resolution. Perfect for controlling external MIDI gear, DAWs, or other Disting NT algorithms via internal routing.
+VFader is a Disting NT algorithm that provides 32 virtual faders organized into 4 pages of 8 faders each. Each fader can be controlled via the three pots (L, C, R) and outputs MIDI CC messages in either 7-bit or 14-bit resolution.
 
 ## Key Features
 
@@ -19,14 +19,6 @@ VFader is a Disting NT algorithm that provides 32 virtual faders organized into 
   - **Scaled**: Physical pot position scales the fader's range
   - **Catch**: Fader doesn't change until pot catches the current value
 - **Custom Naming**: Each fader has a 6-character name + 5-character category
-- **Preset Persistence**: All settings save with presets
-
-## Getting Started
-
-### Installation
-
-1. Copy `VFader.so` to your Disting NT's SD card in the `/plugins/` directory
-2. Load the VFader algorithm from the algorithm browser
 
 ### Basic Operation
 
@@ -43,8 +35,6 @@ VFader is a Disting NT algorithm that provides 32 virtual faders organized into 
 - **Center Pot**: Controls the SELECTED fader
 - **Right Pot**: Controls the fader to the RIGHT of selection (or last fader if rightmost selected)
 
-This 3-pot layout lets you quickly adjust multiple adjacent faders without changing selection.
-
 ## Fader Configuration
 
 ### Naming Faders
@@ -53,7 +43,7 @@ This 3-pot layout lets you quickly adjust multiple adjacent faders without chang
 2. Press **Right Encoder Button** to enter name edit mode
 3. **Left Encoder**: Navigate between characters (6 name + 5 category chars)
 4. **Right Encoder**: Change the current character
-5. Press **Left Encoder Button** to save and exit
+5. Press **Left Encoder Button** to exit and remember to save the preset!
 
 **Name Structure:**
 - Characters 1-6: Fader name (displayed on main screen)
@@ -130,47 +120,6 @@ Controls how physical pot movement affects the virtual fader:
 - **Internal**: Available to other Disting NT algorithms via MIDI routing
 
 **Note:** MIDI channel is currently hardcoded to channel 1.
-
-## Visual Guide
-
-### Main Display
-
-```
-[Fader1] [Fader2] [Fader3] [Fader4] [Fader5] [Fader6] [Fader7] [Fader8]
-  NAME     NAME     NAME     NAME     NAME     NAME     NAME     NAME
-   42       67       89       12       45       78       90       23
-   ▮▮       ▮▮       ▮▮       ▮        ▮▮       ▮▮       ▮▮       ▮
-   ▮▮       ▮▮       ▮▮       ▮        ▮▮       ▮▮       ▮▮       ▮
-   ▮▮       ▮▮       ▮▮       ▮        ▮▮       ▮▮       ▮▮       ▮
-   ▮▮       ▮▮       ▮▮       ░        ▮▮       ▮▮       ▮▮       ▮
-   ▮▮       ▮▮       ░░       ░        ▮▮       ▮▮       ░░       ░
-                                                                    2
-                                                                 CATEG
-```
-
-- Top row: Fader names (6 chars)
-- Second row: Current value/note
-- Vertical bars: Fader fill level (higher = more filled)
-- Tick marks: Quarter divisions (25%, 50%, 75%)
-- Top right: Page number (1-4)
-- Bottom right: Category of selected fader
-
-### Fader Edit Screen
-
-```
-FADER FUNCTION EDIT
-
-Display      Number
-Accidental   Sharp
-Top Value    80
-Bottom Value 20
-
-Note Mask:
-C  C# D  D# E  F
-✓  ✓  ✓  ✓  ✓  ✓
-F# G  G# A  A# B
-✓  ✓  ✓  ✓  ✓  ✓
-```
 
 ## Use Cases
 
@@ -252,8 +201,9 @@ Enable Debug Log parameter and save a preset to capture detailed state informati
 
 ## Credits
 
-Developed by Cory Graddy for Disting NT
-Built using the Expert Sleepers Disting NT API
+Developed by Cory Graddy for Disting NT  
+Built using the Expert Sleepers Disting NT API  
+Made with the help of GitHub Copilot: Claude Sonnet 4.5
 
 ## License
 
