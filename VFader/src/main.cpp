@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 34  // Solid fader fill, CC display, category moved down
+#define VFADER_BUILD 35  // Solid fader fill, CC display, category moved down
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
@@ -661,21 +661,38 @@ bool draw(_NT_algorithm* self) {
     if (a->nameEditMode) {
         VFader::FaderNoteSettings& settings = a->faderNoteSettings[a->nameEditFader];
         
+        // Build number at top left (all pages)
+        char buildStr[16];
+        snprintf(buildStr, sizeof(buildStr), "v%d", VFADER_BUILD);
+        NT_drawText(8, 8, buildStr, 5, kNT_textLeft);
+        
+        // Show fader info on right: Page, Position, Number (all pages)
+        int faderNumber = a->nameEditFader + 1;  // 1-32
+        int pageNum = ((a->nameEditFader) / 8) + 1;  // 1-4
+        int posNum = ((a->nameEditFader) % 8) + 1;  // 1-8
+        char faderInfo[32];
+        snprintf(faderInfo, sizeof(faderInfo), "P:%d Pos:%d #%d", pageNum, posNum, faderNumber);
+        NT_drawText(250, 8, faderInfo, 15, kNT_textRight);
+        
+        // Show current fader name and category below fader info (all pages)
+        char* currentName = a->faderNames[a->nameEditFader];
+        char nameBuf[7] = {0};
+        char catBuf[6] = {0};
+        for (int i = 0; i < 6; i++) {
+            nameBuf[i] = (currentName[i] == 0) ? ' ' : currentName[i];
+        }
+        for (int i = 0; i < 5; i++) {
+            catBuf[i] = (currentName[6 + i] == 0) ? ' ' : currentName[6 + i];
+        }
+        char displayInfo[32];
+        snprintf(displayInfo, sizeof(displayInfo), "%s %s", nameBuf, catBuf);
+        NT_drawText(250, 16, displayInfo, 10, kNT_textRight, kNT_textTiny);
+        
         if (a->nameEditPage == 0) {
             // PAGE 1: NAME/CATEGORY EDITING
             
-            // Build number at top left
-            char buildStr[16];
-            snprintf(buildStr, sizeof(buildStr), "v%d", VFADER_BUILD);
-            NT_drawText(8, 8, buildStr, 5, kNT_textLeft);
-            
             // Title centered
             NT_drawText(128, 8, "EDIT NAME", 15, kNT_textCentre);
-            
-            // Show fader number on right
-            char faderNum[16];
-            snprintf(faderNum, sizeof(faderNum), "Fader %d", a->nameEditFader + 1);
-            NT_drawText(250, 8, faderNum, 15, kNT_textRight);
             
             char* name = a->faderNames[a->nameEditFader];
             int yName = 28;
@@ -714,11 +731,6 @@ bool draw(_NT_algorithm* self) {
         } else if (a->nameEditPage == 1) {
             // PAGE 2: FADER FUNCTION EDITING
             
-            // Build number at top left
-            char buildStr[16];
-            snprintf(buildStr, sizeof(buildStr), "v%d", VFADER_BUILD);
-            NT_drawText(8, 8, buildStr, 5, kNT_textLeft);
-            
             // Title centered
             NT_drawText(128, 8, "FADER FUNCTION EDIT", 15, kNT_textCentre);
             
@@ -734,10 +746,17 @@ bool draw(_NT_algorithm* self) {
             NT_drawText(xValue, yPos, displayStr, (a->nameEditSettingPos == 0) ? 15 : 5);
             yPos += yStep;
             
-            // Sharp/Flat
-            NT_drawText(xLabel, yPos, "Accidental", (a->nameEditSettingPos == 1) ? 15 : 5);
+            // Sharp/Flat - dim to 1 when Display is Number mode
+            int accidentalLabelColor = (a->nameEditSettingPos == 1) ? 15 : 5;
+            int accidentalValueColor = (a->nameEditSettingPos == 1) ? 15 : 5;
+            // Override to very dark if Display is Number mode (not applicable)
+            if (settings.displayMode == 0) {
+                accidentalLabelColor = 1;
+                accidentalValueColor = 1;
+            }
+            NT_drawText(xLabel, yPos, "Accidental", accidentalLabelColor);
             const char* sharpFlatStr = (settings.sharpFlat == 0) ? "Sharp" : "Flat";
-            NT_drawText(xValue, yPos, sharpFlatStr, (a->nameEditSettingPos == 1) ? 15 : 5);
+            NT_drawText(xValue, yPos, sharpFlatStr, accidentalValueColor);
             yPos += yStep;
             
             // Top Value (displays as note name in Note mode, number in Number mode)
@@ -796,11 +815,6 @@ bool draw(_NT_algorithm* self) {
             }
         } else if (a->nameEditPage == 2) {
             // PAGE 3: MACRO FADER SETTINGS
-            
-            // Build number at top left
-            char buildStr[16];
-            snprintf(buildStr, sizeof(buildStr), "v%d", VFADER_BUILD);
-            NT_drawText(8, 8, buildStr, 5, kNT_textLeft);
             
             // Title centered
             NT_drawText(128, 8, "MACRO FADER", 15, kNT_textCentre);
@@ -1092,6 +1106,19 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     
     // NAME EDIT MODE
     if (a->nameEditMode) {
+        // Left pot: select which fader to edit (1-32)
+        if (data.controls & kNT_potL) {
+            float potValue = data.pots[0];
+            // Scale 0.0-1.0 to 0-31 with proper rounding
+            int newFader = (int)(potValue * 31.999f);  // Ensures 1.0 maps to 31
+            if (newFader < 0) newFader = 0;
+            if (newFader > 31) newFader = 31;
+            if (newFader != a->nameEditFader) {
+                a->nameEditFader = (uint8_t)newFader;
+                a->nameEditPos = 0;  // Reset cursor to first position
+            }
+        }
+        
         // Right encoder: navigate between pages or edit values
         // Limit encoder delta to prevent freeze
         int encoderDelta = data.encoders[1];
