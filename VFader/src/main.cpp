@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 26  // Added gang fader feature
+#define VFADER_BUILD 34  // Solid fader fill, CC display, category moved down
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
@@ -78,6 +78,12 @@ struct VFader : public _NT_algorithm {
                                        0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
                                        0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
                                        0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+    
+    // Track last gang fader values to detect changes
+    float lastGangValues[32] = {-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                                -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                                -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                                -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
     
     // Initialize note settings with defaults
     void initializeNoteSettings() {
@@ -441,44 +447,76 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     }
     
     // Apply gang fader transformations
-    // Process all gang faders and update their child faders
+    // Only apply when the gang fader itself has changed
     for (int i = 0; i < 32; i++) {
         if (a->faderNoteSettings[i].controlAllCount > 0) {
             float gangValue = a->internalFaders[i];  // 0.0 to 1.0
-            int childCount = a->faderNoteSettings[i].controlAllCount;
-            uint8_t mode = a->faderNoteSettings[i].controlAllMode;
+            float lastGangValue = a->lastGangValues[i];
             
-            // Process each child fader
-            for (int j = 1; j <= childCount && (i + j) < 32; j++) {
-                int childIdx = i + j;
+            // Only update children if gang fader changed
+            bool gangChanged = (lastGangValue < 0.0f) || (fabsf(gangValue - lastGangValue) > 0.001f);
+            
+            if (gangChanged) {
+                int childCount = a->faderNoteSettings[i].controlAllCount;
+                uint8_t mode = a->faderNoteSettings[i].controlAllMode;
                 
-                // Skip if child is also a gang fader
-                if (a->faderNoteSettings[childIdx].controlAllCount > 0) continue;
-                
-                float refValue = a->faderReferenceValues[childIdx];
-                float newValue;
-                
+                // For Absolute mode, calculate min/max reference values ONCE before processing children
+                float minRef = 1.0f;
+                float maxRef = 0.0f;
                 if (mode == 0) {
-                    // Absolute mode: maintains fixed offsets
-                    // At gang=0.5, child=refValue
-                    // At gang=1.0, child=refValue+0.5
-                    // At gang=0.0, child=refValue-0.5
-                    float offset = gangValue - 0.5f;  // -0.5 to +0.5
-                    newValue = refValue + offset;
-                } else {
-                    // Relative mode: maintains proportions
-                    // At gang=0.5, child=refValue
-                    // Gang acts as multiplier around 0.5 center point
-                    float multiplier = gangValue / 0.5f;  // 0.0 to 2.0
-                    newValue = refValue * multiplier;
+                    for (int k = 1; k <= childCount && (i + k) < 32; k++) {
+                        int checkIdx = i + k;
+                        if (a->faderNoteSettings[checkIdx].controlAllCount > 0) continue; // Skip nested macros
+                        float checkRef = a->faderReferenceValues[checkIdx];
+                        if (checkRef < minRef) minRef = checkRef;
+                        if (checkRef > maxRef) maxRef = checkRef;
+                    }
                 }
                 
-                // Clamp to valid range
-                if (newValue < 0.0f) newValue = 0.0f;
-                if (newValue > 1.0f) newValue = 1.0f;
+                // Calculate gang logical value for Absolute mode (used by all children)
+                float gangLogical = 0.0f;
+                if (mode == 0) {
+                    float gangLogicalMin = 0.5f - maxRef;
+                    float gangLogicalMax = 0.5f + (1.0f - minRef);
+                    gangLogical = gangLogicalMin + (gangValue * (gangLogicalMax - gangLogicalMin));
+                }
                 
-                // Update child fader
-                a->internalFaders[childIdx] = newValue;
+                // Process each child fader
+                for (int j = 1; j <= childCount && (i + j) < 32; j++) {
+                    int childIdx = i + j;
+                    
+                    // Skip if child is also a gang fader
+                    if (a->faderNoteSettings[childIdx].controlAllCount > 0) continue;
+                    
+                    float refValue = a->faderReferenceValues[childIdx];
+                    float newValue;
+                    
+                    if (mode == 0) {
+                        // Absolute mode: children move in parallel using pre-calculated gangLogical
+                        float shift = gangLogical - 0.5f;
+                        newValue = refValue + shift;
+                    } else {
+                        // Relative mode: all children reach 0 and 1.0 together (proportional scaling)
+                        if (gangValue <= 0.5f) {
+                            // Map gang [0.0 to 0.5] → child [0.0 to refValue]
+                            newValue = refValue * (gangValue / 0.5f);
+                        } else {
+                            // Map gang [0.5 to 1.0] → child [refValue to 1.0]
+                            float t = (gangValue - 0.5f) / 0.5f;
+                            newValue = refValue + ((1.0f - refValue) * t);
+                        }
+                    }
+                    
+                    // Clamp to valid range
+                    if (newValue < 0.0f) newValue = 0.0f;
+                    if (newValue > 1.0f) newValue = 1.0f;
+                    
+                    // Update child fader
+                    a->internalFaders[childIdx] = newValue;
+                }
+                
+                // Update last gang value
+                a->lastGangValues[i] = gangValue;
             }
         }
     }
@@ -626,6 +664,11 @@ bool draw(_NT_algorithm* self) {
         if (a->nameEditPage == 0) {
             // PAGE 1: NAME/CATEGORY EDITING
             
+            // Build number at top left
+            char buildStr[16];
+            snprintf(buildStr, sizeof(buildStr), "v%d", VFADER_BUILD);
+            NT_drawText(8, 8, buildStr, 5, kNT_textLeft);
+            
             // Title centered
             NT_drawText(128, 8, "EDIT NAME", 15, kNT_textCentre);
             
@@ -670,6 +713,11 @@ bool draw(_NT_algorithm* self) {
             }
         } else if (a->nameEditPage == 1) {
             // PAGE 2: FADER FUNCTION EDITING
+            
+            // Build number at top left
+            char buildStr[16];
+            snprintf(buildStr, sizeof(buildStr), "v%d", VFADER_BUILD);
+            NT_drawText(8, 8, buildStr, 5, kNT_textLeft);
             
             // Title centered
             NT_drawText(128, 8, "FADER FUNCTION EDIT", 15, kNT_textCentre);
@@ -747,13 +795,18 @@ bool draw(_NT_algorithm* self) {
                 }
             }
         } else if (a->nameEditPage == 2) {
-            // PAGE 3: GANG FADER SETTINGS
+            // PAGE 3: MACRO FADER SETTINGS
+            
+            // Build number at top left
+            char buildStr[16];
+            snprintf(buildStr, sizeof(buildStr), "v%d", VFADER_BUILD);
+            NT_drawText(8, 8, buildStr, 5, kNT_textLeft);
             
             // Title centered
-            NT_drawText(128, 8, "GANG FADER", 15, kNT_textCentre);
+            NT_drawText(128, 8, "MACRO FADER", 15, kNT_textCentre);
             
             int xLabel = 8;
-            int xValue = 79;
+            int xValue = 89;  // Moved 10px to the right (was 79)
             int yPos = 25;
             int yStep = 12;
             
@@ -828,32 +881,36 @@ bool draw(_NT_algorithm* self) {
         // Draw fader background (empty part)
         NT_drawShapeI(kNT_box, faderX, faderTop, faderX + faderWidth, faderBottom, 7);
         
-        // Draw tick marks at 25%, 50%, 75% positions
+        // Calculate tick mark positions
         int faderMidY = faderTop + (faderHeight / 2);
         int fader25Y = faderTop + (faderHeight * 3 / 4);  // 25% from top = 75% from bottom
         int fader75Y = faderTop + (faderHeight / 4);      // 75% from top = 25% from bottom
         
-        // 50% mark - lines (4px) on left and right
-        NT_drawShapeI(kNT_line, faderX, faderMidY, faderX + 3, faderMidY, 10);
-        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, faderMidY, faderX + faderWidth, faderMidY, 10);
-        
-        // 25% mark - same length lines (4px)
-        NT_drawShapeI(kNT_line, faderX, fader25Y, faderX + 3, fader25Y, 10);
-        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, fader25Y, faderX + faderWidth, fader25Y, 10);
-        
-        // 75% mark - same length lines (4px)
-        NT_drawShapeI(kNT_line, faderX, fader75Y, faderX + 3, fader75Y, 10);
-        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, fader75Y, faderX + faderWidth, fader75Y, 10);
-        
-        // Draw filled part of fader with horizontal lines (segmented look)
-        // Lines are added from BOTTOM up as value increases (like stacking plates)
+        // Draw filled part of fader as solid box
+        int fillTop = faderBottom;
         if (fillHeight > 0) {
             int fillColor = isSel ? 15 : 10;
-            // Draw horizontal lines every 2 pixels starting from the BOTTOM of the fader
-            for (int y = faderBottom - 2; y >= faderBottom - fillHeight && y > faderTop; y -= 2) {
-                NT_drawShapeI(kNT_line, faderX + 1, y, faderX + faderWidth - 1, y, fillColor);
-            }
+            fillTop = faderBottom - fillHeight;
+            // Draw solid filled box
+            NT_drawShapeI(kNT_box, faderX + 1, fillTop, faderX + faderWidth - 1, faderBottom - 1, fillColor);
         }
+        
+        // Draw tick marks at 25%, 50%, 75% - invert color if covered by fill
+        // 50% mark - lines (4px) on left and right
+        int tick50Color = (faderMidY >= fillTop) ? 0 : 10;  // Black if filled, bright if empty
+        NT_drawShapeI(kNT_line, faderX, faderMidY, faderX + 3, faderMidY, tick50Color);
+        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, faderMidY, faderX + faderWidth, faderMidY, tick50Color);
+        
+        // 25% mark - same length lines (4px)
+        int tick25Color = (fader25Y >= fillTop) ? 0 : 10;
+        NT_drawShapeI(kNT_line, faderX, fader25Y, faderX + 3, fader25Y, tick25Color);
+        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, fader25Y, faderX + faderWidth, fader25Y, tick25Color);
+        
+        // 75% mark - same length lines (4px)
+        int tick75Color = (fader75Y >= fillTop) ? 0 : 10;
+        NT_drawShapeI(kNT_line, faderX, fader75Y, faderX + 3, fader75Y, tick75Color);
+        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, fader75Y, faderX + faderWidth, fader75Y, tick75Color);
+
         
         // Value at TOP - 1px above fader bar
         int nameColor = isSel ? 15 : 7;
@@ -935,17 +992,58 @@ bool draw(_NT_algorithm* self) {
     // Right side display area (no box, just content)
     int rightAreaX = 224;
     
-    // Top half: Large page number (moved down 12px, doubled size using textLarge)
+    // Top: Large page number
     char pageBuf[2];
     snprintf(pageBuf, sizeof(pageBuf), "%d", a->page);
     NT_drawText(rightAreaX + 8, 20, pageBuf, 15, kNT_textLeft, kNT_textLarge);
     
-    // Bottom half: Selected fader's category (chars 6-10, larger font)
+    // CC number under page number - calculate CC based on MIDI mode
     int selectedFaderIdx = a->sel - 1;  // 0-31
-    const char* selectedName = a->faderNames[selectedFaderIdx];
-    int catY = 42;
+    int midiMode = (int)(self->v[kParamMidiMode] + 0.5f);
+    int ccNumber;
+    if (midiMode == 0) {
+        // 7-bit mode: CC 1-32
+        ccNumber = selectedFaderIdx + 1;
+    } else {
+        // 14-bit mode: CC 0-31
+        ccNumber = selectedFaderIdx;
+    }
+    char ccBuf[8];
+    snprintf(ccBuf, sizeof(ccBuf), "CC%02d", ccNumber);
+    NT_drawText(rightAreaX + 4, 32, ccBuf, 15, kNT_textLeft, kNT_textTiny);
     
-    // Display category (chars 6-10) with normal font, moved 6px left
+    // Macro fader debug info - show if selected fader is macro or child
+    VFader::FaderNoteSettings& selectedSettings = a->faderNoteSettings[selectedFaderIdx];
+    if (selectedSettings.controlAllCount > 0) {
+        // This is a macro fader
+        char macroInfo[32];
+        const char* modeStr = (selectedSettings.controlAllMode == 0) ? "ABS" : "REL";
+        snprintf(macroInfo, sizeof(macroInfo), "M:%d %s", selectedSettings.controlAllCount, modeStr);
+        NT_drawText(rightAreaX, 42, macroInfo, 10, kNT_textLeft, kNT_textTiny);
+    } else {
+        // Check if this is a child of any macro fader
+        for (int i = 0; i < selectedFaderIdx; i++) {
+            if (a->faderNoteSettings[i].controlAllCount > 0) {
+                int childCount = a->faderNoteSettings[i].controlAllCount;
+                int firstChild = i + 1;
+                int lastChild = i + childCount;
+                if (selectedFaderIdx >= firstChild && selectedFaderIdx <= lastChild) {
+                    // This fader is a child
+                    char childInfo[32];
+                    float refVal = a->faderReferenceValues[selectedFaderIdx];
+                    snprintf(childInfo, sizeof(childInfo), "Ch %d R:%.2f", i + 1, refVal);
+                    NT_drawText(rightAreaX, 42, childInfo, 10, kNT_textLeft, kNT_textTiny);
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Category (chars 6-10) - moved down 8px from 42 to 50
+    const char* selectedName = a->faderNames[selectedFaderIdx];
+    int catY = 50;
+    
+    // Display category with normal font
     char catBuf[6] = {0};
     for (int i = 0; i < 5; i++) {
         catBuf[i] = selectedName[6 + i];
@@ -1137,6 +1235,7 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                 switch (a->nameEditSettingPos) {
                     case 0: // Control Count (0-31)
                         {
+                            uint8_t oldCount = settings.controlAllCount;
                             int newCount = (int)settings.controlAllCount + encoderDelta;
                             if (newCount < 0) newCount = 0;
                             if (newCount > 31) newCount = 31;
@@ -1155,6 +1254,18 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                             
                             if (newCount > maxPossible) newCount = maxPossible;
                             settings.controlAllCount = (uint8_t)newCount;
+                            
+                            // If gang fader was just created (0 -> non-zero), initialize children's reference values
+                            if (oldCount == 0 && newCount > 0) {
+                                for (int j = 1; j <= newCount && (faderIdx + j) < 32; j++) {
+                                    int childIdx = faderIdx + j;
+                                    // Set reference to current position (don't snap!)
+                                    a->faderReferenceValues[childIdx] = a->internalFaders[childIdx];
+                                }
+                                // Initialize lastGangValues to -1.0 to trigger first update
+                                a->lastGangValues[faderIdx] = -1.0f;
+                            }
+                            
                             settingsChanged = true;
                         }
                         break;

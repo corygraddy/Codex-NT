@@ -1,0 +1,447 @@
+{
+"kind": "disting NT preset",
+ "author": "Cory Graddy          ",
+ "saved-from": ["v1.11.0","Oct 20 2025 12:26:47"]
+ ,
+ "engine": {
+ "sampleRate": 48000,
+  "blockSize": 24}
+ ,
+ "name": "VFAT5               ",
+ "version": 2,
+ "slots": [{
+  "guid": "VFDR",
+   "specs": [0,0,0]
+   ,
+   "displayLayout": {
+   "buildVersion": 30,
+    "currentPage": 1,
+    "selectedFader": 1,
+    "nameEditMode": false,
+    "namesModified": false,
+    "visibleFaders": [{
+     "index": 0,
+      "value": 9.820001e-01,
+      "name": "FADER01",
+      "inPickup": false}
+     ,{
+     "index": 1,
+      "value": 7.660000e-01,
+      "name": "FADER02",
+      "inPickup": false}
+     ,{
+     "index": 2,
+      "value": 9.880001e-01,
+      "name": "FADER03",
+      "inPickup": false}
+     ,{
+     "index": 3,
+      "value": 1.000000e+00,
+      "name": "FADER04",
+      "inPickup": false}
+     ,{
+     "index": 4,
+      "value": 0.000000e+00,
+      "name": "FADER05",
+      "inPickup": false}
+     ,{
+     "index": 5,
+      "value": 0.000000e+00,
+      "name": "FADER06",
+      "inPickup": false}
+     ,{
+     "index": 6,
+      "value": 0.000000e+00,
+      "name": "FADER07",
+      "inPickup": false}
+     ,{
+     "index": 7,
+      "value": 0.000000e+00,
+      "name": "FADER08",
+      "inPickup": false}
+     ]
+    }
+   ,
+   "faders": [9.820001e-01,7.660000e-01,9.880001e-01,1.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00]
+   ,
+   "inPickupMode": [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]
+   ,
+   "lastMidiValues": [9.820001e-01,7.660000e-01,9.880001e-01,1.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00,0.000000e+00]
+   ,
+   "faderNames": ["FADER01","FADER02","FADER03","FADER04","FADER05","FADER06","FADER07","FADER08","FADER09","FADER10","FADER11","FADER12","FADER13","FADER14","FADER15","FADER16","FADER17","FADER18","FADER19","FADER20","FADER21","FADER22","FADER23","FADER24","FADER25","FADER26","FADER27","FADER28","FADER29","FADER30","FADER31","FADER32"]
+   ,
+   "noteSettings": [{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 3,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ,{
+    "displayMode": 0,
+     "sharpFlat": 0,
+     "bottomMidi": 36,
+     "topMidi": 96,
+     "bottomValue": 0,
+     "topValue": 100,
+     "chromaticScale": [1,1,1,1,1,1,1,1,1,1,1,1]
+     ,
+     "controlAllCount": 0,
+     "controlAllMode": 0}
+    ]
+   ,
+   "faderReferenceValues": [5.000000e-01,2.840000e-01,5.060000e-01,7.380000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01,5.000000e-01]
+   ,
+   "name": "VFader                 ",
+   "parameters": [0,982,284,506,738,0,0,0,0,0,1,1,0]
+   ,
+   "ui": {
+   "page": 0,
+    "items": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "gui"}
+   }
+  ]
+ ,
+ "ui": {
+ "currentSlot": 0,
+  "displayMode": "algorithm",
+  "perfPage": {
+  "display": "params",
+   "item": 0}
+  }
+ }
