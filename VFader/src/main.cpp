@@ -53,6 +53,9 @@ struct VFader : public _NT_algorithm {
     bool nameEditMode = false;       // Whether we're currently editing a name
     uint8_t nameEditPos = 0;         // Current character position being edited (0-10: 0-5 for name, 6-10 for category)
     uint8_t nameEditFader = 0;       // Which fader's name is being edited (0-31)
+    uint8_t nameEditPage = 0;        // Which edit page: 0=name/category, 1=settings
+    uint8_t nameEditSettingPos = 0;  // Which setting being edited: 0=displayMode, 1=sharpFlat, 2=bottomNote, 3=bottomOctave, 4=topNote, 5=topOctave
+    float lastPotR = -1.0f;          // Last pot R value for page detection in name edit mode
     uint16_t lastButtonState = 0;    // Track last button state for debouncing
     bool namesModified = false;      // Whether names have been edited since last preset save
     
@@ -60,10 +63,8 @@ struct VFader : public _NT_algorithm {
     struct FaderNoteSettings {
         uint8_t displayMode;         // 0=Number (0-127), 1=Note
         uint8_t sharpFlat;           // 0=Sharp, 1=Flat
-        uint8_t bottomNote;          // 0-11 (C=0, C#=1, D=2, etc.)
-        uint8_t bottomOctave;        // 0-10
-        uint8_t topNote;             // 0-11
-        uint8_t topOctave;           // 0-10
+        uint8_t bottomMidi;          // 0-127 (MIDI note number, C-1 = 0, G9 = 127)
+        uint8_t topMidi;             // 0-127 (MIDI note number)
         uint8_t chromaticScale[12];  // 0=off, 1=on for each note (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
     };
     FaderNoteSettings faderNoteSettings[32];  // Settings for all 32 faders
@@ -73,15 +74,40 @@ struct VFader : public _NT_algorithm {
         for (int i = 0; i < 32; i++) {
             faderNoteSettings[i].displayMode = 0;     // Default to Number mode
             faderNoteSettings[i].sharpFlat = 0;       // Default to Sharps
-            faderNoteSettings[i].bottomNote = 0;      // C
-            faderNoteSettings[i].bottomOctave = 3;    // C3 (MIDI 60 = middle C = C4, so C3 = 48)
-            faderNoteSettings[i].topNote = 0;         // C
-            faderNoteSettings[i].topOctave = 5;       // C5 (MIDI 72)
+            faderNoteSettings[i].bottomMidi = 36;     // C1 (MIDI 36)
+            faderNoteSettings[i].topMidi = 96;        // C6 (MIDI 96)
             // Initialize chromatic scale - all notes ON by default
             for (int j = 0; j < 12; j++) {
                 faderNoteSettings[i].chromaticScale[j] = 1;
             }
         }
+    }
+    
+    // Helper: Get note name string from MIDI note number (0-127)
+    void getMidiNoteName(uint8_t midiNote, uint8_t sharpFlat, char* buffer, int bufSize) {
+        static const char* noteNamesSharp[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        static const char* noteNamesFlat[] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
+        
+        if (midiNote > 127) midiNote = 127;
+        
+        int octave = (midiNote / 12) - 1;  // MIDI 0-11 = octave -1, 12-23 = octave 0, etc.
+        int noteInOctave = midiNote % 12;
+        const char* noteName = (sharpFlat == 0) ? noteNamesSharp[noteInOctave] : noteNamesFlat[noteInOctave];
+        
+        // Manually build string: note + octave
+        int idx = 0;
+        buffer[idx++] = noteName[0];
+        if (noteName[1] != '\0') {
+            buffer[idx++] = noteName[1];
+        }
+        // Handle octave (can be -1 to 9)
+        if (octave < 0) {
+            buffer[idx++] = '-';
+            buffer[idx++] = '1';
+        } else {
+            buffer[idx++] = '0' + (char)octave;
+        }
+        buffer[idx] = '\0';
     }
 
     // Pot throttling and deadband
@@ -121,6 +147,9 @@ struct VFader : public _NT_algorithm {
         int encoderRCount;
         uint8_t currentPage;
         uint8_t currentSel;
+        uint8_t nameEditPageNum;
+        uint8_t nameEditSettingIdx;
+        int uiFreezeCounter;
         
         // Pickup indicator debug - for all 32 faders
         bool pickupModeActive[32];
@@ -418,61 +447,125 @@ bool draw(_NT_algorithm* self) {
     
     // NAME EDIT MODE DISPLAY
     if (a->nameEditMode) {
-        // Title
-        NT_drawText(4, 8, "EDIT NAME", 15);
-        
-        // Show fader number
-        char faderNum[16];
-        snprintf(faderNum, sizeof(faderNum), "Fader %d", a->nameEditFader + 1);
-        NT_drawText(128, 8, faderNum, 15, kNT_textRight);
-        
-        // Draw the name fields: Name (6 chars) and Cat (4 chars)
-        char* name = a->faderNames[a->nameEditFader];
-        int yName = 28;
-        int yCat = 42;
-        int xStart = 40;
-        
-        // "Name" label
-        NT_drawText(8, yName, "Name", 15);
-        
-        // Name field (chars 0-5)
-        for (int i = 0; i < 6; i++) {
-            char c = name[i];
-            if (c == 0) c = ' ';
-            char buf[2] = {c, 0};
-            int x = xStart + i * 10;  // 8px char width + 2px spacing
-            NT_drawText(x, yName, buf, 15);
-            if (i == a->nameEditPos) {
-                NT_drawShapeI(kNT_line, x, yName + 3, x + 7, yName + 3, 15);
-            }
-        }
-        
-        // "Cat" label
-        NT_drawText(8, yCat, "Cat", 15);
-        
-        // Category field (chars 6-10, displayed as positions 0-4)
-        for (int i = 6; i < 11; i++) {
-            char c = name[i];
-            if (c == 0) c = ' ';
-            char buf[2] = {c, 0};
-            int x = xStart + (i - 6) * 10;
-            NT_drawText(x, yCat, buf, 15);
-            if (i == a->nameEditPos) {
-                NT_drawShapeI(kNT_line, x, yCat + 3, x + 7, yCat + 3, 15);
-            }
-        }
-        
-        // Right side: Per-fader settings
-        int rightX = 140;
         VFader::FaderNoteSettings& settings = a->faderNoteSettings[a->nameEditFader];
         
-        // Display Mode
-        NT_drawText(rightX, 28, "Display", 15, kNT_textLeft, kNT_textTiny);
-        const char* displayStr = (settings.displayMode == 0) ? "Number" : "Note";
-        NT_drawText(rightX, 36, displayStr, 15);
+        if (a->nameEditPage == 0) {
+            // PAGE 1: NAME/CATEGORY EDITING
+            
+            // Title centered
+            NT_drawText(128, 8, "EDIT NAME", 15, kNT_textCentre);
+            
+            // Show fader number on right
+            char faderNum[16];
+            snprintf(faderNum, sizeof(faderNum), "Fader %d", a->nameEditFader + 1);
+            NT_drawText(250, 8, faderNum, 15, kNT_textRight);
+            
+            char* name = a->faderNames[a->nameEditFader];
+            int yName = 28;
+            int yCat = 42;
+            int xStart = 40;
+            
+            // "Name" label
+            NT_drawText(8, yName, "Name", 15);
+            
+            // Name field (chars 0-5)
+            for (int i = 0; i < 6; i++) {
+                char c = name[i];
+                if (c == 0) c = ' ';
+                char buf[2] = {c, 0};
+                int x = xStart + i * 10;  // 8px char width + 2px spacing
+                NT_drawText(x, yName, buf, 15);
+                if (i == a->nameEditPos) {
+                    NT_drawShapeI(kNT_line, x, yName + 3, x + 7, yName + 3, 15);
+                }
+            }
+            
+            // "Cat" label
+            NT_drawText(8, yCat, "Cat", 15);
+            
+            // Category field (chars 6-10, displayed as positions 0-4)
+            for (int i = 6; i < 11; i++) {
+                char c = name[i];
+                if (c == 0) c = ' ';
+                char buf[2] = {c, 0};
+                int x = xStart + (i - 6) * 10;
+                NT_drawText(x, yCat, buf, 15);
+                if (i == a->nameEditPos) {
+                    NT_drawShapeI(kNT_line, x, yCat + 3, x + 7, yCat + 3, 15);
+                }
+            }
+        } else if (a->nameEditPage == 1) {
+            // PAGE 2: FADER FUNCTION EDITING
+            
+            // Title centered
+            NT_drawText(128, 8, "FADER FUNCTION EDIT", 15, kNT_textCentre);
+            
+            // Left side: Note parameters
+            int xLabel = 8;
+            int xValue = 76;  // Moved 6px to the right (was 70)
+            int yPos = 20;
+            int yStep = 10;
+            
+            // Display Mode
+            NT_drawText(xLabel, yPos, "Display", (a->nameEditSettingPos == 0) ? 15 : 7);
+            const char* displayStr = (settings.displayMode == 0) ? "Number" : "Note";
+            NT_drawText(xValue, yPos, displayStr, (a->nameEditSettingPos == 0) ? 15 : 10);
+            yPos += yStep;
+            
+            // Sharp/Flat
+            NT_drawText(xLabel, yPos, "Accidental", (a->nameEditSettingPos == 1) ? 15 : 7);
+            const char* sharpFlatStr = (settings.sharpFlat == 0) ? "Sharp" : "Flat";
+            NT_drawText(xValue, yPos, sharpFlatStr, (a->nameEditSettingPos == 1) ? 15 : 10);
+            yPos += yStep;
+            
+            // Top Note
+            NT_drawText(xLabel, yPos, "Top Note", (a->nameEditSettingPos == 2) ? 15 : 7);
+            char topNoteStr[8];
+            a->getMidiNoteName(settings.topMidi, settings.sharpFlat, topNoteStr, sizeof(topNoteStr));
+            NT_drawText(xValue, yPos, topNoteStr, (a->nameEditSettingPos == 2) ? 15 : 10);
+            yPos += yStep;
+            
+            // Bottom Note
+            NT_drawText(xLabel, yPos, "Bottom Note", (a->nameEditSettingPos == 3) ? 15 : 7);
+            char botNoteStr[8];
+            a->getMidiNoteName(settings.bottomMidi, settings.sharpFlat, botNoteStr, sizeof(botNoteStr));
+            NT_drawText(xValue, yPos, botNoteStr, (a->nameEditSettingPos == 3) ? 15 : 10);
+            
+            // Right side: Note Mask (3 rows of 4 notes)
+            static const char* noteNamesSharp[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+            static const char* noteNamesFlat[] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
+            const char** noteNames = (settings.sharpFlat == 0) ? noteNamesSharp : noteNamesFlat;
+            
+            NT_drawText(140, 20, "Mask:", 15);
+            
+            int xMaskStart = 140;
+            int yMaskStart = 30;
+            int xSpacing = 18;
+            int ySpacing = 10;
+            
+            // 3 rows of 4 notes each
+            for (int row = 0; row < 3; row++) {
+                for (int col = 0; col < 4; col++) {
+                    int noteIdx = row * 4 + col;
+                    int x = xMaskStart + col * xSpacing;
+                    int y = yMaskStart + row * ySpacing;
+                    
+                    bool isActive = (settings.chromaticScale[noteIdx] == 1);
+                    bool isSelected = (a->nameEditSettingPos == 4 + noteIdx);  // Mask starts at position 4
+                    
+                    if (isActive) {
+                        NT_drawText(x, y, noteNames[noteIdx], isSelected ? 15 : 10);
+                    } else {
+                        NT_drawText(x, y, "-", isSelected ? 15 : 7);
+                    }
+                }
+            }
+        }
         
-        // Instructions
-        NT_drawText(128, 61, "Press R to exit", 7, kNT_textRight, kNT_textTiny);
+        // Page indicator and exit on right side, close together
+        const char* pageStr = (a->nameEditPage == 0) ? "Page 1/2" : "Page 2/2";
+        NT_drawText(250, 61, pageStr, 7, kNT_textRight, kNT_textTiny);
+        NT_drawText(250, 55, "R:Exit", 7, kNT_textRight, kNT_textTiny);
         
         return true;
     }
@@ -635,6 +728,7 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     int currentFader = (a->sel - 1);  // 0-31 index
     
     // Detect button press (not hold) - only trigger on rising edge
+    bool leftButtonPressed = (data.controls & kNT_encoderButtonL) && !(a->lastButtonState & kNT_encoderButtonL);
     bool rightButtonPressed = (data.controls & kNT_encoderButtonR) && !(a->lastButtonState & kNT_encoderButtonR);
     a->lastButtonState = data.controls;
     
@@ -645,51 +739,155 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     a->debugSnapshot.nameEditCursorPos = a->nameEditPos;
     a->debugSnapshot.currentPage = a->page;
     a->debugSnapshot.currentSel = a->sel;
+    a->debugSnapshot.nameEditPageNum = a->nameEditPage;
+    a->debugSnapshot.nameEditSettingIdx = a->nameEditSettingPos;
     
     // NAME EDIT MODE
     if (a->nameEditMode) {
-        // Encoder left: move character position
-        if (data.encoders[0] != 0) {
-            a->debugSnapshot.encoderLCount++;
-            int newPos = (int)a->nameEditPos + data.encoders[0];
-            if (newPos < 0) newPos = 0;
-            if (newPos > 10) newPos = 10;  // 0-10 for 11 characters (6 name + 5 category)
-            a->nameEditPos = (uint8_t)newPos;
-        }
+        // Right encoder: navigate between pages or edit values
+        // Limit encoder delta to prevent freeze
+        int encoderDelta = data.encoders[1];
+        if (encoderDelta > 1) encoderDelta = 1;
+        if (encoderDelta < -1) encoderDelta = -1;
         
-        // Encoder right: change character at current position
-        if (data.encoders[1] != 0) {
-            a->debugSnapshot.encoderRCount++;
-            char* name = a->faderNames[a->nameEditFader];
-            char c = name[a->nameEditPos];
-            
-            // Character set: A-Z (65-90), 0-9 (48-57), space (32)
-            // Array: space, 0-9, A-Z (37 total characters)
-            const char charset[] = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-            const int charsetLen = 37;
-            
-            // Find current position in charset
-            int currentIdx = 0;
-            if (c == 0) c = 'A';  // Initialize if null
-            for (int i = 0; i < charsetLen; i++) {
-                if (charset[i] == c) {
-                    currentIdx = i;
-                    break;
+        if (encoderDelta != 0) {
+            a->debugSnapshot.uiFreezeCounter++;
+            if (a->nameEditPage == 0) {
+                // PAGE 1: Editing name/category characters
+                a->debugSnapshot.encoderRCount++;
+                char* name = a->faderNames[a->nameEditFader];
+                char c = name[a->nameEditPos];
+                
+                // Character set: A-Z (65-90), 0-9 (48-57), space (32)
+                // Array: space, 0-9, A-Z (37 total characters)
+                const char charset[] = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                const int charsetLen = 37;
+                
+                // Find current position in charset
+                int currentIdx = 0;
+                if (c == 0) c = 'A';  // Initialize if null
+                for (int i = 0; i < charsetLen; i++) {
+                    if (charset[i] == c) {
+                        currentIdx = i;
+                        break;
+                    }
+                }
+                
+                // Move to next/previous character
+                currentIdx += encoderDelta;
+                if (currentIdx < 0) currentIdx = charsetLen - 1;
+                if (currentIdx >= charsetLen) currentIdx = 0;
+                
+                name[a->nameEditPos] = charset[currentIdx];
+            } else if (a->nameEditPage == 1) {
+                // PAGE 2: Editing settings or mask
+                VFader::FaderNoteSettings& settings = a->faderNoteSettings[a->nameEditFader];
+                bool settingsChanged = false;
+                
+                if (a->nameEditSettingPos < 4) {
+                    // Editing settings (0-3)
+                    switch (a->nameEditSettingPos) {
+                        case 0: // Display Mode (Number/Note)
+                            settings.displayMode = (settings.displayMode == 0) ? 1 : 0;
+                            settingsChanged = true;
+                            break;
+                        case 1: // Sharp/Flat
+                            settings.sharpFlat = (settings.sharpFlat == 0) ? 1 : 0;
+                            settingsChanged = true;
+                            break;
+                        case 2: // Top MIDI Note (0-127)
+                            {
+                                int newMidi = (int)settings.topMidi + encoderDelta;
+                                if (newMidi < 0) newMidi = 0;
+                                if (newMidi > 127) newMidi = 127;
+                                settings.topMidi = (uint8_t)newMidi;
+                                
+                                // Validate: top can't be lower than bottom
+                                if (settings.topMidi < settings.bottomMidi) {
+                                    settings.bottomMidi = settings.topMidi;
+                                }
+                                settingsChanged = true;
+                            }
+                            break;
+                        case 3: // Bottom MIDI Note (0-127)
+                            {
+                                int newMidi = (int)settings.bottomMidi + encoderDelta;
+                                if (newMidi < 0) newMidi = 0;
+                                if (newMidi > 127) newMidi = 127;
+                                settings.bottomMidi = (uint8_t)newMidi;
+                                
+                                // Validate: bottom can't be higher than top
+                                if (settings.bottomMidi > settings.topMidi) {
+                                    settings.topMidi = settings.bottomMidi;
+                                }
+                                settingsChanged = true;
+                            }
+                            break;
+                    }
+                } else {
+                    // Editing mask (4-15 maps to notes 0-11)
+                    int maskIdx = a->nameEditSettingPos - 4;
+                    if (maskIdx >= 0 && maskIdx < 12) {
+                        // Check if we're trying to turn off the last active note
+                        if (settings.chromaticScale[maskIdx] == 1) {
+                            // Count active notes
+                            int activeCount = 0;
+                            for (int i = 0; i < 12; i++) {
+                                if (settings.chromaticScale[i] == 1) activeCount++;
+                            }
+                            // Only allow turning off if at least 2 notes are active
+                            if (activeCount > 1) {
+                                settings.chromaticScale[maskIdx] = 0;
+                                settingsChanged = true;
+                            }
+                        } else {
+                            // Turning on is always allowed
+                            settings.chromaticScale[maskIdx] = 1;
+                            settingsChanged = true;
+                        }
+                    }
+                }
+                
+                if (settingsChanged) {
+                    a->namesModified = true;  // Mark settings as modified
                 }
             }
-            
-            // Move to next/previous character
-            currentIdx += data.encoders[1];
-            if (currentIdx < 0) currentIdx = charsetLen - 1;
-            if (currentIdx >= charsetLen) currentIdx = 0;
-            
-            name[a->nameEditPos] = charset[currentIdx];
+        }
+        
+        // Left encoder: move cursor position (page 1) or setting selection (page 2)
+        if (data.encoders[0] != 0) {
+            a->debugSnapshot.encoderLCount++;
+            if (a->nameEditPage == 0) {
+                // PAGE 1: Move character position
+                int newPos = (int)a->nameEditPos + data.encoders[0];
+                if (newPos < 0) newPos = 0;
+                if (newPos > 10) newPos = 10;  // 0-10 for 11 characters (6 name + 5 category)
+                a->nameEditPos = (uint8_t)newPos;
+            } else {
+                // PAGE 2: Move between settings (4 settings + 12 mask notes = 16 total)
+                int newSettingPos = (int)a->nameEditSettingPos + data.encoders[0];
+                if (newSettingPos < 0) newSettingPos = 0;
+                if (newSettingPos > 15) newSettingPos = 15;  // 0-3: settings, 4-15: mask notes
+                a->nameEditSettingPos = (uint8_t)newSettingPos;
+            }
+        }
+        
+        // Top right pot (pot R): switch between edit pages (2 pages)
+        // Pot value: < 0.5 = Page 1, >= 0.5 = Page 2
+        if (data.controls & kNT_potR) {
+            float potValue = data.pots[2];
+            // Check if pot moved significantly (to avoid jitter)
+            if (a->lastPotR < 0.0f || fabsf(potValue - a->lastPotR) > 0.1f) {
+                a->nameEditPage = (potValue < 0.5f) ? 0 : 1;
+                a->lastPotR = potValue;
+            }
         }
         
         // Right encoder button: exit name edit mode (only on press, not hold)
         if (rightButtonPressed) {
             a->nameEditMode = false;
             a->namesModified = true;  // Mark that names have been changed
+            a->lastPotR = -1.0f;  // Reset pot tracking
         }
         
         return;  // Don't process normal UI in name edit mode
@@ -702,6 +900,9 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         a->nameEditMode = true;
         a->nameEditFader = currentFader;
         a->nameEditPos = 0;
+        a->nameEditPage = 0;  // Start on page 1 (name/category)
+        a->nameEditSettingPos = 0;
+        a->lastPotR = -1.0f;  // Reset pot tracking for page switching
         return;
     }
     
@@ -1025,6 +1226,15 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
             stream.addMemberName("currentSel");
             stream.addNumber(a->debugSnapshot.currentSel);
             
+            stream.addMemberName("nameEditPageNum");
+            stream.addNumber(a->debugSnapshot.nameEditPageNum);
+            
+            stream.addMemberName("nameEditSettingIdx");
+            stream.addNumber(a->debugSnapshot.nameEditSettingIdx);
+            
+            stream.addMemberName("uiFreezeCounter");
+            stream.addNumber(a->debugSnapshot.uiFreezeCounter);
+            
             // Pickup indicator debug - detailed state for all 32 faders
             stream.addMemberName("pickupDebug");
             stream.openArray();
@@ -1128,14 +1338,10 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
         stream.addNumber(a->faderNoteSettings[i].displayMode);
         stream.addMemberName("sharpFlat");
         stream.addNumber(a->faderNoteSettings[i].sharpFlat);
-        stream.addMemberName("bottomNote");
-        stream.addNumber(a->faderNoteSettings[i].bottomNote);
-        stream.addMemberName("bottomOctave");
-        stream.addNumber(a->faderNoteSettings[i].bottomOctave);
-        stream.addMemberName("topNote");
-        stream.addNumber(a->faderNoteSettings[i].topNote);
-        stream.addMemberName("topOctave");
-        stream.addNumber(a->faderNoteSettings[i].topOctave);
+        stream.addMemberName("bottomMidi");
+        stream.addNumber(a->faderNoteSettings[i].bottomMidi);
+        stream.addMemberName("topMidi");
+        stream.addNumber(a->faderNoteSettings[i].topMidi);
         stream.addMemberName("chromaticScale");
         stream.openArray();
         for (int j = 0; j < 12; j++) {
@@ -1206,25 +1412,28 @@ static bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
                         if (!parse.number(val)) return false;
                         a->faderNoteSettings[j].sharpFlat = (uint8_t)val;
                     }
-                    else if (parse.matchName("bottomNote")) {
+                    else if (parse.matchName("bottomMidi")) {
                         float val;
                         if (!parse.number(val)) return false;
-                        a->faderNoteSettings[j].bottomNote = (uint8_t)val;
+                        int midi = (int)val;
+                        if (midi < 0) midi = 0;
+                        if (midi > 127) midi = 127;
+                        a->faderNoteSettings[j].bottomMidi = (uint8_t)midi;
                     }
-                    else if (parse.matchName("bottomOctave")) {
+                    else if (parse.matchName("topMidi")) {
                         float val;
                         if (!parse.number(val)) return false;
-                        a->faderNoteSettings[j].bottomOctave = (uint8_t)val;
+                        int midi = (int)val;
+                        if (midi < 0) midi = 0;
+                        if (midi > 127) midi = 127;
+                        a->faderNoteSettings[j].topMidi = (uint8_t)midi;
                     }
-                    else if (parse.matchName("topNote")) {
+                    // Backward compatibility with old format
+                    else if (parse.matchName("bottomNote") || parse.matchName("bottomOctave") || 
+                             parse.matchName("topNote") || parse.matchName("topOctave")) {
                         float val;
                         if (!parse.number(val)) return false;
-                        a->faderNoteSettings[j].topNote = (uint8_t)val;
-                    }
-                    else if (parse.matchName("topOctave")) {
-                        float val;
-                        if (!parse.number(val)) return false;
-                        a->faderNoteSettings[j].topOctave = (uint8_t)val;
+                        // Ignore old format - will use defaults
                     }
                     else if (parse.matchName("chromaticScale")) {
                         int scaleSize;
