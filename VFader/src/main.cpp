@@ -55,11 +55,40 @@ struct VFader : public _NT_algorithm {
     uint8_t nameEditFader = 0;       // Which fader's name is being edited (0-31)
     uint16_t lastButtonState = 0;    // Track last button state for debouncing
     bool namesModified = false;      // Whether names have been edited since last preset save
+    
+    // Per-fader note settings
+    struct FaderNoteSettings {
+        uint8_t displayMode;         // 0=Number (0-127), 1=Note
+        uint8_t sharpFlat;           // 0=Sharp, 1=Flat
+        uint8_t bottomNote;          // 0-11 (C=0, C#=1, D=2, etc.)
+        uint8_t bottomOctave;        // 0-10
+        uint8_t topNote;             // 0-11
+        uint8_t topOctave;           // 0-10
+        uint8_t chromaticScale[12];  // 0=off, 1=on for each note (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
+    };
+    FaderNoteSettings faderNoteSettings[32];  // Settings for all 32 faders
+    
+    // Initialize note settings with defaults
+    void initializeNoteSettings() {
+        for (int i = 0; i < 32; i++) {
+            faderNoteSettings[i].displayMode = 0;     // Default to Number mode
+            faderNoteSettings[i].sharpFlat = 0;       // Default to Sharps
+            faderNoteSettings[i].bottomNote = 0;      // C
+            faderNoteSettings[i].bottomOctave = 3;    // C3 (MIDI 60 = middle C = C4, so C3 = 48)
+            faderNoteSettings[i].topNote = 0;         // C
+            faderNoteSettings[i].topOctave = 5;       // C5 (MIDI 72)
+            // Initialize chromatic scale - all notes ON by default
+            for (int j = 0; j < 12; j++) {
+                faderNoteSettings[i].chromaticScale[j] = 1;
+            }
+        }
+    }
 
-    // Pot throttling
+    // Pot throttling and deadband
     float potLast[3] = { -1.0f, -1.0f, -1.0f };
     uint32_t potLastStep[3] = { 0, 0, 0 };
     uint8_t minStepsBetweenPotWrites = 2;
+    float potDeadband = 0.015f;  // Minimum change required (1.5%) to update fader
     uint32_t stepCounter = 0;
     
     // DEBUG tracking - captures state for JSON export
@@ -262,6 +291,9 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
         snprintf(alg->faderNames[i], 13, "FADER%02d", i + 1);
     }
     
+    // Initialize note settings for all faders
+    alg->initializeNoteSettings();
+    
     return alg;
 }
 
@@ -429,6 +461,15 @@ bool draw(_NT_algorithm* self) {
                 NT_drawShapeI(kNT_line, x, yCat + 3, x + 7, yCat + 3, 15);
             }
         }
+        
+        // Right side: Per-fader settings
+        int rightX = 140;
+        VFader::FaderNoteSettings& settings = a->faderNoteSettings[a->nameEditFader];
+        
+        // Display Mode
+        NT_drawText(rightX, 28, "Display", 15, kNT_textLeft, kNT_textTiny);
+        const char* displayStr = (settings.displayMode == 0) ? "Number" : "Note";
+        NT_drawText(rightX, 36, displayStr, 15);
         
         // Instructions
         NT_drawText(128, 61, "Press R to exit", 7, kNT_textRight, kNT_textTiny);
@@ -699,25 +740,40 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     
     // Left pot controls fader to the LEFT of selected (or first on page if selected is first)
     if (data.controls & kNT_potL) {
-        int targetCol = (colInPage > 0) ? (colInPage - 1) : 0;
-        int faderParam = targetCol;  // FADER 1-8 maps to 0-7
-        int16_t value = (int16_t)(data.pots[0] * 1000.0f + 0.5f);  // Scale to 0-1000
-        NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+        float potValue = data.pots[0];
+        // Apply deadband - only update if change is significant
+        if (a->potLast[0] < 0.0f || fabsf(potValue - a->potLast[0]) > a->potDeadband) {
+            int targetCol = (colInPage > 0) ? (colInPage - 1) : 0;
+            int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+            int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
+            NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+            a->potLast[0] = potValue;
+        }
     }
     
     // Center pot always controls the SELECTED fader's column
     if (data.controls & kNT_potC) {
-        int faderParam = colInPage;  // FADER 1-8 maps to 0-7
-        int16_t value = (int16_t)(data.pots[1] * 1000.0f + 0.5f);  // Scale to 0-1000
-        NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+        float potValue = data.pots[1];
+        // Apply deadband - only update if change is significant
+        if (a->potLast[1] < 0.0f || fabsf(potValue - a->potLast[1]) > a->potDeadband) {
+            int faderParam = colInPage;  // FADER 1-8 maps to 0-7
+            int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
+            NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+            a->potLast[1] = potValue;
+        }
     }
     
     // Right pot controls fader to the RIGHT of selected (or last on page if selected is last)
     if (data.controls & kNT_potR) {
-        int targetCol = (colInPage < 7) ? (colInPage + 1) : 7;
-        int faderParam = targetCol;  // FADER 1-8 maps to 0-7
-        int16_t value = (int16_t)(data.pots[2] * 1000.0f + 0.5f);  // Scale to 0-1000
-        NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+        float potValue = data.pots[2];
+        // Apply deadband - only update if change is significant
+        if (a->potLast[2] < 0.0f || fabsf(potValue - a->potLast[2]) > a->potDeadband) {
+            int targetCol = (colInPage < 7) ? (colInPage + 1) : 7;
+            int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+            int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
+            NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+            a->potLast[2] = potValue;
+        }
     }
 }
 
@@ -1062,6 +1118,33 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
         stream.addString(a->faderNames[i]);
     }
     stream.closeArray();
+    
+    // Write fader note settings
+    stream.addMemberName("noteSettings");
+    stream.openArray();
+    for (int i = 0; i < 32; i++) {
+        stream.openObject();
+        stream.addMemberName("displayMode");
+        stream.addNumber(a->faderNoteSettings[i].displayMode);
+        stream.addMemberName("sharpFlat");
+        stream.addNumber(a->faderNoteSettings[i].sharpFlat);
+        stream.addMemberName("bottomNote");
+        stream.addNumber(a->faderNoteSettings[i].bottomNote);
+        stream.addMemberName("bottomOctave");
+        stream.addNumber(a->faderNoteSettings[i].bottomOctave);
+        stream.addMemberName("topNote");
+        stream.addNumber(a->faderNoteSettings[i].topNote);
+        stream.addMemberName("topOctave");
+        stream.addNumber(a->faderNoteSettings[i].topOctave);
+        stream.addMemberName("chromaticScale");
+        stream.openArray();
+        for (int j = 0; j < 12; j++) {
+            stream.addNumber(a->faderNoteSettings[i].chromaticScale[j]);
+        }
+        stream.closeArray();
+        stream.closeObject();
+    }
+    stream.closeArray();
 }
 
 // Deserialization - restore fader names and values
@@ -1100,6 +1183,61 @@ static bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
                 if (str != NULL) {
                     strncpy(a->faderNames[j], str, 12);
                     a->faderNames[j][12] = 0;  // Ensure null termination (12 chars max)
+                }
+            }
+        }
+        // Load note settings
+        else if (parse.matchName("noteSettings")) {
+            int arraySize;
+            if (!parse.numberOfArrayElements(arraySize))
+                return false;
+            for (int j = 0; j < arraySize && j < 32; j++) {
+                int numFields;
+                if (!parse.numberOfObjectMembers(numFields))
+                    return false;
+                for (int k = 0; k < numFields; k++) {
+                    if (parse.matchName("displayMode")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        a->faderNoteSettings[j].displayMode = (uint8_t)val;
+                    }
+                    else if (parse.matchName("sharpFlat")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        a->faderNoteSettings[j].sharpFlat = (uint8_t)val;
+                    }
+                    else if (parse.matchName("bottomNote")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        a->faderNoteSettings[j].bottomNote = (uint8_t)val;
+                    }
+                    else if (parse.matchName("bottomOctave")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        a->faderNoteSettings[j].bottomOctave = (uint8_t)val;
+                    }
+                    else if (parse.matchName("topNote")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        a->faderNoteSettings[j].topNote = (uint8_t)val;
+                    }
+                    else if (parse.matchName("topOctave")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        a->faderNoteSettings[j].topOctave = (uint8_t)val;
+                    }
+                    else if (parse.matchName("chromaticScale")) {
+                        int scaleSize;
+                        if (!parse.numberOfArrayElements(scaleSize)) return false;
+                        for (int m = 0; m < scaleSize && m < 12; m++) {
+                            float val;
+                            if (!parse.number(val)) return false;
+                            a->faderNoteSettings[j].chromaticScale[m] = (uint8_t)val;
+                        }
+                    }
+                    else {
+                        if (!parse.skipMember()) return false;
+                    }
                 }
             }
         }
