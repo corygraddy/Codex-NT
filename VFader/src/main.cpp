@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 25  // 32 faders, 4 pages, MIDI-only, soft takeover
+#define VFADER_BUILD 26  // Added gang fader feature
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
@@ -68,9 +68,16 @@ struct VFader : public _NT_algorithm {
         uint8_t bottomValue;         // 0-100 (for Number mode)
         uint8_t topValue;            // 0-100 (for Number mode)
         uint8_t chromaticScale[12];  // 0=off, 1=on for each note (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
-        uint8_t controlAll;          // 0=Off, 1=On - if enabled, this fader controls all others
+        uint8_t controlAllCount;     // 0-31: number of faders to the right to control (0=disabled)
+        uint8_t controlAllMode;      // 0=Absolute (offset), 1=Relative (proportional)
     };
     FaderNoteSettings faderNoteSettings[32];  // Settings for all 32 faders
+    
+    // Gang fader reference values - the "50%" position for each fader
+    float faderReferenceValues[32] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+                                       0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+                                       0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+                                       0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
     
     // Initialize note settings with defaults
     void initializeNoteSettings() {
@@ -79,6 +86,8 @@ struct VFader : public _NT_algorithm {
             faderNoteSettings[i].sharpFlat = 0;       // Default to Sharps
             faderNoteSettings[i].bottomMidi = 36;     // C1 (MIDI 36)
             faderNoteSettings[i].topMidi = 96;        // C6 (MIDI 96)
+            faderNoteSettings[i].controlAllCount = 0; // Gang fader disabled by default
+            faderNoteSettings[i].controlAllMode = 0;  // Default to Absolute mode
             faderNoteSettings[i].bottomValue = 0;     // 0% for Number mode
             faderNoteSettings[i].topValue = 100;      // 100% for Number mode
             // Initialize chromatic scale - all notes ON by default
@@ -431,6 +440,49 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         a->debugSnapshot.hasControl0 = !a->inPickupMode[0];  // inverted: true = normal, false = pickup
     }
     
+    // Apply gang fader transformations
+    // Process all gang faders and update their child faders
+    for (int i = 0; i < 32; i++) {
+        if (a->faderNoteSettings[i].controlAllCount > 0) {
+            float gangValue = a->internalFaders[i];  // 0.0 to 1.0
+            int childCount = a->faderNoteSettings[i].controlAllCount;
+            uint8_t mode = a->faderNoteSettings[i].controlAllMode;
+            
+            // Process each child fader
+            for (int j = 1; j <= childCount && (i + j) < 32; j++) {
+                int childIdx = i + j;
+                
+                // Skip if child is also a gang fader
+                if (a->faderNoteSettings[childIdx].controlAllCount > 0) continue;
+                
+                float refValue = a->faderReferenceValues[childIdx];
+                float newValue;
+                
+                if (mode == 0) {
+                    // Absolute mode: maintains fixed offsets
+                    // At gang=0.5, child=refValue
+                    // At gang=1.0, child=refValue+0.5
+                    // At gang=0.0, child=refValue-0.5
+                    float offset = gangValue - 0.5f;  // -0.5 to +0.5
+                    newValue = refValue + offset;
+                } else {
+                    // Relative mode: maintains proportions
+                    // At gang=0.5, child=refValue
+                    // Gang acts as multiplier around 0.5 center point
+                    float multiplier = gangValue / 0.5f;  // 0.0 to 2.0
+                    newValue = refValue * multiplier;
+                }
+                
+                // Clamp to valid range
+                if (newValue < 0.0f) newValue = 0.0f;
+                if (newValue > 1.0f) newValue = 1.0f;
+                
+                // Update child fader
+                a->internalFaders[childIdx] = newValue;
+            }
+        }
+    }
+    
     // Get MIDI mode (0=7-bit, 1=14-bit)
     int midiMode = (int)(self->v[kParamMidiMode] + 0.5f);
     
@@ -694,10 +746,44 @@ bool draw(_NT_algorithm* self) {
                     }
                 }
             }
+        } else if (a->nameEditPage == 2) {
+            // PAGE 3: GANG FADER SETTINGS
+            
+            // Title centered
+            NT_drawText(128, 8, "GANG FADER", 15, kNT_textCentre);
+            
+            int xLabel = 8;
+            int xValue = 79;
+            int yPos = 25;
+            int yStep = 12;
+            
+            // Control Count (0-31, with dynamic max)
+            NT_drawText(xLabel, yPos, "Control Count", (a->nameEditSettingPos == 0) ? 15 : 5);
+            char countStr[8];
+            if (settings.controlAllCount == 0) {
+                snprintf(countStr, sizeof(countStr), "Off");
+            } else {
+                snprintf(countStr, sizeof(countStr), "%d", settings.controlAllCount);
+            }
+            NT_drawText(xValue, yPos, countStr, (a->nameEditSettingPos == 0) ? 15 : 5);
+            yPos += yStep;
+            
+            // Control Mode (Absolute/Relative)
+            NT_drawText(xLabel, yPos, "Control Mode", (a->nameEditSettingPos == 1) ? 15 : 5);
+            const char* modeStr = (settings.controlAllMode == 0) ? "Absolute" : "Relative";
+            NT_drawText(xValue, yPos, modeStr, (a->nameEditSettingPos == 1) ? 15 : 5);
+            yPos += yStep;
+            
+            // Help text
+            NT_drawText(8, yPos + 5, "Controls faders to the right", 5, kNT_textLeft, kNT_textTiny);
+            NT_drawText(8, yPos + 12, "At 50% = reference values", 5, kNT_textLeft, kNT_textTiny);
         }
         
         // Page indicator and exit on right side, close together
-        const char* pageStr = (a->nameEditPage == 0) ? "Page 1/2" : "Page 2/2";
+        const char* pageStr;
+        if (a->nameEditPage == 0) pageStr = "Page 1/3";
+        else if (a->nameEditPage == 1) pageStr = "Page 2/3";
+        else pageStr = "Page 3/3";
         NT_drawText(250, 61, pageStr, 5, kNT_textRight, kNT_textTiny);
         NT_drawText(250, 55, "R:Exit", 5, kNT_textRight, kNT_textTiny);
         
@@ -1043,10 +1129,48 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                     // Invalidate MIDI cache for this fader to force re-send with new settings
                     a->lastMidiValues[a->nameEditFader] = -1.0f;
                 }
+            } else if (a->nameEditPage == 2) {
+                // PAGE 3: Gang fader settings
+                VFader::FaderNoteSettings& settings = a->faderNoteSettings[a->nameEditFader];
+                bool settingsChanged = false;
+                
+                switch (a->nameEditSettingPos) {
+                    case 0: // Control Count (0-31)
+                        {
+                            int newCount = (int)settings.controlAllCount + encoderDelta;
+                            if (newCount < 0) newCount = 0;
+                            if (newCount > 31) newCount = 31;
+                            
+                            // Calculate max based on fader position and next gang fader
+                            int faderIdx = a->nameEditFader;  // 0-31
+                            int maxPossible = 31 - faderIdx;  // Can't control beyond fader 31
+                            
+                            // Find next gang fader to the right (if any)
+                            for (int i = faderIdx + 1; i < 32; i++) {
+                                if (a->faderNoteSettings[i].controlAllCount > 0) {
+                                    maxPossible = i - faderIdx - 1;
+                                    break;
+                                }
+                            }
+                            
+                            if (newCount > maxPossible) newCount = maxPossible;
+                            settings.controlAllCount = (uint8_t)newCount;
+                            settingsChanged = true;
+                        }
+                        break;
+                    case 1: // Control Mode (Absolute/Relative)
+                        settings.controlAllMode = (settings.controlAllMode == 0) ? 1 : 0;
+                        settingsChanged = true;
+                        break;
+                }
+                
+                if (settingsChanged) {
+                    a->namesModified = true;
+                }
             }
         }
         
-        // Left encoder: move cursor position (page 1) or setting selection (page 2)
+        // Left encoder: move cursor position (page 1) or setting selection (page 2/3)
         if (data.encoders[0] != 0) {
             a->debugSnapshot.encoderLCount++;
             if (a->nameEditPage == 0) {
@@ -1055,22 +1179,34 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                 if (newPos < 0) newPos = 0;
                 if (newPos > 10) newPos = 10;  // 0-10 for 11 characters (6 name + 5 category)
                 a->nameEditPos = (uint8_t)newPos;
-            } else {
+            } else if (a->nameEditPage == 1) {
                 // PAGE 2: Move between settings (4 settings + 12 mask notes = 16 total)
                 int newSettingPos = (int)a->nameEditSettingPos + data.encoders[0];
                 if (newSettingPos < 0) newSettingPos = 0;
                 if (newSettingPos > 15) newSettingPos = 15;  // 0-3: settings, 4-15: mask notes
                 a->nameEditSettingPos = (uint8_t)newSettingPos;
+            } else if (a->nameEditPage == 2) {
+                // PAGE 3: Move between gang fader settings (2 settings)
+                int newSettingPos = (int)a->nameEditSettingPos + data.encoders[0];
+                if (newSettingPos < 0) newSettingPos = 0;
+                if (newSettingPos > 1) newSettingPos = 1;  // 0-1: Control Count, Control Mode
+                a->nameEditSettingPos = (uint8_t)newSettingPos;
             }
         }
         
-        // Top right pot (pot R): switch between edit pages (2 pages)
-        // Pot value: < 0.5 = Page 1, >= 0.5 = Page 2
+        // Top right pot (pot R): switch between edit pages (3 pages)
+        // Pot value: < 0.33 = Page 1, 0.33-0.66 = Page 2, >= 0.66 = Page 3
         if (data.controls & kNT_potR) {
             float potValue = data.pots[2];
             // Check if pot moved significantly (to avoid jitter)
             if (a->lastPotR < 0.0f || fabsf(potValue - a->lastPotR) > 0.1f) {
-                a->nameEditPage = (potValue < 0.5f) ? 0 : 1;
+                if (potValue < 0.33f) {
+                    a->nameEditPage = 0;
+                } else if (potValue < 0.66f) {
+                    a->nameEditPage = 1;
+                } else {
+                    a->nameEditPage = 2;
+                }
                 a->lastPotR = potValue;
             }
         }
@@ -1316,6 +1452,25 @@ void parameterChanged(_NT_algorithm* self, int p) {
         
         // Update physical position tracking
         a->physicalFaderPos[internalIdx] = v;
+        
+        // Update reference value for gang fader system
+        // If this fader is a child of a gang fader, update its reference
+        bool isChild = false;
+        for (int g = 0; g < internalIdx; g++) {
+            if (a->faderNoteSettings[g].controlAllCount > 0) {
+                int childStart = g + 1;
+                int childEnd = g + a->faderNoteSettings[g].controlAllCount;
+                if (internalIdx >= childStart && internalIdx <= childEnd) {
+                    isChild = true;
+                    break;
+                }
+            }
+        }
+        
+        // If this is a child fader and it was manually adjusted, update its reference
+        if (isChild && !a->inPickupMode[internalIdx]) {
+            a->faderReferenceValues[internalIdx] = a->internalFaders[internalIdx];
+        }
         
         // Track debug info for FADER 1 (internalIdx 0 on page 0)
         if (internalIdx == 0) {
@@ -1567,7 +1722,19 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
             stream.addNumber(a->faderNoteSettings[i].chromaticScale[j]);
         }
         stream.closeArray();
+        stream.addMemberName("controlAllCount");
+        stream.addNumber(a->faderNoteSettings[i].controlAllCount);
+        stream.addMemberName("controlAllMode");
+        stream.addNumber(a->faderNoteSettings[i].controlAllMode);
         stream.closeObject();
+    }
+    stream.closeArray();
+    
+    // Save fader reference values
+    stream.addMemberName("faderReferenceValues");
+    stream.openArray();
+    for (int i = 0; i < 32; i++) {
+        stream.addNumber(a->faderReferenceValues[i]);
     }
     stream.closeArray();
 }
@@ -1679,10 +1846,35 @@ static bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
                             a->faderNoteSettings[j].chromaticScale[m] = (uint8_t)val;
                         }
                     }
+                    else if (parse.matchName("controlAllCount")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        int count = (int)val;
+                        if (count < 0) count = 0;
+                        if (count > 31) count = 31;
+                        a->faderNoteSettings[j].controlAllCount = (uint8_t)count;
+                    }
+                    else if (parse.matchName("controlAllMode")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        int mode = (int)val;
+                        if (mode < 0) mode = 0;
+                        if (mode > 1) mode = 1;
+                        a->faderNoteSettings[j].controlAllMode = (uint8_t)mode;
+                    }
                     else {
                         if (!parse.skipMember()) return false;
                     }
                 }
+            }
+        }
+        else if (parse.matchName("faderReferenceValues")) {
+            int refCount;
+            if (!parse.numberOfArrayElements(refCount)) return false;
+            for (int i = 0; i < refCount && i < 32; i++) {
+                float val;
+                if (!parse.number(val)) return false;
+                a->faderReferenceValues[i] = val;
             }
         }
         // Skip other members (debug data, etc.)
