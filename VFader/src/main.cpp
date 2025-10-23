@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 35  // Solid fader fill, CC display, category moved down
+#define VFADER_BUILD 42  // P and F aligned vertically, fader fill now solid (kNT_rectangle)
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
@@ -659,34 +659,10 @@ bool draw(_NT_algorithm* self) {
     
     // NAME EDIT MODE DISPLAY
     if (a->nameEditMode) {
+        // Bounds check nameEditFader to prevent display corruption
+        if (a->nameEditFader > 31) a->nameEditFader = 0;
+        
         VFader::FaderNoteSettings& settings = a->faderNoteSettings[a->nameEditFader];
-        
-        // Build number at top left (all pages)
-        char buildStr[16];
-        snprintf(buildStr, sizeof(buildStr), "v%d", VFADER_BUILD);
-        NT_drawText(8, 8, buildStr, 5, kNT_textLeft);
-        
-        // Show fader info on right: Page, Position, Number (all pages)
-        int faderNumber = a->nameEditFader + 1;  // 1-32
-        int pageNum = ((a->nameEditFader) / 8) + 1;  // 1-4
-        int posNum = ((a->nameEditFader) % 8) + 1;  // 1-8
-        char faderInfo[32];
-        snprintf(faderInfo, sizeof(faderInfo), "P:%d Pos:%d #%d", pageNum, posNum, faderNumber);
-        NT_drawText(250, 8, faderInfo, 15, kNT_textRight);
-        
-        // Show current fader name and category below fader info (all pages)
-        char* currentName = a->faderNames[a->nameEditFader];
-        char nameBuf[7] = {0};
-        char catBuf[6] = {0};
-        for (int i = 0; i < 6; i++) {
-            nameBuf[i] = (currentName[i] == 0) ? ' ' : currentName[i];
-        }
-        for (int i = 0; i < 5; i++) {
-            catBuf[i] = (currentName[6 + i] == 0) ? ' ' : currentName[6 + i];
-        }
-        char displayInfo[32];
-        snprintf(displayInfo, sizeof(displayInfo), "%s %s", nameBuf, catBuf);
-        NT_drawText(250, 16, displayInfo, 10, kNT_textRight, kNT_textTiny);
         
         if (a->nameEditPage == 0) {
             // PAGE 1: NAME/CATEGORY EDITING
@@ -905,8 +881,8 @@ bool draw(_NT_algorithm* self) {
         if (fillHeight > 0) {
             int fillColor = isSel ? 15 : 10;
             fillTop = faderBottom - fillHeight;
-            // Draw solid filled box
-            NT_drawShapeI(kNT_box, faderX + 1, fillTop, faderX + faderWidth - 1, faderBottom - 1, fillColor);
+            // Draw solid filled rectangle
+            NT_drawShapeI(kNT_rectangle, faderX + 1, fillTop, faderX + faderWidth - 1, faderBottom - 1, fillColor);
         }
         
         // Draw tick marks at 25%, 50%, 75% - invert color if covered by fill
@@ -983,6 +959,30 @@ bool draw(_NT_algorithm* self) {
             }
         }
         
+        // Macro/Child indicator on right side of fader
+        if (faderSettings.controlAllCount > 0) {
+            // This is a macro fader - show "M"
+            int indicatorX = faderX + faderWidth + 2;
+            int indicatorY = faderTop + 4;
+            NT_drawText(indicatorX, indicatorY, "M", 10, kNT_textLeft, kNT_textTiny);
+        } else {
+            // Check if this is a child of any macro fader
+            for (int m = 0; m < idx - 1; m++) {
+                if (a->faderNoteSettings[m].controlAllCount > 0) {
+                    int childCount = a->faderNoteSettings[m].controlAllCount;
+                    int firstChild = m + 1;
+                    int lastChild = m + childCount;
+                    if ((idx - 1) >= firstChild && (idx - 1) <= lastChild) {
+                        // This fader is a child - show "C"
+                        int indicatorX = faderX + faderWidth + 2;
+                        int indicatorY = faderTop + 4;
+                        NT_drawText(indicatorX, indicatorY, "C", 10, kNT_textLeft, kNT_textTiny);
+                        break;
+                    }
+                }
+            }
+        }
+        
         // Draw name vertically on LEFT side - 0px spacing between chars (tighter fit for 6 chars)
         const char* nameStr = a->faderNames[idx - 1];
         int nameLen = 0;
@@ -1006,12 +1006,12 @@ bool draw(_NT_algorithm* self) {
     // Right side display area (no box, just content)
     int rightAreaX = 224;
     
-    // Top: Large page number
-    char pageBuf[2];
-    snprintf(pageBuf, sizeof(pageBuf), "%d", a->page);
-    NT_drawText(rightAreaX + 8, 20, pageBuf, 15, kNT_textLeft, kNT_textLarge);
+    // Top: Large page number with "P" prefix - aligned with F below
+    char pageBuf[4];
+    snprintf(pageBuf, sizeof(pageBuf), "P%d", a->page);
+    NT_drawText(rightAreaX, 20, pageBuf, 15, kNT_textLeft, kNT_textLarge);  // Was rightAreaX + 8, now rightAreaX to align with F
     
-    // CC number under page number - calculate CC based on MIDI mode
+    // CC number under page number - large with "F" prefix, moved down 6px
     int selectedFaderIdx = a->sel - 1;  // 0-31
     int midiMode = (int)(self->v[kParamMidiMode] + 0.5f);
     int ccNumber;
@@ -1023,39 +1023,12 @@ bool draw(_NT_algorithm* self) {
         ccNumber = selectedFaderIdx;
     }
     char ccBuf[8];
-    snprintf(ccBuf, sizeof(ccBuf), "CC%02d", ccNumber);
-    NT_drawText(rightAreaX + 4, 32, ccBuf, 15, kNT_textLeft, kNT_textTiny);
+    snprintf(ccBuf, sizeof(ccBuf), "F%d", ccNumber);
+    NT_drawText(rightAreaX, 41, ccBuf, 15, kNT_textLeft, kNT_textLarge);  // Was 38, now 38 + 3 = 41
     
-    // Macro fader debug info - show if selected fader is macro or child
-    VFader::FaderNoteSettings& selectedSettings = a->faderNoteSettings[selectedFaderIdx];
-    if (selectedSettings.controlAllCount > 0) {
-        // This is a macro fader
-        char macroInfo[32];
-        const char* modeStr = (selectedSettings.controlAllMode == 0) ? "ABS" : "REL";
-        snprintf(macroInfo, sizeof(macroInfo), "M:%d %s", selectedSettings.controlAllCount, modeStr);
-        NT_drawText(rightAreaX, 42, macroInfo, 10, kNT_textLeft, kNT_textTiny);
-    } else {
-        // Check if this is a child of any macro fader
-        for (int i = 0; i < selectedFaderIdx; i++) {
-            if (a->faderNoteSettings[i].controlAllCount > 0) {
-                int childCount = a->faderNoteSettings[i].controlAllCount;
-                int firstChild = i + 1;
-                int lastChild = i + childCount;
-                if (selectedFaderIdx >= firstChild && selectedFaderIdx <= lastChild) {
-                    // This fader is a child
-                    char childInfo[32];
-                    float refVal = a->faderReferenceValues[selectedFaderIdx];
-                    snprintf(childInfo, sizeof(childInfo), "Ch %d R:%.2f", i + 1, refVal);
-                    NT_drawText(rightAreaX, 42, childInfo, 10, kNT_textLeft, kNT_textTiny);
-                    break;
-                }
-            }
-        }
-    }
-    
-    // Category (chars 6-10) - moved down 8px from 42 to 50
+    // Category (chars 6-10) - moved left 3px and down 3px from previous position
     const char* selectedName = a->faderNames[selectedFaderIdx];
-    int catY = 50;
+    int catY = 53;  // Was 50, now 50 + 3 = 53
     
     // Display category with normal font
     char catBuf[6] = {0};
@@ -1063,7 +1036,7 @@ bool draw(_NT_algorithm* self) {
         catBuf[i] = selectedName[6 + i];
         if (catBuf[i] == 0) catBuf[i] = ' ';
     }
-    NT_drawText(rightAreaX - 2, catY, catBuf, 15, kNT_textLeft, kNT_textNormal);
+    NT_drawText(rightAreaX - 5, catY, catBuf, 15, kNT_textLeft, kNT_textNormal);  // Changed back to kNT_textNormal
     
     // DEBUG: Capture pickup mode state for all faders
     for (int i = 0; i < 32; i++) {
@@ -1106,19 +1079,6 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     
     // NAME EDIT MODE
     if (a->nameEditMode) {
-        // Left pot: select which fader to edit (1-32)
-        if (data.controls & kNT_potL) {
-            float potValue = data.pots[0];
-            // Scale 0.0-1.0 to 0-31 with proper rounding
-            int newFader = (int)(potValue * 31.999f);  // Ensures 1.0 maps to 31
-            if (newFader < 0) newFader = 0;
-            if (newFader > 31) newFader = 31;
-            if (newFader != a->nameEditFader) {
-                a->nameEditFader = (uint8_t)newFader;
-                a->nameEditPos = 0;  // Reset cursor to first position
-            }
-        }
-        
         // Right encoder: navigate between pages or edit values
         // Limit encoder delta to prevent freeze
         int encoderDelta = data.encoders[1];
@@ -1365,6 +1325,8 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     if (rightButtonPressed) {
         a->nameEditMode = true;
         a->nameEditFader = currentFader;
+        // Bounds check
+        if (a->nameEditFader > 31) a->nameEditFader = 0;
         a->nameEditPos = 0;
         a->nameEditPage = 0;  // Start on page 1 (name/category)
         a->nameEditSettingPos = 0;
@@ -1782,6 +1744,9 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
         
         stream.addMemberName("nameEditMode");
         stream.addBoolean(a->nameEditMode);
+        
+        stream.addMemberName("nameEditFader");
+        stream.addNumber(a->nameEditFader);
         
         stream.addMemberName("namesModified");
         stream.addBoolean(a->namesModified);
