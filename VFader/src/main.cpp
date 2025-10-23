@@ -49,9 +49,9 @@ struct VFader : public _NT_algorithm {
     bool needsFaderUpdate = false;
     
     // Name editing state
-    char faderNames[32][11] = {{0}};  // 32 faders, 10 chars + null terminator
+    char faderNames[32][13] = {{0}};  // 32 faders, 12 chars + null terminator
     bool nameEditMode = false;       // Whether we're currently editing a name
-    uint8_t nameEditPos = 0;         // Current character position being edited (0-9)
+    uint8_t nameEditPos = 0;         // Current character position being edited (0-11)
     uint8_t nameEditFader = 0;       // Which fader's name is being edited (0-31)
     uint16_t lastButtonState = 0;    // Track last button state for debouncing
     bool namesModified = false;      // Whether names have been edited since last preset save
@@ -82,7 +82,17 @@ struct VFader : public _NT_algorithm {
         float lastMismatch;
         bool lastCaughtUpUp;
         bool lastCaughtUpDown;
-    } debugSnapshot = {0, 0.0f, -1.0f, true, 0, 0, 0.0f, 0, 0, 0, 0.0f, -1.0f, 0.0f, 0.0f, false, false};
+        
+        // UI interaction debug tracking
+        uint16_t lastButtonState;
+        bool nameEditModeActive;
+        uint8_t nameEditFaderIdx;
+        uint8_t nameEditCursorPos;
+        int encoderLCount;
+        int encoderRCount;
+        uint8_t currentPage;
+        uint8_t currentSel;
+    } debugSnapshot = {0, 0.0f, -1.0f, true, 0, 0, 0.0f, 0, 0, 0, 0.0f, -1.0f, 0.0f, 0.0f, false, false, 0, false, 0, 0, 0, 0, 1, 1};
 };
 
 // parameters - 8 FADER + 1 PAGE + 1 MIDI MODE = 10 total
@@ -216,9 +226,9 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
     alg->parameters = parameters;
     alg->parameterPages = &pages;
     
-    // Initialize default fader names
+    // Initialize default fader names (12 chars max)
     for (int i = 0; i < 32; i++) {
-        snprintf(alg->faderNames[i], 9, "FADER%02d", i + 1);
+        snprintf(alg->faderNames[i], 13, "FADER%02d", i + 1);
     }
     
     return alg;
@@ -353,24 +363,33 @@ bool draw(_NT_algorithm* self) {
         snprintf(faderNum, sizeof(faderNum), "Fader %d", a->nameEditFader + 1);
         NT_drawText(128, 8, faderNum, 15, kNT_textRight);
         
-        // Draw the name being edited, with cursor
+        // Draw the name being edited, with cursor (12 chars max: 2 rows of 6)
         char* name = a->faderNames[a->nameEditFader];
-        int yText = 28;
+        int yRow1 = 28;
+        int yRow2 = 42;
         int xStart = 20;
         
-        for (int i = 0; i < 10; i++) {
+        // First row (chars 0-5)
+        for (int i = 0; i < 6; i++) {
             char c = name[i];
-            if (c == 0) c = ' ';  // Display space for null chars
-            
+            if (c == 0) c = ' ';
             char buf[2] = {c, 0};
-            int x = xStart + i * 13;
-            
-            // Draw character
-            NT_drawText(x, yText, buf, 15);
-            
-            // Underline current position (directly under character)
+            int x = xStart + i * 10;  // 8px char width + 2px spacing
+            NT_drawText(x, yRow1, buf, 15);
             if (i == a->nameEditPos) {
-                NT_drawShapeI(kNT_line, x, yText + 8, x + 7, yText + 8, 15);
+                NT_drawShapeI(kNT_line, x, yRow1 + 8, x + 7, yRow1 + 8, 15);
+            }
+        }
+        
+        // Second row (chars 6-11)
+        for (int i = 6; i < 12; i++) {
+            char c = name[i];
+            if (c == 0) c = ' ';
+            char buf[2] = {c, 0};
+            int x = xStart + (i - 6) * 10;
+            NT_drawText(x, yRow2, buf, 15);
+            if (i == a->nameEditPos) {
+                NT_drawShapeI(kNT_line, x, yRow2 + 8, x + 7, yRow2 + 8, 15);
             }
         }
         
@@ -429,55 +448,88 @@ bool draw(_NT_algorithm* self) {
             }
         }
         
-        // Value at TOP - 1px above fader bar
+        // Value at TOP - 1px above fader bar (normal size, same as letters, moved 5px to right)
         int valuePct = (int)(v * 100.0f + 0.5f);
         char valBuf[4];
         snprintf(valBuf, sizeof(valBuf), "%d", valuePct);
         int nameColor = isSel ? 15 : 7;
-        NT_drawText(xCenter, faderTop - 2, valBuf, nameColor, kNT_textCentre, kNT_textTiny);
+        NT_drawText(xCenter + 5, faderTop - 2, valBuf, nameColor, kNT_textCentre, kNT_textNormal);
         
-        // Pickup mode indicator - "P" next to value
+        // Pickup mode indicator - small line sticking out right side at locked value position
         if (isPickup) {
-            NT_drawText(xCenter + 6, faderTop - 2, "P", 15, kNT_textLeft, kNT_textTiny);
+            float lockedValue = a->internalFaders[idx - 1];
+            int lockY = faderBottom - 1 - (int)(lockedValue * faderHeight);
+            int lineStartX = faderX + faderWidth;
+            int lineEndX = lineStartX + 3;  // 3px line extending to the right
+            NT_drawShapeI(kNT_line, lineStartX, lockY, lineEndX, lockY, 15);
         }
         
-        // Draw name vertically on LEFT side - evenly spaced within safe bounds
+        // Draw underline indicators below fader (thicker 3px and 2px wider each direction = 4px total)
+        int underlineY = faderBottom + 2;
+        int underlineStartX = faderX - 4;
+        int underlineEndX = faderX + faderWidth + 4;
+        if (isSel) {
+            // Solid line for active fader (3px thick)
+            NT_drawShapeI(kNT_line, underlineStartX, underlineY, underlineEndX, underlineY, 15);
+            NT_drawShapeI(kNT_line, underlineStartX, underlineY + 1, underlineEndX, underlineY + 1, 15);
+            NT_drawShapeI(kNT_line, underlineStartX, underlineY + 2, underlineEndX, underlineY + 2, 15);
+        } else if (i == localSel - 1 || i == localSel + 1) {
+            // Dotted line for adjacent faders (3px thick, draw every other pixel)
+            for (int dotX = underlineStartX; dotX <= underlineEndX; dotX += 2) {
+                NT_drawShapeI(kNT_line, dotX, underlineY, dotX, underlineY, 7);
+                NT_drawShapeI(kNT_line, dotX, underlineY + 1, dotX, underlineY + 1, 7);
+                NT_drawShapeI(kNT_line, dotX, underlineY + 2, dotX, underlineY + 2, 7);
+            }
+        }
+        
+        // Draw name vertically on LEFT side - 0px spacing between chars (tighter fit for 6 chars)
         const char* nameStr = a->faderNames[idx - 1];
         int nameLen = 0;
-        for (int j = 0; j < 10 && nameStr[j] != 0; j++) nameLen++;
+        for (int j = 0; j < 12 && nameStr[j] != 0; j++) nameLen++;
+        if (nameLen > 6) nameLen = 6;  // Limit to 6 chars for display
         
         if (nameLen > 0) {
             int nameX = colStart + 1;  // Position name on left side of column
-            int nameStartY = faderTop + 2; // Move down 10px from previous position (was faderTop - 8)
-            int nameEndY = 56;         // End before bottom with margin
-            int nameSpan = nameEndY - nameStartY;
-            float charSpacing = (nameLen > 1) ? (float)nameSpan / (nameLen - 1) : 0;
+            int nameStartY = faderTop + 5;  // Moved down 6px from previous position (was -1, now +5)
             
             for (int charIdx = 0; charIdx < nameLen; charIdx++) {
                 char buf[2] = {nameStr[charIdx], 0};
-                int charY = nameStartY + (int)(charIdx * charSpacing);
-                if (charY >= 0 && charY <= 56) {  // Keep text within visible bounds
+                int charY = nameStartY + charIdx * 8;  // 8px char height + 0px spacing
+                if (charY >= -2 && charY <= 63) {  // Allow full range to bottom of screen
                     NT_drawText(nameX, charY, buf, nameColor, kNT_textLeft, kNT_textNormal);
                 }
             }
         }
     }
 
-    // Draw info box on right side to show available space
-    int infoBoxX = 224;      // Start at x=224 (256 - 32)
-    int infoBoxY = 0;        // Start at top
-    int infoBoxWidth = 32;   // 32 pixels wide
-    int infoBoxHeight = 64;  // Full height
-    NT_drawShapeI(kNT_box, infoBoxX, infoBoxY, infoBoxX + infoBoxWidth, infoBoxHeight, 7);
+    // Right side display area (no box, just content)
+    int rightAreaX = 224;
     
-    // Draw dimensions text inside box
-    NT_drawText(infoBoxX + 2, 2, "32", 15, kNT_textLeft, kNT_textTiny);
-    NT_drawText(infoBoxX + 2, 8, "x", 15, kNT_textLeft, kNT_textTiny);
-    NT_drawText(infoBoxX + 2, 14, "64", 15, kNT_textLeft, kNT_textTiny);
-
-    // Bottom info bar - just save indicator (removed version number)
-    if (a->namesModified) {
-        NT_drawText(126, 60, "*SAVE", 15, kNT_textRight, kNT_textTiny);
+    // Top half: Large page number (moved down 12px, doubled size using textLarge)
+    char pageBuf[2];
+    snprintf(pageBuf, sizeof(pageBuf), "%d", a->page);
+    NT_drawText(rightAreaX + 8, 20, pageBuf, 15, kNT_textLeft, kNT_textLarge);
+    
+    // Bottom half: Selected fader's extended name (2 rows of 6 chars)
+    int selectedFaderIdx = a->sel - 1;  // 0-31
+    const char* selectedName = a->faderNames[selectedFaderIdx];
+    int nameY1 = 36;
+    int nameY2 = 46;
+    
+    // First row (chars 0-5)
+    for (int i = 0; i < 6; i++) {
+        char c = selectedName[i];
+        if (c == 0) c = ' ';
+        char buf[2] = {c, 0};
+        NT_drawText(rightAreaX + 2 + i * 5, nameY1, buf, 15, kNT_textLeft, kNT_textTiny);
+    }
+    
+    // Second row (chars 6-11)
+    for (int i = 6; i < 12; i++) {
+        char c = selectedName[i];
+        if (c == 0) c = ' ';
+        char buf[2] = {c, 0};
+        NT_drawText(rightAreaX + 2 + (i - 6) * 5, nameY2, buf, 15, kNT_textLeft, kNT_textTiny);
     }
     
     return true; // keep suppressing default header; change to false if needed in next step
@@ -499,18 +551,28 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     bool rightButtonPressed = (data.controls & kNT_encoderButtonR) && !(a->lastButtonState & kNT_encoderButtonR);
     a->lastButtonState = data.controls;
     
+    // DEBUG: Update UI state tracking
+    a->debugSnapshot.lastButtonState = a->lastButtonState;
+    a->debugSnapshot.nameEditModeActive = a->nameEditMode;
+    a->debugSnapshot.nameEditFaderIdx = a->nameEditFader;
+    a->debugSnapshot.nameEditCursorPos = a->nameEditPos;
+    a->debugSnapshot.currentPage = a->page;
+    a->debugSnapshot.currentSel = a->sel;
+    
     // NAME EDIT MODE
     if (a->nameEditMode) {
         // Encoder left: move character position
         if (data.encoders[0] != 0) {
+            a->debugSnapshot.encoderLCount++;
             int newPos = (int)a->nameEditPos + data.encoders[0];
             if (newPos < 0) newPos = 0;
-            if (newPos > 9) newPos = 9;  // 0-9 for 10 characters
+            if (newPos > 11) newPos = 11;  // 0-11 for 12 characters
             a->nameEditPos = (uint8_t)newPos;
         }
         
         // Encoder right: change character at current position
         if (data.encoders[1] != 0) {
+            a->debugSnapshot.encoderRCount++;
             char* name = a->faderNames[a->nameEditFader];
             char c = name[a->nameEditPos];
             
@@ -804,6 +866,30 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
         
         stream.addMemberName("lastCaughtUpDown");
         stream.addBoolean(a->debugSnapshot.lastCaughtUpDown);
+        
+        stream.addMemberName("lastButtonState");
+        stream.addNumber(a->debugSnapshot.lastButtonState);
+        
+        stream.addMemberName("nameEditModeActive");
+        stream.addBoolean(a->debugSnapshot.nameEditModeActive);
+        
+        stream.addMemberName("nameEditFaderIdx");
+        stream.addNumber(a->debugSnapshot.nameEditFaderIdx);
+        
+        stream.addMemberName("nameEditCursorPos");
+        stream.addNumber(a->debugSnapshot.nameEditCursorPos);
+        
+        stream.addMemberName("encoderLCount");
+        stream.addNumber(a->debugSnapshot.encoderLCount);
+        
+        stream.addMemberName("encoderRCount");
+        stream.addNumber(a->debugSnapshot.encoderRCount);
+        
+        stream.addMemberName("currentPage");
+        stream.addNumber(a->debugSnapshot.currentPage);
+        
+        stream.addMemberName("currentSel");
+        stream.addNumber(a->debugSnapshot.currentSel);
     stream.closeObject();
     
     // Write display layout info for debugging/screenshots
@@ -910,8 +996,8 @@ static bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
                 if (!parse.string(str))
                     return false;
                 if (str != NULL) {
-                    strncpy(a->faderNames[j], str, 8);
-                    a->faderNames[j][8] = 0;  // Ensure null termination
+                    strncpy(a->faderNames[j], str, 12);
+                    a->faderNames[j][12] = 0;  // Ensure null termination (12 chars max)
                 }
             }
         }
