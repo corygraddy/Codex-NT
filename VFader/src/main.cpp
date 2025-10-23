@@ -296,7 +296,7 @@ static void initParameters() {
     parameters[kParamMidiMode].name = "MIDI Mode";
     parameters[kParamMidiMode].min = 0;
     parameters[kParamMidiMode].max = 1;  // 0=7-bit, 1=14-bit
-    parameters[kParamMidiMode].def = 0;  // Default to 7-bit
+    parameters[kParamMidiMode].def = 1;  // Default to 14-bit
     parameters[kParamMidiMode].unit = kNT_unitEnum;
     parameters[kParamMidiMode].scaling = kNT_scalingNone;
     parameters[kParamMidiMode].enumStrings = midiModeStrings;
@@ -305,7 +305,7 @@ static void initParameters() {
     parameters[kParamPickupMode].name = "Pickup Mode";
     parameters[kParamPickupMode].min = 0;
     parameters[kParamPickupMode].max = 1;  // 0=Scaled, 1=Catch
-    parameters[kParamPickupMode].def = 0;  // Default to Scaled mode
+    parameters[kParamPickupMode].def = 1;  // Default to Catch mode
     parameters[kParamPickupMode].unit = kNT_unitEnum;
     parameters[kParamPickupMode].scaling = kNT_scalingNone;
     parameters[kParamPickupMode].enumStrings = pickupModeStrings;
@@ -623,7 +623,7 @@ bool draw(_NT_algorithm* self) {
             
             // Left side: Note parameters
             int xLabel = 8;
-            int xValue = 76;  // Moved 6px to the right (was 70)
+            int xValue = 79;  // Moved 3px to the right (was 76)
             int yPos = 20;
             int yStep = 10;
             
