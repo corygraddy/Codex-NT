@@ -186,13 +186,33 @@ struct VFader : public _NT_algorithm {
         uint8_t nameEditSettingIdx;
         int uiFreezeCounter;
         
+        // Note mode debug tracking for selected fader
+        uint8_t selectedFaderDisplayMode;
+        uint8_t selectedFaderBottomMidi;
+        uint8_t selectedFaderTopMidi;
+        uint8_t lastSentMidiValue;
+        float lastSentFaderValue;
+        uint8_t snappedNoteValue;
+        
         // Pickup indicator debug - for all 32 faders
         bool pickupModeActive[32];
         float internalFaderValue[32];
         float physicalFaderValue[32];
         float pickupPivotValue[32];
         float pickupStartValueArray[32];
-    } debugSnapshot = {0, 0.0f, -1.0f, true, 0, 0, 0.0f, 0, 0, 0, 0.0f, -1.0f, 0.0f, 0.0f, false, false, 0, false, 0, 0, 0, 0, 1, 1};
+    };
+    
+    DebugSnapshot debugSnapshot = {};  // Zero-initialize all members
+    
+    // Constructor to set non-zero defaults
+    VFader() {
+        debugSnapshot.currentPage = 1;
+        debugSnapshot.currentSel = 1;
+        debugSnapshot.selectedFaderBottomMidi = 36;
+        debugSnapshot.selectedFaderTopMidi = 96;
+        debugSnapshot.lastMidiValue0 = -1.0f;
+        debugSnapshot.lastPickupPivot = -1.0f;
+    }
 };
 
 // parameters - 8 FADER + 1 PAGE + 1 MIDI MODE + 1 PICKUP MODE + 1 DEBUG = 12 total
@@ -405,9 +425,29 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             bool valueChanged = fabsf(currentValue - lastValue) > 0.001f;
             
             if (firstSend || valueChanged) {
-                // Convert 0.0-1.0 to 0-127 (7-bit MIDI CC)
-                uint8_t midiValue = (uint8_t)(currentValue * 127.0f + 0.5f);
-                if (midiValue > 127) midiValue = 127;
+                uint8_t midiValue;
+                
+                // Check if this fader is in Note mode
+                if (a->faderNoteSettings[i].displayMode == 1) {
+                    // Note mode: snap to active note and send that MIDI note number
+                    midiValue = (uint8_t)a->snapToActiveNote(currentValue, a->faderNoteSettings[i]);
+                } else {
+                    // Number mode: convert 0.0-1.0 to 0-127 (7-bit MIDI CC)
+                    midiValue = (uint8_t)(currentValue * 127.0f + 0.5f);
+                    if (midiValue > 127) midiValue = 127;
+                }
+                
+                // Debug tracking for selected fader
+                if (i == (a->sel - 1)) {
+                    a->debugSnapshot.selectedFaderDisplayMode = a->faderNoteSettings[i].displayMode;
+                    a->debugSnapshot.selectedFaderBottomMidi = a->faderNoteSettings[i].bottomMidi;
+                    a->debugSnapshot.selectedFaderTopMidi = a->faderNoteSettings[i].topMidi;
+                    a->debugSnapshot.lastSentMidiValue = midiValue;
+                    a->debugSnapshot.lastSentFaderValue = currentValue;
+                    if (a->faderNoteSettings[i].displayMode == 1) {
+                        a->debugSnapshot.snappedNoteValue = midiValue;
+                    }
+                }
                 
                 // Send MIDI CC (CC number is i+1, so fader 0 → CC #1)
                 uint8_t ccNumber = (uint8_t)(i + 1);
@@ -439,8 +479,18 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             bool valueChanged = fabsf(currentValue - lastValue) > 0.001f;
             
             if (firstSend || valueChanged) {
-                // Calculate 14-bit value
-                int full = (int)(currentValue * 16383.0f + 0.5f);
+                int full;
+                
+                // Check if this fader is in Note mode
+                if (a->faderNoteSettings[i].displayMode == 1) {
+                    // Note mode: snap to active note and use that as the value (0-127)
+                    uint8_t noteValue = (uint8_t)a->snapToActiveNote(currentValue, a->faderNoteSettings[i]);
+                    full = noteValue << 7;  // Shift to MSB position for 14-bit
+                } else {
+                    // Number mode: calculate 14-bit value
+                    full = (int)(currentValue * 16383.0f + 0.5f);
+                }
+                
                 uint8_t msb = (uint8_t)(full >> 7);
                 uint8_t lsb = (uint8_t)(full & 0x7F);
                 
@@ -898,6 +948,8 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                 
                 if (settingsChanged) {
                     a->namesModified = true;  // Mark settings as modified
+                    // Invalidate MIDI cache for this fader to force re-send with new settings
+                    a->lastMidiValues[a->nameEditFader] = -1.0f;
                 }
             }
         }
@@ -1282,6 +1334,23 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
             
             stream.addMemberName("uiFreezeCounter");
             stream.addNumber(a->debugSnapshot.uiFreezeCounter);
+            
+            // Note mode debug tracking
+            stream.addMemberName("noteDebug");
+            stream.openObject();
+                stream.addMemberName("selectedFaderDisplayMode");
+                stream.addNumber(a->debugSnapshot.selectedFaderDisplayMode);
+                stream.addMemberName("selectedFaderBottomMidi");
+                stream.addNumber(a->debugSnapshot.selectedFaderBottomMidi);
+                stream.addMemberName("selectedFaderTopMidi");
+                stream.addNumber(a->debugSnapshot.selectedFaderTopMidi);
+                stream.addMemberName("lastSentMidiValue");
+                stream.addNumber(a->debugSnapshot.lastSentMidiValue);
+                stream.addMemberName("lastSentFaderValue");
+                stream.addNumber(a->debugSnapshot.lastSentFaderValue);
+                stream.addMemberName("snappedNoteValue");
+                stream.addNumber(a->debugSnapshot.snappedNoteValue);
+            stream.closeObject();
             
             // Pickup indicator debug - detailed state for all 32 faders
             stream.addMemberName("pickupDebug");
