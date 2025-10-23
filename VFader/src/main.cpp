@@ -92,10 +92,17 @@ struct VFader : public _NT_algorithm {
         int encoderRCount;
         uint8_t currentPage;
         uint8_t currentSel;
+        
+        // Pickup indicator debug - for all 32 faders
+        bool pickupModeActive[32];
+        float internalFaderValue[32];
+        float physicalFaderValue[32];
+        float pickupPivotValue[32];
+        float pickupStartValueArray[32];
     } debugSnapshot = {0, 0.0f, -1.0f, true, 0, 0, 0.0f, 0, 0, 0, 0.0f, -1.0f, 0.0f, 0.0f, false, false, 0, false, 0, 0, 0, 0, 1, 1};
 };
 
-// parameters - 8 FADER + 1 PAGE + 1 MIDI MODE = 10 total
+// parameters - 8 FADER + 1 PAGE + 1 MIDI MODE + 1 PICKUP MODE = 11 total
 enum {
     kParamFader1 = 0,    // External control faders (0-1000 scaled)
     kParamFader2,
@@ -107,11 +114,13 @@ enum {
     kParamFader8,
     kParamPage,          // Page selector (0-7, displayed as Page 1-8)
     kParamMidiMode,      // MIDI mode: 0=7-bit, 1=14-bit
+    kParamPickupMode,    // Pickup mode: 0=Scaled, 1=Catch
     kNumParameters
 };
 
 static const char* const pageStrings[] = { "Page 1", "Page 2", "Page 3", "Page 4", NULL };
 static const char* const midiModeStrings[] = { "7-bit CC", "14-bit CC", NULL };
+static const char* const pickupModeStrings[] = { "Scaled", "Catch", NULL };
 
 static _NT_parameter parameters[kNumParameters] = {};
 
@@ -149,22 +158,32 @@ static void initParameters() {
     parameters[kParamMidiMode].unit = kNT_unitEnum;
     parameters[kParamMidiMode].scaling = kNT_scalingNone;
     parameters[kParamMidiMode].enumStrings = midiModeStrings;
+    
+    // PICKUP MODE parameter
+    parameters[kParamPickupMode].name = "Pickup Mode";
+    parameters[kParamPickupMode].min = 0;
+    parameters[kParamPickupMode].max = 1;  // 0=Scaled, 1=Catch
+    parameters[kParamPickupMode].def = 0;  // Default to Scaled mode
+    parameters[kParamPickupMode].unit = kNT_unitEnum;
+    parameters[kParamPickupMode].scaling = kNT_scalingNone;
+    parameters[kParamPickupMode].enumStrings = pickupModeStrings;
 }
 
-// Parameter page with FADER 1-8 and MIDI Mode visible (PAGE hidden)
-static uint8_t visibleParams[9];  // FADER 1-8 + MIDI Mode
+// Parameter page with FADER 1-8, MIDI Mode, and Pickup Mode visible (PAGE hidden)
+static uint8_t visibleParams[10];  // FADER 1-8 + MIDI Mode + Pickup Mode
 static _NT_parameterPage page_array[1];
 static _NT_parameterPages pages;
 
 static void initPages() {
-    // Show FADER 1-8 and MIDI Mode (hide PAGE to avoid confusion)
+    // Show FADER 1-8, MIDI Mode, and Pickup Mode (hide PAGE to avoid confusion)
     for (int i = 0; i < 8; ++i) {
         visibleParams[i] = kParamFader1 + i;
     }
     visibleParams[8] = kParamMidiMode;
+    visibleParams[9] = kParamPickupMode;
     
     page_array[0].name = "VFADER";
-    page_array[0].numParams = 9;
+    page_array[0].numParams = 10;
     page_array[0].params = visibleParams;
     
     pages.numPages = 1;
@@ -456,12 +475,19 @@ bool draw(_NT_algorithm* self) {
         NT_drawText(xCenter + 5, faderTop - 2, valBuf, nameColor, kNT_textCentre, kNT_textNormal);
         
         // Pickup mode indicator - small line sticking out right side at locked value position
+        // Only show if there's actually a mismatch (physical != internal)
         if (isPickup) {
             float lockedValue = a->internalFaders[idx - 1];
-            int lockY = faderBottom - 1 - (int)(lockedValue * faderHeight);
-            int lineStartX = faderX + faderWidth;
-            int lineEndX = lineStartX + 3;  // 3px line extending to the right
-            NT_drawShapeI(kNT_line, lineStartX, lockY, lineEndX, lockY, 15);
+            float physicalPos = a->physicalFaderPos[idx - 1];
+            float mismatch = fabsf(physicalPos - lockedValue);
+            
+            // Only draw the line if there's a meaningful mismatch (>2%)
+            if (mismatch > 0.02f) {
+                int lockY = faderBottom - 1 - (int)(lockedValue * faderHeight);
+                int lineStartX = faderX + faderWidth;
+                int lineEndX = lineStartX + 3;  // 3px line extending to the right
+                NT_drawShapeI(kNT_line, lineStartX, lockY, lineEndX, lockY, 15);
+            }
         }
         
         // Draw underline indicators below fader (thicker 3px and 2px wider each direction = 4px total)
@@ -530,6 +556,15 @@ bool draw(_NT_algorithm* self) {
         if (c == 0) c = ' ';
         char buf[2] = {c, 0};
         NT_drawText(rightAreaX + 2 + (i - 6) * 5, nameY2, buf, 15, kNT_textLeft, kNT_textTiny);
+    }
+    
+    // DEBUG: Capture pickup mode state for all faders
+    for (int i = 0; i < 32; i++) {
+        a->debugSnapshot.pickupModeActive[i] = a->inPickupMode[i];
+        a->debugSnapshot.internalFaderValue[i] = a->internalFaders[i];
+        a->debugSnapshot.physicalFaderValue[i] = a->physicalFaderPos[i];
+        a->debugSnapshot.pickupPivotValue[i] = a->pickupPivot[i];
+        a->debugSnapshot.pickupStartValueArray[i] = a->pickupStartValue[i];
     }
     
     return true; // keep suppressing default header; change to false if needed in next step
@@ -693,6 +728,9 @@ void parameterChanged(_NT_algorithm* self, int p) {
         if (v < 0.0f) v = 0.0f;
         else if (v > 1.0f) v = 1.0f;
         
+        // Get pickup mode setting (0=Scaled, 1=Catch)
+        int pickupMode = (int)(self->v[kParamPickupMode] + 0.5f);
+        
         // Pickup mode logic: relative scaling when physical position ≠ value
         float currentValue = a->internalFaders[internalIdx];
         float mismatch = fabsf(v - currentValue);
@@ -724,68 +762,85 @@ void parameterChanged(_NT_algorithm* self, int p) {
                 a->internalFaders[internalIdx] = v;
             }
         } else {
-            // Already in pickup mode - calculate scaled value
-            float pivotPos = a->pickupPivot[internalIdx];
-            float startValue = a->pickupStartValue[internalIdx];
-            float physicalDelta = v - pivotPos;
-            
-            // Calculate scaled target value
-            float targetValue;
-            if (physicalDelta > 0) {
-                // Moving up from pivot
-                float physicalRange = 1.0f - pivotPos;
-                float valueRange = 1.0f - startValue;
-                if (physicalRange > 0.001f) {
-                    float ratio = physicalDelta / physicalRange;
-                    if (ratio > 1.0f) ratio = 1.0f;
-                    targetValue = startValue + ratio * valueRange;
-                } else {
-                    targetValue = 1.0f;
+            // Already in pickup mode
+            if (pickupMode == 1) {
+                // CATCH MODE: Don't change value until physical matches internal
+                // Check if physical has caught the internal value
+                if (mismatch < 0.02f) {
+                    // Caught! Exit pickup mode and use absolute control
+                    a->inPickupMode[internalIdx] = false;
+                    a->pickupPivot[internalIdx] = -1.0f;
+                    a->internalFaders[internalIdx] = v;
+                    
+                    if (internalIdx == 0) {
+                        a->debugSnapshot.pickupExitCount++;
+                    }
                 }
-            } else if (physicalDelta < 0) {
-                // Moving down from pivot
-                float physicalRange = pivotPos;
-                float valueRange = startValue;
-                if (physicalRange > 0.001f) {
-                    float ratio = -physicalDelta / physicalRange;
-                    if (ratio > 1.0f) ratio = 1.0f;
-                    targetValue = startValue - ratio * valueRange;
-                } else {
-                    targetValue = 0.0f;
-                }
+                // Otherwise, don't update the value - just wait for catch
             } else {
-                // No movement from pivot yet
-                targetValue = startValue;
-            }
-            
-            // Clamp
-            if (targetValue < 0.0f) targetValue = 0.0f;
-            if (targetValue > 1.0f) targetValue = 1.0f;
-            
-            // Check if we should exit pickup mode
-            // Exit when physical position is close to the OUTPUT value (not start value)
-            float outputMismatch = fabsf(v - targetValue);
-            bool caughtUp = (outputMismatch < 0.02f);  // Within 2% of output
-            
-            // Debug tracking for fader 0
-            if (internalIdx == 0) {
-                a->debugSnapshot.lastCaughtUpUp = (physicalDelta > 0 && caughtUp);
-                a->debugSnapshot.lastCaughtUpDown = (physicalDelta < 0 && caughtUp);
-            }
-            
-            if (caughtUp) {
-                // Physical position has caught up with output - exit pickup mode
-                a->inPickupMode[internalIdx] = false;
-                a->pickupPivot[internalIdx] = -1.0f;
-                a->internalFaders[internalIdx] = v;  // Now use absolute
+                // SCALED MODE: Calculate scaled value based on pivot
+                float pivotPos = a->pickupPivot[internalIdx];
+                float startValue = a->pickupStartValue[internalIdx];
+                float physicalDelta = v - pivotPos;
+                
+                // Calculate scaled target value
+                float targetValue;
+                if (physicalDelta > 0) {
+                    // Moving up from pivot
+                    float physicalRange = 1.0f - pivotPos;
+                    float valueRange = 1.0f - startValue;
+                    if (physicalRange > 0.001f) {
+                        float ratio = physicalDelta / physicalRange;
+                        if (ratio > 1.0f) ratio = 1.0f;
+                        targetValue = startValue + ratio * valueRange;
+                    } else {
+                        targetValue = 1.0f;
+                    }
+                } else if (physicalDelta < 0) {
+                    // Moving down from pivot
+                    float physicalRange = pivotPos;
+                    float valueRange = startValue;
+                    if (physicalRange > 0.001f) {
+                        float ratio = -physicalDelta / physicalRange;
+                        if (ratio > 1.0f) ratio = 1.0f;
+                        targetValue = startValue - ratio * valueRange;
+                    } else {
+                        targetValue = 0.0f;
+                    }
+                } else {
+                    // No movement from pivot yet
+                    targetValue = startValue;
+                }
+                
+                // Clamp
+                if (targetValue < 0.0f) targetValue = 0.0f;
+                if (targetValue > 1.0f) targetValue = 1.0f;
+                
+                // Check if we should exit pickup mode
+                // Exit when physical position is close to the OUTPUT value (not start value)
+                float outputMismatch = fabsf(v - targetValue);
+                bool caughtUp = (outputMismatch < 0.02f);  // Within 2% of output
                 
                 // Debug tracking for fader 0
                 if (internalIdx == 0) {
-                    a->debugSnapshot.pickupExitCount++;
+                    a->debugSnapshot.lastCaughtUpUp = (physicalDelta > 0 && caughtUp);
+                    a->debugSnapshot.lastCaughtUpDown = (physicalDelta < 0 && caughtUp);
                 }
-            } else {
-                // Still in pickup - use scaled value
-                a->internalFaders[internalIdx] = targetValue;
+                
+                if (caughtUp) {
+                    // Physical position has caught up with output - exit pickup mode
+                    a->inPickupMode[internalIdx] = false;
+                    a->pickupPivot[internalIdx] = -1.0f;
+                    a->internalFaders[internalIdx] = v;  // Now use absolute
+                    
+                    // Debug tracking for fader 0
+                    if (internalIdx == 0) {
+                        a->debugSnapshot.pickupExitCount++;
+                    }
+                } else {
+                    // Still in pickup - use scaled value
+                    a->internalFaders[internalIdx] = targetValue;
+                }
             }
         }
         
@@ -890,6 +945,29 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
         
         stream.addMemberName("currentSel");
         stream.addNumber(a->debugSnapshot.currentSel);
+        
+        // Pickup indicator debug - detailed state for all 32 faders
+        stream.addMemberName("pickupDebug");
+        stream.openArray();
+        for (int i = 0; i < 32; i++) {
+            stream.openObject();
+                stream.addMemberName("faderIdx");
+                stream.addNumber(i);
+                stream.addMemberName("pickupActive");
+                stream.addBoolean(a->debugSnapshot.pickupModeActive[i]);
+                stream.addMemberName("internalValue");
+                stream.addNumber(a->debugSnapshot.internalFaderValue[i]);
+                stream.addMemberName("physicalValue");
+                stream.addNumber(a->debugSnapshot.physicalFaderValue[i]);
+                stream.addMemberName("pivotValue");
+                stream.addNumber(a->debugSnapshot.pickupPivotValue[i]);
+                stream.addMemberName("startValue");
+                stream.addNumber(a->debugSnapshot.pickupStartValueArray[i]);
+                stream.addMemberName("mismatch");
+                stream.addNumber(fabsf(a->debugSnapshot.physicalFaderValue[i] - a->debugSnapshot.internalFaderValue[i]));
+            stream.closeObject();
+        }
+        stream.closeArray();
     stream.closeObject();
     
     // Write display layout info for debugging/screenshots
