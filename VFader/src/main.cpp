@@ -49,9 +49,9 @@ struct VFader : public _NT_algorithm {
     bool needsFaderUpdate = false;
     
     // Name editing state
-    char faderNames[32][13] = {{0}};  // 32 faders, 12 chars + null terminator
+    char faderNames[32][13] = {{0}};  // 32 faders, 12 chars + null terminator (6 name + 5 category + 1 unused)
     bool nameEditMode = false;       // Whether we're currently editing a name
-    uint8_t nameEditPos = 0;         // Current character position being edited (0-11)
+    uint8_t nameEditPos = 0;         // Current character position being edited (0-10: 0-5 for name, 6-10 for category)
     uint8_t nameEditFader = 0;       // Which fader's name is being edited (0-31)
     uint16_t lastButtonState = 0;    // Track last button state for debouncing
     bool namesModified = false;      // Whether names have been edited since last preset save
@@ -102,7 +102,7 @@ struct VFader : public _NT_algorithm {
     } debugSnapshot = {0, 0.0f, -1.0f, true, 0, 0, 0.0f, 0, 0, 0, 0.0f, -1.0f, 0.0f, 0.0f, false, false, 0, false, 0, 0, 0, 0, 1, 1};
 };
 
-// parameters - 8 FADER + 1 PAGE + 1 MIDI MODE + 1 PICKUP MODE = 11 total
+// parameters - 8 FADER + 1 PAGE + 1 MIDI MODE + 1 PICKUP MODE + 1 DEBUG = 12 total
 enum {
     kParamFader1 = 0,    // External control faders (0-1000 scaled)
     kParamFader2,
@@ -115,12 +115,14 @@ enum {
     kParamPage,          // Page selector (0-7, displayed as Page 1-8)
     kParamMidiMode,      // MIDI mode: 0=7-bit, 1=14-bit
     kParamPickupMode,    // Pickup mode: 0=Scaled, 1=Catch
+    kParamDebugLog,      // Debug logging: 0=Off, 1=On
     kNumParameters
 };
 
 static const char* const pageStrings[] = { "Page 1", "Page 2", "Page 3", "Page 4", NULL };
 static const char* const midiModeStrings[] = { "7-bit CC", "14-bit CC", NULL };
 static const char* const pickupModeStrings[] = { "Scaled", "Catch", NULL };
+static const char* const debugLogStrings[] = { "Off", "On", NULL };
 
 static _NT_parameter parameters[kNumParameters] = {};
 
@@ -167,23 +169,33 @@ static void initParameters() {
     parameters[kParamPickupMode].unit = kNT_unitEnum;
     parameters[kParamPickupMode].scaling = kNT_scalingNone;
     parameters[kParamPickupMode].enumStrings = pickupModeStrings;
+    
+    // DEBUG LOG parameter
+    parameters[kParamDebugLog].name = "Debug Log";
+    parameters[kParamDebugLog].min = 0;
+    parameters[kParamDebugLog].max = 1;  // 0=Off, 1=On
+    parameters[kParamDebugLog].def = 0;  // Default to Off
+    parameters[kParamDebugLog].unit = kNT_unitEnum;
+    parameters[kParamDebugLog].scaling = kNT_scalingNone;
+    parameters[kParamDebugLog].enumStrings = debugLogStrings;
 }
 
-// Parameter page with FADER 1-8, MIDI Mode, and Pickup Mode visible (PAGE hidden)
-static uint8_t visibleParams[10];  // FADER 1-8 + MIDI Mode + Pickup Mode
+// Parameter page with FADER 1-8, MIDI Mode, Pickup Mode, and Debug Log visible (PAGE hidden)
+static uint8_t visibleParams[11];  // FADER 1-8 + MIDI Mode + Pickup Mode + Debug Log
 static _NT_parameterPage page_array[1];
 static _NT_parameterPages pages;
 
 static void initPages() {
-    // Show FADER 1-8, MIDI Mode, and Pickup Mode (hide PAGE to avoid confusion)
+    // Show FADER 1-8, MIDI Mode, Pickup Mode, and Debug Log (hide PAGE to avoid confusion)
     for (int i = 0; i < 8; ++i) {
         visibleParams[i] = kParamFader1 + i;
     }
     visibleParams[8] = kParamMidiMode;
     visibleParams[9] = kParamPickupMode;
+    visibleParams[10] = kParamDebugLog;
     
     page_array[0].name = "VFADER";
-    page_array[0].numParams = 10;
+    page_array[0].numParams = 11;
     page_array[0].params = visibleParams;
     
     pages.numPages = 1;
@@ -382,39 +394,44 @@ bool draw(_NT_algorithm* self) {
         snprintf(faderNum, sizeof(faderNum), "Fader %d", a->nameEditFader + 1);
         NT_drawText(128, 8, faderNum, 15, kNT_textRight);
         
-        // Draw the name being edited, with cursor (12 chars max: 2 rows of 6)
+        // Draw the name fields: Name (6 chars) and Cat (4 chars)
         char* name = a->faderNames[a->nameEditFader];
-        int yRow1 = 28;
-        int yRow2 = 42;
-        int xStart = 20;
+        int yName = 28;
+        int yCat = 42;
+        int xStart = 40;
         
-        // First row (chars 0-5)
+        // "Name" label
+        NT_drawText(8, yName, "Name", 15);
+        
+        // Name field (chars 0-5)
         for (int i = 0; i < 6; i++) {
             char c = name[i];
             if (c == 0) c = ' ';
             char buf[2] = {c, 0};
             int x = xStart + i * 10;  // 8px char width + 2px spacing
-            NT_drawText(x, yRow1, buf, 15);
+            NT_drawText(x, yName, buf, 15);
             if (i == a->nameEditPos) {
-                NT_drawShapeI(kNT_line, x, yRow1 + 8, x + 7, yRow1 + 8, 15);
+                NT_drawShapeI(kNT_line, x, yName + 3, x + 7, yName + 3, 15);
             }
         }
         
-        // Second row (chars 6-11)
-        for (int i = 6; i < 12; i++) {
+        // "Cat" label
+        NT_drawText(8, yCat, "Cat", 15);
+        
+        // Category field (chars 6-10, displayed as positions 0-4)
+        for (int i = 6; i < 11; i++) {
             char c = name[i];
             if (c == 0) c = ' ';
             char buf[2] = {c, 0};
             int x = xStart + (i - 6) * 10;
-            NT_drawText(x, yRow2, buf, 15);
+            NT_drawText(x, yCat, buf, 15);
             if (i == a->nameEditPos) {
-                NT_drawShapeI(kNT_line, x, yRow2 + 8, x + 7, yRow2 + 8, 15);
+                NT_drawShapeI(kNT_line, x, yCat + 3, x + 7, yCat + 3, 15);
             }
         }
         
         // Instructions
-        NT_drawText(64, 48, "L:Pos R:Char", 7, kNT_textCentre);
-        NT_drawText(64, 56, "Press R to exit", 7, kNT_textCentre);
+        NT_drawText(128, 61, "Press R to exit", 7, kNT_textRight, kNT_textTiny);
         
         return true;
     }
@@ -453,28 +470,28 @@ bool draw(_NT_algorithm* self) {
         
         // Calculate filled height based on value
         int fillHeight = (int)(v * faderHeight);
-        int fillTop = faderBottom - fillHeight;
         
         // Draw fader background (empty part)
         NT_drawShapeI(kNT_box, faderX, faderTop, faderX + faderWidth, faderBottom, 7);
         
         // Draw filled part of fader with horizontal lines (segmented look)
+        // Lines are added from BOTTOM up as value increases (like stacking plates)
         if (fillHeight > 0) {
             int fillColor = isSel ? 15 : 10;
-            // Draw horizontal lines every 2 pixels for a segmented fader look
-            for (int y = fillTop; y < faderBottom - 1; y += 2) {
+            // Draw horizontal lines every 2 pixels starting from the BOTTOM of the fader
+            for (int y = faderBottom - 2; y >= faderBottom - fillHeight && y > faderTop; y -= 2) {
                 NT_drawShapeI(kNT_line, faderX + 1, y, faderX + faderWidth - 1, y, fillColor);
             }
         }
         
-        // Value at TOP - 1px above fader bar (normal size, same as letters, moved 5px to right)
+        // Value at TOP - 1px above fader bar (normal size, same as letters, moved 3px to right)
         int valuePct = (int)(v * 100.0f + 0.5f);
         char valBuf[4];
         snprintf(valBuf, sizeof(valBuf), "%d", valuePct);
         int nameColor = isSel ? 15 : 7;
-        NT_drawText(xCenter + 5, faderTop - 2, valBuf, nameColor, kNT_textCentre, kNT_textNormal);
+        NT_drawText(xCenter + 3, faderTop - 2, valBuf, nameColor, kNT_textCentre, kNT_textNormal);
         
-        // Pickup mode indicator - small line sticking out right side at locked value position
+        // Pickup mode indicator - small line sticking out right side at locked value position (2px long, 3px tall)
         // Only show if there's actually a mismatch (physical != internal)
         if (isPickup) {
             float lockedValue = a->internalFaders[idx - 1];
@@ -485,8 +502,11 @@ bool draw(_NT_algorithm* self) {
             if (mismatch > 0.02f) {
                 int lockY = faderBottom - 1 - (int)(lockedValue * faderHeight);
                 int lineStartX = faderX + faderWidth;
-                int lineEndX = lineStartX + 3;  // 3px line extending to the right
+                int lineEndX = lineStartX + 2;  // 2px line extending to the right
+                // Draw 3 lines for 3px height (centered)
+                NT_drawShapeI(kNT_line, lineStartX, lockY - 1, lineEndX, lockY - 1, 15);
                 NT_drawShapeI(kNT_line, lineStartX, lockY, lineEndX, lockY, 15);
+                NT_drawShapeI(kNT_line, lineStartX, lockY + 1, lineEndX, lockY + 1, 15);
             }
         }
         
@@ -536,27 +556,18 @@ bool draw(_NT_algorithm* self) {
     snprintf(pageBuf, sizeof(pageBuf), "%d", a->page);
     NT_drawText(rightAreaX + 8, 20, pageBuf, 15, kNT_textLeft, kNT_textLarge);
     
-    // Bottom half: Selected fader's extended name (2 rows of 6 chars)
+    // Bottom half: Selected fader's category (chars 6-10, larger font)
     int selectedFaderIdx = a->sel - 1;  // 0-31
     const char* selectedName = a->faderNames[selectedFaderIdx];
-    int nameY1 = 36;
-    int nameY2 = 46;
+    int catY = 42;
     
-    // First row (chars 0-5)
-    for (int i = 0; i < 6; i++) {
-        char c = selectedName[i];
-        if (c == 0) c = ' ';
-        char buf[2] = {c, 0};
-        NT_drawText(rightAreaX + 2 + i * 5, nameY1, buf, 15, kNT_textLeft, kNT_textTiny);
+    // Display category (chars 6-10) with normal font, moved 6px left
+    char catBuf[6] = {0};
+    for (int i = 0; i < 5; i++) {
+        catBuf[i] = selectedName[6 + i];
+        if (catBuf[i] == 0) catBuf[i] = ' ';
     }
-    
-    // Second row (chars 6-11)
-    for (int i = 6; i < 12; i++) {
-        char c = selectedName[i];
-        if (c == 0) c = ' ';
-        char buf[2] = {c, 0};
-        NT_drawText(rightAreaX + 2 + (i - 6) * 5, nameY2, buf, 15, kNT_textLeft, kNT_textTiny);
-    }
+    NT_drawText(rightAreaX - 2, catY, catBuf, 15, kNT_textLeft, kNT_textNormal);
     
     // DEBUG: Capture pickup mode state for all faders
     for (int i = 0; i < 32; i++) {
@@ -601,7 +612,7 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
             a->debugSnapshot.encoderLCount++;
             int newPos = (int)a->nameEditPos + data.encoders[0];
             if (newPos < 0) newPos = 0;
-            if (newPos > 11) newPos = 11;  // 0-11 for 12 characters
+            if (newPos > 10) newPos = 10;  // 0-10 for 11 characters (6 name + 5 category)
             a->nameEditPos = (uint8_t)newPos;
         }
         
@@ -611,17 +622,27 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
             char* name = a->faderNames[a->nameEditFader];
             char c = name[a->nameEditPos];
             
-            // Character set: A-Z, 0-9, space, symbols
-            // Simple increment/decrement through ASCII printable range (32-126)
+            // Character set: A-Z (65-90), 0-9 (48-57), space (32)
+            // Array: space, 0-9, A-Z (37 total characters)
+            const char charset[] = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            const int charsetLen = 37;
+            
+            // Find current position in charset
+            int currentIdx = 0;
             if (c == 0) c = 'A';  // Initialize if null
+            for (int i = 0; i < charsetLen; i++) {
+                if (charset[i] == c) {
+                    currentIdx = i;
+                    break;
+                }
+            }
             
-            c += data.encoders[1];
+            // Move to next/previous character
+            currentIdx += data.encoders[1];
+            if (currentIdx < 0) currentIdx = charsetLen - 1;
+            if (currentIdx >= charsetLen) currentIdx = 0;
             
-            // Wrap around printable ASCII range (space to ~)
-            if (c < 32) c = 126;
-            if (c > 126) c = 32;
-            
-            name[a->nameEditPos] = c;
+            name[a->nameEditPos] = charset[currentIdx];
         }
         
         // Right encoder button: exit name edit mode (only on press, not hold)
@@ -871,104 +892,107 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
     // Clear the modified flag when saving
     a->namesModified = false;
     
-    // Write debug snapshot
-    stream.addMemberName("debug");
-    stream.openObject();
-        stream.addMemberName("stepCount");
-        stream.addNumber((int)a->debugSnapshot.stepCount);
-        
-        stream.addMemberName("fader0Value");
-        stream.addNumber(a->debugSnapshot.fader0Value);
-        
-        stream.addMemberName("lastMidiValue0");
-        stream.addNumber(a->debugSnapshot.lastMidiValue0);
-        
-        stream.addMemberName("hasControl0");
-        stream.addBoolean(a->debugSnapshot.hasControl0);
-        
-        stream.addMemberName("paramChangedCount");
-        stream.addNumber(a->debugSnapshot.paramChangedCount);
-        
-        stream.addMemberName("midiSentCount");
-        stream.addNumber(a->debugSnapshot.midiSentCount);
-        
-        stream.addMemberName("lastParamChangedValue");
-        stream.addNumber(a->debugSnapshot.lastParamChangedValue);
-        
-        stream.addMemberName("lastParamChangedStep");
-        stream.addNumber((int)a->debugSnapshot.lastParamChangedStep);
-        
-        stream.addMemberName("pickupEnterCount");
-        stream.addNumber(a->debugSnapshot.pickupEnterCount);
-        
-        stream.addMemberName("pickupExitCount");
-        stream.addNumber(a->debugSnapshot.pickupExitCount);
-        
-        stream.addMemberName("lastPhysicalPos");
-        stream.addNumber(a->debugSnapshot.lastPhysicalPos);
-        
-        stream.addMemberName("lastPickupPivot");
-        stream.addNumber(a->debugSnapshot.lastPickupPivot);
-        
-        stream.addMemberName("lastPickupStartValue");
-        stream.addNumber(a->debugSnapshot.lastPickupStartValue);
-        
-        stream.addMemberName("lastMismatch");
-        stream.addNumber(a->debugSnapshot.lastMismatch);
-        
-        stream.addMemberName("lastCaughtUpUp");
-        stream.addBoolean(a->debugSnapshot.lastCaughtUpUp);
-        
-        stream.addMemberName("lastCaughtUpDown");
-        stream.addBoolean(a->debugSnapshot.lastCaughtUpDown);
-        
-        stream.addMemberName("lastButtonState");
-        stream.addNumber(a->debugSnapshot.lastButtonState);
-        
-        stream.addMemberName("nameEditModeActive");
-        stream.addBoolean(a->debugSnapshot.nameEditModeActive);
-        
-        stream.addMemberName("nameEditFaderIdx");
-        stream.addNumber(a->debugSnapshot.nameEditFaderIdx);
-        
-        stream.addMemberName("nameEditCursorPos");
-        stream.addNumber(a->debugSnapshot.nameEditCursorPos);
-        
-        stream.addMemberName("encoderLCount");
-        stream.addNumber(a->debugSnapshot.encoderLCount);
-        
-        stream.addMemberName("encoderRCount");
-        stream.addNumber(a->debugSnapshot.encoderRCount);
-        
-        stream.addMemberName("currentPage");
-        stream.addNumber(a->debugSnapshot.currentPage);
-        
-        stream.addMemberName("currentSel");
-        stream.addNumber(a->debugSnapshot.currentSel);
-        
-        // Pickup indicator debug - detailed state for all 32 faders
-        stream.addMemberName("pickupDebug");
-        stream.openArray();
-        for (int i = 0; i < 32; i++) {
-            stream.openObject();
-                stream.addMemberName("faderIdx");
-                stream.addNumber(i);
-                stream.addMemberName("pickupActive");
-                stream.addBoolean(a->debugSnapshot.pickupModeActive[i]);
-                stream.addMemberName("internalValue");
-                stream.addNumber(a->debugSnapshot.internalFaderValue[i]);
-                stream.addMemberName("physicalValue");
-                stream.addNumber(a->debugSnapshot.physicalFaderValue[i]);
-                stream.addMemberName("pivotValue");
-                stream.addNumber(a->debugSnapshot.pickupPivotValue[i]);
-                stream.addMemberName("startValue");
-                stream.addNumber(a->debugSnapshot.pickupStartValueArray[i]);
-                stream.addMemberName("mismatch");
-                stream.addNumber(fabsf(a->debugSnapshot.physicalFaderValue[i] - a->debugSnapshot.internalFaderValue[i]));
-            stream.closeObject();
-        }
-        stream.closeArray();
-    stream.closeObject();
+    // Write debug snapshot (only if debug logging is enabled)
+    int debugEnabled = (int)(self->v[kParamDebugLog] + 0.5f);
+    if (debugEnabled) {
+        stream.addMemberName("debug");
+        stream.openObject();
+            stream.addMemberName("stepCount");
+            stream.addNumber((int)a->debugSnapshot.stepCount);
+            
+            stream.addMemberName("fader0Value");
+            stream.addNumber(a->debugSnapshot.fader0Value);
+            
+            stream.addMemberName("lastMidiValue0");
+            stream.addNumber(a->debugSnapshot.lastMidiValue0);
+            
+            stream.addMemberName("hasControl0");
+            stream.addBoolean(a->debugSnapshot.hasControl0);
+            
+            stream.addMemberName("paramChangedCount");
+            stream.addNumber(a->debugSnapshot.paramChangedCount);
+            
+            stream.addMemberName("midiSentCount");
+            stream.addNumber(a->debugSnapshot.midiSentCount);
+            
+            stream.addMemberName("lastParamChangedValue");
+            stream.addNumber(a->debugSnapshot.lastParamChangedValue);
+            
+            stream.addMemberName("lastParamChangedStep");
+            stream.addNumber((int)a->debugSnapshot.lastParamChangedStep);
+            
+            stream.addMemberName("pickupEnterCount");
+            stream.addNumber(a->debugSnapshot.pickupEnterCount);
+            
+            stream.addMemberName("pickupExitCount");
+            stream.addNumber(a->debugSnapshot.pickupExitCount);
+            
+            stream.addMemberName("lastPhysicalPos");
+            stream.addNumber(a->debugSnapshot.lastPhysicalPos);
+            
+            stream.addMemberName("lastPickupPivot");
+            stream.addNumber(a->debugSnapshot.lastPickupPivot);
+            
+            stream.addMemberName("lastPickupStartValue");
+            stream.addNumber(a->debugSnapshot.lastPickupStartValue);
+            
+            stream.addMemberName("lastMismatch");
+            stream.addNumber(a->debugSnapshot.lastMismatch);
+            
+            stream.addMemberName("lastCaughtUpUp");
+            stream.addBoolean(a->debugSnapshot.lastCaughtUpUp);
+            
+            stream.addMemberName("lastCaughtUpDown");
+            stream.addBoolean(a->debugSnapshot.lastCaughtUpDown);
+            
+            stream.addMemberName("lastButtonState");
+            stream.addNumber(a->debugSnapshot.lastButtonState);
+            
+            stream.addMemberName("nameEditModeActive");
+            stream.addBoolean(a->debugSnapshot.nameEditModeActive);
+            
+            stream.addMemberName("nameEditFaderIdx");
+            stream.addNumber(a->debugSnapshot.nameEditFaderIdx);
+            
+            stream.addMemberName("nameEditCursorPos");
+            stream.addNumber(a->debugSnapshot.nameEditCursorPos);
+            
+            stream.addMemberName("encoderLCount");
+            stream.addNumber(a->debugSnapshot.encoderLCount);
+            
+            stream.addMemberName("encoderRCount");
+            stream.addNumber(a->debugSnapshot.encoderRCount);
+            
+            stream.addMemberName("currentPage");
+            stream.addNumber(a->debugSnapshot.currentPage);
+            
+            stream.addMemberName("currentSel");
+            stream.addNumber(a->debugSnapshot.currentSel);
+            
+            // Pickup indicator debug - detailed state for all 32 faders
+            stream.addMemberName("pickupDebug");
+            stream.openArray();
+            for (int i = 0; i < 32; i++) {
+                stream.openObject();
+                    stream.addMemberName("faderIdx");
+                    stream.addNumber(i);
+                    stream.addMemberName("pickupActive");
+                    stream.addBoolean(a->debugSnapshot.pickupModeActive[i]);
+                    stream.addMemberName("internalValue");
+                    stream.addNumber(a->debugSnapshot.internalFaderValue[i]);
+                    stream.addMemberName("physicalValue");
+                    stream.addNumber(a->debugSnapshot.physicalFaderValue[i]);
+                    stream.addMemberName("pivotValue");
+                    stream.addNumber(a->debugSnapshot.pickupPivotValue[i]);
+                    stream.addMemberName("startValue");
+                    stream.addNumber(a->debugSnapshot.pickupStartValueArray[i]);
+                    stream.addMemberName("mismatch");
+                    stream.addNumber(fabsf(a->debugSnapshot.physicalFaderValue[i] - a->debugSnapshot.internalFaderValue[i]));
+                stream.closeObject();
+            }
+            stream.closeArray();
+        stream.closeObject();
+    }
     
     // Write display layout info for debugging/screenshots
     stream.addMemberName("displayLayout");
