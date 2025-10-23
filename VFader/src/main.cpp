@@ -61,10 +61,12 @@ struct VFader : public _NT_algorithm {
     
     // Per-fader note settings
     struct FaderNoteSettings {
-        uint8_t displayMode;         // 0=Number (0-127), 1=Note
+        uint8_t displayMode;         // 0=Number (0-100), 1=Note
         uint8_t sharpFlat;           // 0=Sharp, 1=Flat
         uint8_t bottomMidi;          // 0-127 (MIDI note number, C-1 = 0, G9 = 127)
         uint8_t topMidi;             // 0-127 (MIDI note number)
+        uint8_t bottomValue;         // 0-100 (for Number mode)
+        uint8_t topValue;            // 0-100 (for Number mode)
         uint8_t chromaticScale[12];  // 0=off, 1=on for each note (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
     };
     FaderNoteSettings faderNoteSettings[32];  // Settings for all 32 faders
@@ -76,6 +78,8 @@ struct VFader : public _NT_algorithm {
             faderNoteSettings[i].sharpFlat = 0;       // Default to Sharps
             faderNoteSettings[i].bottomMidi = 36;     // C1 (MIDI 36)
             faderNoteSettings[i].topMidi = 96;        // C6 (MIDI 96)
+            faderNoteSettings[i].bottomValue = 0;     // 0% for Number mode
+            faderNoteSettings[i].topValue = 100;      // 100% for Number mode
             // Initialize chromatic scale - all notes ON by default
             for (int j = 0; j < 12; j++) {
                 faderNoteSettings[i].chromaticScale[j] = 1;
@@ -144,6 +148,26 @@ struct VFader : public _NT_algorithm {
         
         return activeNotes[index];
     }
+    
+    // Helper: Map fader value to value range (for Number mode)
+    // Returns the scaled value (0-100) to display/send
+    int snapToValueRange(float faderValue, const FaderNoteSettings& settings) {
+        // More aggressive handling for extremes - expand the edge zones
+        // Bottom 5% always maps to bottom value, top 5% always maps to top value
+        if (faderValue <= 0.05f) return settings.bottomValue;
+        if (faderValue >= 0.95f) return settings.topValue;
+        
+        // Map fader value 0.05-0.95 to bottomValue-topValue range
+        float adjustedValue = (faderValue - 0.05f) / 0.9f;  // Normalize 0.05-0.95 to 0-1
+        int range = settings.topValue - settings.bottomValue;
+        int scaledValue = settings.bottomValue + (int)(adjustedValue * range + 0.5f);
+        
+        // Clamp to ensure we stay within bounds
+        if (scaledValue < settings.bottomValue) scaledValue = settings.bottomValue;
+        if (scaledValue > settings.topValue) scaledValue = settings.topValue;
+        
+        return scaledValue;
+    }
 
     // Pot throttling and deadband
     float potLast[3] = { -1.0f, -1.0f, -1.0f };
@@ -190,9 +214,12 @@ struct VFader : public _NT_algorithm {
         uint8_t selectedFaderDisplayMode;
         uint8_t selectedFaderBottomMidi;
         uint8_t selectedFaderTopMidi;
+        uint8_t selectedFaderBottomValue;
+        uint8_t selectedFaderTopValue;
         uint8_t lastSentMidiValue;
         float lastSentFaderValue;
         uint8_t snappedNoteValue;
+        uint8_t scaledNumberValue;  // The 0-100 value after snapToValueRange
         
         // Pickup indicator debug - for all 32 faders
         bool pickupModeActive[32];
@@ -426,14 +453,17 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             
             if (firstSend || valueChanged) {
                 uint8_t midiValue;
+                int scaledValue = 0;  // Track the scaled value for debug
                 
                 // Check if this fader is in Note mode
                 if (a->faderNoteSettings[i].displayMode == 1) {
                     // Note mode: snap to active note and send that MIDI note number
                     midiValue = (uint8_t)a->snapToActiveNote(currentValue, a->faderNoteSettings[i]);
                 } else {
-                    // Number mode: convert 0.0-1.0 to 0-127 (7-bit MIDI CC)
-                    midiValue = (uint8_t)(currentValue * 127.0f + 0.5f);
+                    // Number mode: snap to value range (0-100), then scale to MIDI (0-127)
+                    scaledValue = a->snapToValueRange(currentValue, a->faderNoteSettings[i]);
+                    // Map 0-100 to 0-127
+                    midiValue = (uint8_t)((scaledValue * 127) / 100);
                     if (midiValue > 127) midiValue = 127;
                 }
                 
@@ -442,10 +472,14 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     a->debugSnapshot.selectedFaderDisplayMode = a->faderNoteSettings[i].displayMode;
                     a->debugSnapshot.selectedFaderBottomMidi = a->faderNoteSettings[i].bottomMidi;
                     a->debugSnapshot.selectedFaderTopMidi = a->faderNoteSettings[i].topMidi;
+                    a->debugSnapshot.selectedFaderBottomValue = a->faderNoteSettings[i].bottomValue;
+                    a->debugSnapshot.selectedFaderTopValue = a->faderNoteSettings[i].topValue;
                     a->debugSnapshot.lastSentMidiValue = midiValue;
                     a->debugSnapshot.lastSentFaderValue = currentValue;
                     if (a->faderNoteSettings[i].displayMode == 1) {
                         a->debugSnapshot.snappedNoteValue = midiValue;
+                    } else {
+                        a->debugSnapshot.scaledNumberValue = (uint8_t)scaledValue;
                     }
                 }
                 
@@ -487,8 +521,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     uint8_t noteValue = (uint8_t)a->snapToActiveNote(currentValue, a->faderNoteSettings[i]);
                     full = noteValue << 7;  // Shift to MSB position for 14-bit
                 } else {
-                    // Number mode: calculate 14-bit value
-                    full = (int)(currentValue * 16383.0f + 0.5f);
+                    // Number mode: snap to value range (0-100), scale to 14-bit (0-16383)
+                    int scaledValue = a->snapToValueRange(currentValue, a->faderNoteSettings[i]);
+                    // Map 0-100 to 0-16383
+                    full = (scaledValue * 16383) / 100;
                 }
                 
                 uint8_t msb = (uint8_t)(full >> 7);
@@ -603,18 +639,30 @@ bool draw(_NT_algorithm* self) {
             NT_drawText(xValue, yPos, sharpFlatStr, (a->nameEditSettingPos == 1) ? 15 : 10);
             yPos += yStep;
             
-            // Top Note
-            NT_drawText(xLabel, yPos, "Top Note", (a->nameEditSettingPos == 2) ? 15 : 7);
-            char topNoteStr[8];
-            a->getMidiNoteName(settings.topMidi, settings.sharpFlat, topNoteStr, sizeof(topNoteStr));
-            NT_drawText(xValue, yPos, topNoteStr, (a->nameEditSettingPos == 2) ? 15 : 10);
+            // Top Value (displays as note name in Note mode, number in Number mode)
+            NT_drawText(xLabel, yPos, "Top Value", (a->nameEditSettingPos == 2) ? 15 : 7);
+            char topValStr[8];
+            if (settings.displayMode == 1) {
+                // Note mode: show note name
+                a->getMidiNoteName(settings.topMidi, settings.sharpFlat, topValStr, sizeof(topValStr));
+            } else {
+                // Number mode: show value 0-100
+                snprintf(topValStr, sizeof(topValStr), "%d", settings.topValue);
+            }
+            NT_drawText(xValue, yPos, topValStr, (a->nameEditSettingPos == 2) ? 15 : 10);
             yPos += yStep;
             
-            // Bottom Note
-            NT_drawText(xLabel, yPos, "Bottom Note", (a->nameEditSettingPos == 3) ? 15 : 7);
-            char botNoteStr[8];
-            a->getMidiNoteName(settings.bottomMidi, settings.sharpFlat, botNoteStr, sizeof(botNoteStr));
-            NT_drawText(xValue, yPos, botNoteStr, (a->nameEditSettingPos == 3) ? 15 : 10);
+            // Bottom Value (displays as note name in Note mode, number in Number mode)
+            NT_drawText(xLabel, yPos, "Bottom Value", (a->nameEditSettingPos == 3) ? 15 : 7);
+            char botValStr[8];
+            if (settings.displayMode == 1) {
+                // Note mode: show note name
+                a->getMidiNoteName(settings.bottomMidi, settings.sharpFlat, botValStr, sizeof(botValStr));
+            } else {
+                // Number mode: show value 0-100
+                snprintf(botValStr, sizeof(botValStr), "%d", settings.bottomValue);
+            }
+            NT_drawText(xValue, yPos, botValStr, (a->nameEditSettingPos == 3) ? 15 : 10);
             
             // Right side: Note Mask (3 rows of 4 notes)
             static const char* noteNamesSharp[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
@@ -693,6 +741,23 @@ bool draw(_NT_algorithm* self) {
         // Draw fader background (empty part)
         NT_drawShapeI(kNT_box, faderX, faderTop, faderX + faderWidth, faderBottom, 7);
         
+        // Draw tick marks at 25%, 50%, 75% positions
+        int faderMidY = faderTop + (faderHeight / 2);
+        int fader25Y = faderTop + (faderHeight * 3 / 4);  // 25% from top = 75% from bottom
+        int fader75Y = faderTop + (faderHeight / 4);      // 75% from top = 25% from bottom
+        
+        // 50% mark - lines (4px) on left and right
+        NT_drawShapeI(kNT_line, faderX, faderMidY, faderX + 3, faderMidY, 10);
+        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, faderMidY, faderX + faderWidth, faderMidY, 10);
+        
+        // 25% mark - same length lines (4px)
+        NT_drawShapeI(kNT_line, faderX, fader25Y, faderX + 3, fader25Y, 10);
+        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, fader25Y, faderX + faderWidth, fader25Y, 10);
+        
+        // 75% mark - same length lines (4px)
+        NT_drawShapeI(kNT_line, faderX, fader75Y, faderX + 3, fader75Y, 10);
+        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, fader75Y, faderX + faderWidth, fader75Y, 10);
+        
         // Draw filled part of fader with horizontal lines (segmented look)
         // Lines are added from BOTTOM up as value increases (like stacking plates)
         if (fillHeight > 0) {
@@ -716,10 +781,10 @@ bool draw(_NT_algorithm* self) {
             a->getMidiNoteName(midiNote, faderSettings.sharpFlat, noteBuf, sizeof(noteBuf));
             NT_drawText(xCenter + 3, faderTop - 2, noteBuf, nameColor, kNT_textCentre, kNT_textNormal);
         } else {
-            // Number mode - display percentage
-            int valuePct = (int)(v * 100.0f + 0.5f);
+            // Number mode - display scaled value (respecting bottomValue/topValue range)
+            int scaledValue = a->snapToValueRange(v, faderSettings);
             char valBuf[4];
-            snprintf(valBuf, sizeof(valBuf), "%d", valuePct);
+            snprintf(valBuf, sizeof(valBuf), "%d", scaledValue);
             NT_drawText(xCenter + 3, faderTop - 2, valBuf, nameColor, kNT_textCentre, kNT_textNormal);
         }
         
@@ -893,8 +958,9 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                             settings.sharpFlat = (settings.sharpFlat == 0) ? 1 : 0;
                             settingsChanged = true;
                             break;
-                        case 2: // Top MIDI Note (0-127)
-                            {
+                        case 2: // Top Value (MIDI note in Note mode, 0-100 value in Number mode)
+                            if (settings.displayMode == 1) {
+                                // Note mode: edit MIDI note (0-127)
                                 int newMidi = (int)settings.topMidi + encoderDelta;
                                 if (newMidi < 0) newMidi = 0;
                                 if (newMidi > 127) newMidi = 127;
@@ -904,11 +970,24 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                                 if (settings.topMidi < settings.bottomMidi) {
                                     settings.bottomMidi = settings.topMidi;
                                 }
-                                settingsChanged = true;
+                            } else {
+                                // Number mode: edit value (0-100)
+                                int newValue = (int)settings.topValue + encoderDelta;
+                                if (newValue < 0) newValue = 0;
+                                if (newValue > 100) newValue = 100;
+                                
+                                // Validate: top must be greater than bottom (not equal)
+                                if (newValue <= settings.bottomValue) {
+                                    newValue = settings.bottomValue + 1;
+                                    if (newValue > 100) newValue = 100;
+                                }
+                                settings.topValue = (uint8_t)newValue;
                             }
+                            settingsChanged = true;
                             break;
-                        case 3: // Bottom MIDI Note (0-127)
-                            {
+                        case 3: // Bottom Value (MIDI note in Note mode, 0-100 value in Number mode)
+                            if (settings.displayMode == 1) {
+                                // Note mode: edit MIDI note (0-127)
                                 int newMidi = (int)settings.bottomMidi + encoderDelta;
                                 if (newMidi < 0) newMidi = 0;
                                 if (newMidi > 127) newMidi = 127;
@@ -918,8 +997,20 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                                 if (settings.bottomMidi > settings.topMidi) {
                                     settings.topMidi = settings.bottomMidi;
                                 }
-                                settingsChanged = true;
+                            } else {
+                                // Number mode: edit value (0-100)
+                                int newValue = (int)settings.bottomValue + encoderDelta;
+                                if (newValue < 0) newValue = 0;
+                                if (newValue > 100) newValue = 100;
+                                
+                                // Validate: bottom must be less than top (not equal)
+                                if (newValue >= settings.topValue) {
+                                    newValue = settings.topValue - 1;
+                                    if (newValue < 0) newValue = 0;
+                                }
+                                settings.bottomValue = (uint8_t)newValue;
                             }
+                            settingsChanged = true;
                             break;
                     }
                 } else {
@@ -1344,12 +1435,18 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
                 stream.addNumber(a->debugSnapshot.selectedFaderBottomMidi);
                 stream.addMemberName("selectedFaderTopMidi");
                 stream.addNumber(a->debugSnapshot.selectedFaderTopMidi);
+                stream.addMemberName("selectedFaderBottomValue");
+                stream.addNumber(a->debugSnapshot.selectedFaderBottomValue);
+                stream.addMemberName("selectedFaderTopValue");
+                stream.addNumber(a->debugSnapshot.selectedFaderTopValue);
                 stream.addMemberName("lastSentMidiValue");
                 stream.addNumber(a->debugSnapshot.lastSentMidiValue);
                 stream.addMemberName("lastSentFaderValue");
                 stream.addNumber(a->debugSnapshot.lastSentFaderValue);
                 stream.addMemberName("snappedNoteValue");
                 stream.addNumber(a->debugSnapshot.snappedNoteValue);
+                stream.addMemberName("scaledNumberValue");
+                stream.addNumber(a->debugSnapshot.scaledNumberValue);
             stream.closeObject();
             
             // Pickup indicator debug - detailed state for all 32 faders
@@ -1459,6 +1556,10 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
         stream.addNumber(a->faderNoteSettings[i].bottomMidi);
         stream.addMemberName("topMidi");
         stream.addNumber(a->faderNoteSettings[i].topMidi);
+        stream.addMemberName("bottomValue");
+        stream.addNumber(a->faderNoteSettings[i].bottomValue);
+        stream.addMemberName("topValue");
+        stream.addNumber(a->faderNoteSettings[i].topValue);
         stream.addMemberName("chromaticScale");
         stream.openArray();
         for (int j = 0; j < 12; j++) {
@@ -1544,6 +1645,22 @@ static bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
                         if (midi < 0) midi = 0;
                         if (midi > 127) midi = 127;
                         a->faderNoteSettings[j].topMidi = (uint8_t)midi;
+                    }
+                    else if (parse.matchName("bottomValue")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        int value = (int)val;
+                        if (value < 0) value = 0;
+                        if (value > 100) value = 100;
+                        a->faderNoteSettings[j].bottomValue = (uint8_t)value;
+                    }
+                    else if (parse.matchName("topValue")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        int value = (int)val;
+                        if (value < 0) value = 0;
+                        if (value > 100) value = 100;
+                        a->faderNoteSettings[j].topValue = (uint8_t)value;
                     }
                     // Backward compatibility with old format
                     else if (parse.matchName("bottomNote") || parse.matchName("bottomOctave") || 
