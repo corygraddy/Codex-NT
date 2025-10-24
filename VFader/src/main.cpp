@@ -1171,7 +1171,7 @@ bool draw(_NT_algorithm* self) {
     }
     
     // Build number in bottom right corner (tiny font)
-    NT_drawText(236, 58, "B44", 15, kNT_textLeft, kNT_textTiny);
+    NT_drawText(236, 60, "B44", 15, kNT_textLeft, kNT_textTiny);
     
     return true; // keep suppressing default header; change to false if needed in next step
 }
