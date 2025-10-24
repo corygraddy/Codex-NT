@@ -272,6 +272,8 @@ enum {
     kParamMidiMode,      // MIDI mode: 0=7-bit, 1=14-bit
     kParamPickupMode,    // Pickup mode: 0=Scaled, 1=Catch
     kParamDebugLog,      // Debug logging: 0=Off, 1=On
+    kParamZeroPad,       // Zero pad: 0=Off, 1=On
+    kParamZeroPadSize,   // Zero pad size: 1-5
     // CV Output parameters (output bus selection)
     kParamCvOut1,
     kParamCvOut1Mode,
@@ -305,6 +307,8 @@ static const char* const pageStrings[] = { "Page 1", "Page 2", "Page 3", "Page 4
 static const char* const midiModeStrings[] = { "7-bit CC", "14-bit CC", NULL };
 static const char* const pickupModeStrings[] = { "Scaled", "Catch", NULL };
 static const char* const debugLogStrings[] = { "Off", "On", NULL };
+static const char* const zeroPadStrings[] = { "Off", "On", NULL };
+static const char* const zeroPadSizeStrings[] = { "1", "2", "3", "4", "5", NULL };
 
 // Fader mapping strings for CV outputs: None, Fader 1-32
 static const char* const faderMapStrings[] = {
@@ -370,6 +374,24 @@ static void initParameters() {
     parameters[kParamDebugLog].scaling = kNT_scalingNone;
     parameters[kParamDebugLog].enumStrings = debugLogStrings;
     
+    // ZERO PAD parameter
+    parameters[kParamZeroPad].name = "Zero Pad";
+    parameters[kParamZeroPad].min = 0;
+    parameters[kParamZeroPad].max = 1;  // 0=Off, 1=On
+    parameters[kParamZeroPad].def = 0;  // Default to Off
+    parameters[kParamZeroPad].unit = kNT_unitEnum;
+    parameters[kParamZeroPad].scaling = kNT_scalingNone;
+    parameters[kParamZeroPad].enumStrings = zeroPadStrings;
+    
+    // ZERO PAD SIZE parameter
+    parameters[kParamZeroPadSize].name = "Pad Size";
+    parameters[kParamZeroPadSize].min = 1;
+    parameters[kParamZeroPadSize].max = 5;  // 1-5
+    parameters[kParamZeroPadSize].def = 2;  // Default to size 2
+    parameters[kParamZeroPadSize].unit = kNT_unitEnum;
+    parameters[kParamZeroPadSize].scaling = kNT_scalingNone;
+    parameters[kParamZeroPadSize].enumStrings = zeroPadSizeStrings;
+    
     // CV Output parameters (8 CV outputs with mode and fader mapping)
     // Using NT_PARAMETER_CV_OUTPUT_WITH_MODE pattern manually
     for (int i = 0; i < 8; ++i) {
@@ -424,28 +446,30 @@ static void initParameters() {
 }
 
 // Parameter pages: Single FADER page with all parameters
-static uint8_t faderPageParams[35];  // FADER 1-8 + MIDI Mode + Pickup Mode + Debug Log + 24 CV params
+static uint8_t faderPageParams[37];  // FADER 1-8 + MIDI Mode + Pickup Mode + Debug Log + Zero Pad + Pad Size + 24 CV params
 static _NT_parameterPage page_array[1];
 static _NT_parameterPages pages;
 
 static void initPages() {
-    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Debug Log, then all CV output parameters
+    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Debug Log, Zero Pad, Pad Size, then all CV output parameters
     for (int i = 0; i < 8; ++i) {
         faderPageParams[i] = kParamFader1 + i;
     }
     faderPageParams[8] = kParamMidiMode;
     faderPageParams[9] = kParamPickupMode;
     faderPageParams[10] = kParamDebugLog;
+    faderPageParams[11] = kParamZeroPad;
+    faderPageParams[12] = kParamZeroPadSize;
     
     // CV Output parameters at the bottom
     for (int i = 0; i < 8; ++i) {
-        faderPageParams[11 + i * 3 + 0] = kParamCvOut1 + (i * 2);      // CV Out bus
-        faderPageParams[11 + i * 3 + 1] = kParamCvOut1Mode + (i * 2);  // CV Out mode
-        faderPageParams[11 + i * 3 + 2] = kParamCvOut1Map + i;         // Fader mapping
+        faderPageParams[13 + i * 3 + 0] = kParamCvOut1 + (i * 2);      // CV Out bus
+        faderPageParams[13 + i * 3 + 1] = kParamCvOut1Mode + (i * 2);  // CV Out mode
+        faderPageParams[13 + i * 3 + 2] = kParamCvOut1Map + i;         // Fader mapping
     }
     
     page_array[0].name = "VFADER";
-    page_array[0].numParams = 35;
+    page_array[0].numParams = 37;
     page_array[0].params = faderPageParams;
     
     pages.numPages = 1;
@@ -518,8 +542,31 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
     return alg;
 }
 
+// Helper function to apply zero pad deadzone
+static inline float applyZeroPad(float value, bool zeroPadEnabled, int padSize) {
+    if (!zeroPadEnabled || value > 0.0f) {
+        return value;
+    }
+    
+    // Calculate deadzone threshold based on pad size (1-5)
+    // Size 1 = 1% deadzone, Size 5 = 5% deadzone
+    float threshold = (float)padSize / 100.0f;
+    
+    if (value <= threshold) {
+        return 0.0f;
+    }
+    
+    // Scale remaining range to maintain full output range
+    // Map (threshold, 1.0] to (0.0, 1.0]
+    return (value - threshold) / (1.0f - threshold);
+}
+
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     VFader* a = (VFader*)self;
+    
+    // Get zero pad settings
+    bool zeroPadEnabled = (self->v[kParamZeroPad] > 0);
+    int padSize = self->v[kParamZeroPadSize];
     
     // Advance step counter and UI ticking
     a->stepCounter++;
@@ -623,7 +670,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     if (midiMode == 0) {
         // 7-bit mode: send all changed faders
         for (int i = 0; i < 32; ++i) {
-            float currentValue = a->internalFaders[i];
+            float rawValue = a->internalFaders[i];
+            float currentValue = applyZeroPad(rawValue, zeroPadEnabled, padSize);
             float lastValue = a->lastMidiValues[i];
             
             // Note: Soft takeover removed for external I2C control
@@ -685,7 +733,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         uint8_t status = 0xB0 | (midiChannel - 1);
         
         for (int i = 0; i < 32; ++i) {
-            float currentValue = a->internalFaders[i];
+            float rawValue = a->internalFaders[i];
+            float currentValue = applyZeroPad(rawValue, zeroPadEnabled, padSize);
             float lastValue = a->lastMidiValues[i];
             
             // Note: Soft takeover removed for external I2C control
@@ -758,9 +807,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             continue;
         }
         
-        // Get the mapped fader value (0.0 to 1.0)
+        // Get the mapped fader value (0.0 to 1.0) and apply zero pad
         int faderIdx = faderMapping - 1;  // Convert 1-32 to 0-31
-        float faderValue = a->internalFaders[faderIdx];
+        float rawValue = a->internalFaders[faderIdx];
+        float faderValue = applyZeroPad(rawValue, zeroPadEnabled, padSize);
         
         // Convert to CV voltage (0-10V range)
         float voltage = faderValue * 10.0f;
@@ -1171,7 +1221,7 @@ bool draw(_NT_algorithm* self) {
     }
     
     // Build number in bottom right corner (tiny font)
-    NT_drawText(236, 60, "B44", 15, kNT_textLeft, kNT_textTiny);
+    NT_drawText(236, 60, "B45", 15, kNT_textLeft, kNT_textTiny);
     
     return true; // keep suppressing default header; change to false if needed in next step
 }
