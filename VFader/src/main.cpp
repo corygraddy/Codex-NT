@@ -1547,16 +1547,18 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     uint32_t algIndex = NT_algorithmIndex(self);
     uint32_t paramOffset = NT_parameterOffset();
     
-    // Left pot controls fader to the LEFT of selected (or first on page if selected is first)
+    // Left pot controls fader to the LEFT of selected (does nothing if first fader selected)
     if (data.controls & kNT_potL) {
-        float potValue = data.pots[0];
-        // Apply deadband - only update if change is significant
-        if (a->potLast[0] < 0.0f || fabsf(potValue - a->potLast[0]) > a->potDeadband) {
-            int targetCol = (colInPage > 0) ? (colInPage - 1) : 0;
-            int faderParam = targetCol;  // FADER 1-8 maps to 0-7
-            int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
-            NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
-            a->potLast[0] = potValue;
+        if (colInPage > 0) {  // Only active if not first fader
+            float potValue = data.pots[0];
+            // Apply deadband - only update if change is significant
+            if (a->potLast[0] < 0.0f || fabsf(potValue - a->potLast[0]) > a->potDeadband) {
+                int targetCol = colInPage - 1;
+                int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+                int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
+                NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                a->potLast[0] = potValue;
+            }
         }
     }
     
@@ -1572,16 +1574,18 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         }
     }
     
-    // Right pot controls fader to the RIGHT of selected (or last on page if selected is last)
+    // Right pot controls fader to the RIGHT of selected (does nothing if last fader selected)
     if (data.controls & kNT_potR) {
-        float potValue = data.pots[2];
-        // Apply deadband - only update if change is significant
-        if (a->potLast[2] < 0.0f || fabsf(potValue - a->potLast[2]) > a->potDeadband) {
-            int targetCol = (colInPage < 7) ? (colInPage + 1) : 7;
-            int faderParam = targetCol;  // FADER 1-8 maps to 0-7
-            int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
-            NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
-            a->potLast[2] = potValue;
+        if (colInPage < 7) {  // Only active if not last fader
+            float potValue = data.pots[2];
+            // Apply deadband - only update if change is significant
+            if (a->potLast[2] < 0.0f || fabsf(potValue - a->potLast[2]) > a->potDeadband) {
+                int targetCol = colInPage + 1;
+                int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+                int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
+                NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                a->potLast[2] = potValue;
+            }
         }
     }
 }
