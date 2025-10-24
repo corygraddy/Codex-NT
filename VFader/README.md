@@ -1,20 +1,27 @@
 # VFader
 
-**Version 1.0** - 32 Virtual Faders with MIDI CC Output for Disting NT
+**Build 44** - 32 Virtual Faders with MIDI CC and CV Output for Disting NT
 
 ## Overview
 
-VFader is a Disting NT algorithm that provides 32 virtual faders organized into 4 pages of 8 faders each. Each fader can be controlled via the three pots (L, C, R) and outputs MIDI CC messages in either 7-bit or 14-bit resolution.
+VFader is a Disting NT algorithm that provides 32 virtual faders organized into 4 pages of 8 faders each. Each fader can be controlled via the three pots (L, C, R) and outputs both MIDI CC messages (7-bit or 14-bit) and direct CV outputs.
 
 ## Key Features
 
 - **32 Virtual Faders**: 4 pages × 8 faders per page
+- **8 CV Outputs**: Direct voltage control (0-10V) from any fader
 - **Dual Control Modes**: 
   - **Note Mode**: Send specific MIDI notes with customizable chromatic scales
   - **Number Mode**: Send scaled values (0-100 range, customizable)
 - **MIDI Output**: 
   - 7-bit CC (CC 1-32, values 0-127)
   - 14-bit CC (CC 0-31 MSB paired with CC 32-63 LSB, values 0-16383)
+- **CV Output**:
+  - 8 configurable CV outputs
+  - Route to any of 28 disting NT output buses
+  - Map each CV output to any of the 32 faders
+  - Add or Replace output modes
+  - 0-10V range based on fader position
 - **Pickup Modes**: 
   - **Scaled**: Physical pot position scales the fader's range
   - **Catch**: Fader doesn't change until pot catches the current value
@@ -51,11 +58,11 @@ VFader is a Disting NT algorithm that provides 32 virtual faders organized into 
 
 ### Fader Function Settings
 
-From name edit mode, press **Right Encoder Button** to access function settings:
+From name edit mode, turn **Right Pot** to access function settings:
 
 #### Display Mode
-- **Number**: Sends values 0-100 (scaled to MIDI range)
-- **Note**: Sends specific MIDI note numbers
+- **Number**: Displays values 0-100 (scaled to MIDI range)
+- **Note**: Displays specific MIDI note numbers
 
 #### Accidental (Note Mode only)
 - **Sharp**: Display notes with sharps (C, C#, D, etc.)
@@ -102,6 +109,14 @@ Controls how physical pot movement affects the virtual fader:
 - **On**: Captures detailed state information in preset JSON for troubleshooting
 - Default: Off
 
+### CV Out 1-8
+Each CV output has three parameters (scroll down on the VFADER parameter page):
+- **CV Out N**: Select output bus (1-28)
+- **CV Out N mode**: Add (mix with existing signal) or Replace (overwrite)
+- **CV Out N Fader**: Map to a fader (None, or Fader 1-32)
+
+CV outputs generate 0-10V based on the mapped fader's position (0.0-1.0 → 0-10V).
+
 ## MIDI Output Details
 
 ### 7-bit Mode
@@ -123,6 +138,12 @@ Controls how physical pot movement affects the virtual fader:
 
 ## Use Cases
 
+### Controlling External Modules via CV
+- Map VFader outputs directly to module CV inputs (V/Oct, filter cutoff, etc.)
+- No need for separate MIDI→CV conversion
+- Control up to 8 parameters simultaneously
+- Perfect for complex patches with multiple modules
+
 ### Controlling a DAW
 - Map VFader's MIDI CCs to DAW mixer faders, plugin parameters, or automation
 - Use 14-bit mode for smooth, high-resolution control
@@ -142,6 +163,7 @@ Controls how physical pot movement affects the virtual fader:
 - Map F8R's faders to VFader's FADER 1-8 parameters
 - Control 8 faders simultaneously per page
 - Switch pages for 32 total faders under F8R control
+- CV outputs enable direct modular control alongside MIDI
 
 ## Tips & Tricks
 
@@ -160,10 +182,12 @@ Controls how physical pot movement affects the virtual fader:
 ## Technical Specifications
 
 - **Algorithm GUID**: VFDR
-- **Build Version**: 25
+- **Build Version**: 44
 - **Memory Usage**: Optimized for Disting NT SRAM
 - **MIDI Channel**: 1 (hardcoded)
 - **MIDI Destinations**: USB + Internal
+- **CV Outputs**: 8 configurable outputs, 0-10V range
+- **Output Buses**: Routes to any of 28 disting NT buses
 - **Preset Format**: JSON with full state serialization
 
 ## Troubleshooting
@@ -172,6 +196,12 @@ Controls how physical pot movement affects the virtual fader:
 - Check that the correct page is selected
 - Verify Pickup Mode settings (may need to "catch" the value in Catch mode)
 - Ensure the pot is mapped to the correct FADER parameter
+
+### CV output not working
+- Check that the CV output is mapped to a fader (not "None")
+- Verify the output bus routing matches your patch
+- Ensure the output mode (Add/Replace) is appropriate
+- Check that the mapped fader has a non-zero value
 
 ### MIDI not received by destination
 - Verify MIDI routing in Disting NT settings
@@ -186,6 +216,15 @@ Controls how physical pot movement affects the virtual fader:
 Enable Debug Log parameter and save a preset to capture detailed state information in the JSON file.
 
 ## Version History
+
+### Build 44 (October 2025)
+- Added 8 CV outputs with fader mapping
+- CV outputs generate 0-10V based on fader position
+- Configurable output bus routing (1-28)
+- Add/Replace output modes
+- Build number display in UI (bottom right corner)
+- Improved parameter page layout (single scrollable page)
+- Updated description to include CV outputs
 
 ### v1.0 (October 2025)
 - Initial release
