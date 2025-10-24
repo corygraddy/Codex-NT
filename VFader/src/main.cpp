@@ -272,6 +272,32 @@ enum {
     kParamMidiMode,      // MIDI mode: 0=7-bit, 1=14-bit
     kParamPickupMode,    // Pickup mode: 0=Scaled, 1=Catch
     kParamDebugLog,      // Debug logging: 0=Off, 1=On
+    // CV Output parameters (output bus selection)
+    kParamCvOut1,
+    kParamCvOut1Mode,
+    kParamCvOut2,
+    kParamCvOut2Mode,
+    kParamCvOut3,
+    kParamCvOut3Mode,
+    kParamCvOut4,
+    kParamCvOut4Mode,
+    kParamCvOut5,
+    kParamCvOut5Mode,
+    kParamCvOut6,
+    kParamCvOut6Mode,
+    kParamCvOut7,
+    kParamCvOut7Mode,
+    kParamCvOut8,
+    kParamCvOut8Mode,
+    // CV Output fader mappings (which fader controls each CV output)
+    kParamCvOut1Map,
+    kParamCvOut2Map,
+    kParamCvOut3Map,
+    kParamCvOut4Map,
+    kParamCvOut5Map,
+    kParamCvOut6Map,
+    kParamCvOut7Map,
+    kParamCvOut8Map,
     kNumParameters
 };
 
@@ -279,6 +305,15 @@ static const char* const pageStrings[] = { "Page 1", "Page 2", "Page 3", "Page 4
 static const char* const midiModeStrings[] = { "7-bit CC", "14-bit CC", NULL };
 static const char* const pickupModeStrings[] = { "Scaled", "Catch", NULL };
 static const char* const debugLogStrings[] = { "Off", "On", NULL };
+
+// Fader mapping strings for CV outputs: None, Fader 1-32
+static const char* const faderMapStrings[] = {
+    "None", "Fader 1", "Fader 2", "Fader 3", "Fader 4", "Fader 5", "Fader 6", "Fader 7", "Fader 8",
+    "Fader 9", "Fader 10", "Fader 11", "Fader 12", "Fader 13", "Fader 14", "Fader 15", "Fader 16",
+    "Fader 17", "Fader 18", "Fader 19", "Fader 20", "Fader 21", "Fader 22", "Fader 23", "Fader 24",
+    "Fader 25", "Fader 26", "Fader 27", "Fader 28", "Fader 29", "Fader 30", "Fader 31", "Fader 32",
+    NULL
+};
 
 static _NT_parameter parameters[kNumParameters] = {};
 
@@ -334,27 +369,91 @@ static void initParameters() {
     parameters[kParamDebugLog].unit = kNT_unitEnum;
     parameters[kParamDebugLog].scaling = kNT_scalingNone;
     parameters[kParamDebugLog].enumStrings = debugLogStrings;
+    
+    // CV Output parameters (8 CV outputs with mode and fader mapping)
+    // Using NT_PARAMETER_CV_OUTPUT_WITH_MODE pattern manually
+    for (int i = 0; i < 8; ++i) {
+        // CV Output bus selection (which output 1-28)
+        int cvOutParam = kParamCvOut1 + (i * 2);
+        parameters[cvOutParam].name = (i == 0) ? "CV Out 1" :
+                                       (i == 1) ? "CV Out 2" :
+                                       (i == 2) ? "CV Out 3" :
+                                       (i == 3) ? "CV Out 4" :
+                                       (i == 4) ? "CV Out 5" :
+                                       (i == 5) ? "CV Out 6" :
+                                       (i == 6) ? "CV Out 7" : "CV Out 8";
+        parameters[cvOutParam].min = 1;
+        parameters[cvOutParam].max = 28;
+        parameters[cvOutParam].def = i + 1;  // Default to outputs 1-8
+        parameters[cvOutParam].unit = kNT_unitCvOutput;
+        parameters[cvOutParam].scaling = kNT_scalingNone;
+        parameters[cvOutParam].enumStrings = NULL;
+        
+        // CV Output mode (add/replace)
+        int cvModeParam = kParamCvOut1Mode + (i * 2);
+        parameters[cvModeParam].name = (i == 0) ? "CV Out 1 mode" :
+                                        (i == 1) ? "CV Out 2 mode" :
+                                        (i == 2) ? "CV Out 3 mode" :
+                                        (i == 3) ? "CV Out 4 mode" :
+                                        (i == 4) ? "CV Out 5 mode" :
+                                        (i == 5) ? "CV Out 6 mode" :
+                                        (i == 6) ? "CV Out 7 mode" : "CV Out 8 mode";
+        parameters[cvModeParam].min = 0;
+        parameters[cvModeParam].max = 1;
+        parameters[cvModeParam].def = 0;
+        parameters[cvModeParam].unit = kNT_unitOutputMode;
+        parameters[cvModeParam].scaling = kNT_scalingNone;
+        parameters[cvModeParam].enumStrings = NULL;
+        
+        // Fader mapping (which fader 0-32 controls this CV output)
+        int mapParam = kParamCvOut1Map + i;
+        parameters[mapParam].name = (i == 0) ? "CV Out 1 Fader" :
+                                     (i == 1) ? "CV Out 2 Fader" :
+                                     (i == 2) ? "CV Out 3 Fader" :
+                                     (i == 3) ? "CV Out 4 Fader" :
+                                     (i == 4) ? "CV Out 5 Fader" :
+                                     (i == 5) ? "CV Out 6 Fader" :
+                                     (i == 6) ? "CV Out 7 Fader" : "CV Out 8 Fader";
+        parameters[mapParam].min = 0;
+        parameters[mapParam].max = 32;  // 0=None, 1-32=Fader 1-32
+        parameters[mapParam].def = 0;   // Default to None
+        parameters[mapParam].unit = kNT_unitEnum;
+        parameters[mapParam].scaling = kNT_scalingNone;
+        parameters[mapParam].enumStrings = faderMapStrings;
+    }
 }
 
-// Parameter page with FADER 1-8, MIDI Mode, Pickup Mode, and Debug Log visible (PAGE hidden)
-static uint8_t visibleParams[11];  // FADER 1-8 + MIDI Mode + Pickup Mode + Debug Log
-static _NT_parameterPage page_array[1];
+// Parameter pages: FADER page and CV OUTPUT page
+static uint8_t faderPageParams[11];  // FADER 1-8 + MIDI Mode + Pickup Mode + Debug Log
+static uint8_t cvOutputPageParams[24]; // 8 CV outputs + 8 modes + 8 fader mappings
+static _NT_parameterPage page_array[2];
 static _NT_parameterPages pages;
 
 static void initPages() {
-    // Show FADER 1-8, MIDI Mode, Pickup Mode, and Debug Log (hide PAGE to avoid confusion)
+    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, and Debug Log (hide PAGE to avoid confusion)
     for (int i = 0; i < 8; ++i) {
-        visibleParams[i] = kParamFader1 + i;
+        faderPageParams[i] = kParamFader1 + i;
     }
-    visibleParams[8] = kParamMidiMode;
-    visibleParams[9] = kParamPickupMode;
-    visibleParams[10] = kParamDebugLog;
+    faderPageParams[8] = kParamMidiMode;
+    faderPageParams[9] = kParamPickupMode;
+    faderPageParams[10] = kParamDebugLog;
     
-    page_array[0].name = "VFADER";
+    page_array[0].name = "FADER";
     page_array[0].numParams = 11;
-    page_array[0].params = visibleParams;
+    page_array[0].params = faderPageParams;
     
-    pages.numPages = 1;
+    // CV OUTPUT page: All CV output parameters
+    for (int i = 0; i < 8; ++i) {
+        cvOutputPageParams[i * 3 + 0] = kParamCvOut1 + (i * 2);      // CV Out bus
+        cvOutputPageParams[i * 3 + 1] = kParamCvOut1Mode + (i * 2);  // CV Out mode
+        cvOutputPageParams[i * 3 + 2] = kParamCvOut1Map + i;         // Fader mapping
+    }
+    
+    page_array[1].name = "CV OUTPUT";
+    page_array[1].numParams = 24;
+    page_array[1].params = cvOutputPageParams;
+    
+    pages.numPages = 2;
     pages.pages = page_array;
 }
 
@@ -426,8 +525,6 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
 
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     VFader* a = (VFader*)self;
-    (void)busFrames;  // Not using CV output
-    (void)numFramesBy4;
     
     // Advance step counter and UI ticking
     a->stepCounter++;
@@ -645,6 +742,45 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         
         // Toggle phase for next step
         a->send14bitPhase = !a->send14bitPhase;
+    }
+    
+    // ========== CV OUTPUT GENERATION ==========
+    // Generate CV outputs based on fader mappings
+    int numFrames = numFramesBy4 * 4;
+    
+    for (int i = 0; i < 8; ++i) {
+        // Get parameters for this CV output
+        int cvOutParam = kParamCvOut1 + (i * 2);
+        int cvModeParam = kParamCvOut1Mode + (i * 2);
+        int mapParam = kParamCvOut1Map + i;
+        
+        int cvOutputIdx = self->v[cvOutParam] - 1;  // Bus index (0-27)
+        bool cvReplace = self->v[cvModeParam];      // 0=add, 1=replace
+        int faderMapping = self->v[mapParam];       // 0=None, 1-32=Fader 1-32
+        
+        // Skip if no fader mapped or invalid output
+        if (faderMapping == 0 || cvOutputIdx < 0 || cvOutputIdx >= 28) {
+            continue;
+        }
+        
+        // Get the mapped fader value (0.0 to 1.0)
+        int faderIdx = faderMapping - 1;  // Convert 1-32 to 0-31
+        float faderValue = a->internalFaders[faderIdx];
+        
+        // Convert to CV voltage (0-10V range)
+        float voltage = faderValue * 10.0f;
+        
+        // Get pointer to output bus
+        float* cvOutput = busFrames + (cvOutputIdx * numFrames);
+        
+        // Write DC voltage to all frames
+        for (int frame = 0; frame < numFrames; ++frame) {
+            if (cvReplace) {
+                cvOutput[frame] = voltage;
+            } else {
+                cvOutput[frame] += voltage;
+            }
+        }
     }
 }
 
