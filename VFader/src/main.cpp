@@ -272,8 +272,7 @@ enum {
     kParamMidiMode,      // MIDI mode: 0=7-bit, 1=14-bit
     kParamPickupMode,    // Pickup mode: 0=Scaled, 1=Catch
     kParamDebugLog,      // Debug logging: 0=Off, 1=On
-    kParamZeroPad,       // Zero pad: 0=Off, 1=On
-    kParamZeroPadSize,   // Zero pad size: 1-5
+    kParamDriftControl,  // Drift control: 0=Off, 1=Low, 2=Med, 3=High
     // CV Output parameters (output bus selection)
     kParamCvOut1,
     kParamCvOut1Mode,
@@ -307,8 +306,7 @@ static const char* const pageStrings[] = { "Page 1", "Page 2", "Page 3", "Page 4
 static const char* const midiModeStrings[] = { "7-bit CC", "14-bit CC", NULL };
 static const char* const pickupModeStrings[] = { "Scaled", "Catch", NULL };
 static const char* const debugLogStrings[] = { "Off", "On", NULL };
-static const char* const zeroPadStrings[] = { "Off", "On", NULL };
-static const char* const zeroPadSizeStrings[] = { "1", "2", "3", "4", "5", NULL };
+static const char* const driftControlStrings[] = { "Off", "Low", "Med", "High", NULL };
 
 // Fader mapping strings for CV outputs: None, Fader 1-32
 static const char* const faderMapStrings[] = {
@@ -374,23 +372,14 @@ static void initParameters() {
     parameters[kParamDebugLog].scaling = kNT_scalingNone;
     parameters[kParamDebugLog].enumStrings = debugLogStrings;
     
-    // ZERO PAD parameter
-    parameters[kParamZeroPad].name = "Zero Pad";
-    parameters[kParamZeroPad].min = 0;
-    parameters[kParamZeroPad].max = 1;  // 0=Off, 1=On
-    parameters[kParamZeroPad].def = 0;  // Default to Off
-    parameters[kParamZeroPad].unit = kNT_unitEnum;
-    parameters[kParamZeroPad].scaling = kNT_scalingNone;
-    parameters[kParamZeroPad].enumStrings = zeroPadStrings;
-    
-    // ZERO PAD SIZE parameter
-    parameters[kParamZeroPadSize].name = "Pad Size";
-    parameters[kParamZeroPadSize].min = 1;
-    parameters[kParamZeroPadSize].max = 5;  // 1-5
-    parameters[kParamZeroPadSize].def = 2;  // Default to size 2
-    parameters[kParamZeroPadSize].unit = kNT_unitEnum;
-    parameters[kParamZeroPadSize].scaling = kNT_scalingNone;
-    parameters[kParamZeroPadSize].enumStrings = zeroPadSizeStrings;
+    // DRIFT CONTROL parameter
+    parameters[kParamDriftControl].name = "Drift Ctrl";
+    parameters[kParamDriftControl].min = 0;
+    parameters[kParamDriftControl].max = 3;  // 0=Off, 1=Low, 2=Med, 3=High
+    parameters[kParamDriftControl].def = 0;  // Default to Off
+    parameters[kParamDriftControl].unit = kNT_unitEnum;
+    parameters[kParamDriftControl].scaling = kNT_scalingNone;
+    parameters[kParamDriftControl].enumStrings = driftControlStrings;
     
     // CV Output parameters (8 CV outputs with mode and fader mapping)
     // Using NT_PARAMETER_CV_OUTPUT_WITH_MODE pattern manually
@@ -446,30 +435,29 @@ static void initParameters() {
 }
 
 // Parameter pages: Single FADER page with all parameters
-static uint8_t faderPageParams[37];  // FADER 1-8 + MIDI Mode + Pickup Mode + Debug Log + Zero Pad + Pad Size + 24 CV params
+static uint8_t faderPageParams[36];  // FADER 1-8 + MIDI Mode + Pickup Mode + Debug Log + Drift Control + 24 CV params
 static _NT_parameterPage page_array[1];
 static _NT_parameterPages pages;
 
 static void initPages() {
-    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Debug Log, Zero Pad, Pad Size, then all CV output parameters
+    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Debug Log, Drift Control, then all CV output parameters
     for (int i = 0; i < 8; ++i) {
         faderPageParams[i] = kParamFader1 + i;
     }
     faderPageParams[8] = kParamMidiMode;
     faderPageParams[9] = kParamPickupMode;
     faderPageParams[10] = kParamDebugLog;
-    faderPageParams[11] = kParamZeroPad;
-    faderPageParams[12] = kParamZeroPadSize;
+    faderPageParams[11] = kParamDriftControl;
     
     // CV Output parameters at the bottom
     for (int i = 0; i < 8; ++i) {
-        faderPageParams[13 + i * 3 + 0] = kParamCvOut1 + (i * 2);      // CV Out bus
-        faderPageParams[13 + i * 3 + 1] = kParamCvOut1Mode + (i * 2);  // CV Out mode
-        faderPageParams[13 + i * 3 + 2] = kParamCvOut1Map + i;         // Fader mapping
+        faderPageParams[12 + i * 3 + 0] = kParamCvOut1 + (i * 2);      // CV Out bus
+        faderPageParams[12 + i * 3 + 1] = kParamCvOut1Mode + (i * 2);  // CV Out mode
+        faderPageParams[12 + i * 3 + 2] = kParamCvOut1Map + i;         // Fader mapping
     }
     
     page_array[0].name = "VFADER";
-    page_array[0].numParams = 37;
+    page_array[0].numParams = 36;
     page_array[0].params = faderPageParams;
     
     pages.numPages = 1;
@@ -542,31 +530,40 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
     return alg;
 }
 
-// Helper function to apply zero pad deadzone
-static inline float applyZeroPad(float value, bool zeroPadEnabled, int padSize) {
-    if (!zeroPadEnabled || value > 0.0f) {
-        return value;
+// Helper function to apply drift control
+// Locks fader value until input changes by more than threshold
+static inline float applyDriftControl(float newValue, float lockedValue, int driftLevel) {
+    if (driftLevel == 0) {
+        return newValue;  // No drift control
     }
     
-    // Calculate deadzone threshold based on pad size (1-5)
-    // Size 1 = 1% deadzone, Size 5 = 5% deadzone
-    float threshold = (float)padSize / 100.0f;
-    
-    if (value <= threshold) {
-        return 0.0f;
+    // Drift thresholds: Low=0.5%, Med=1%, High=2%
+    float threshold;
+    switch (driftLevel) {
+        case 1: threshold = 0.005f; break;  // Low
+        case 2: threshold = 0.01f; break;   // Med
+        case 3: threshold = 0.02f; break;   // High
+        default: threshold = 0.0f; break;
     }
     
-    // Scale remaining range to maintain full output range
-    // Map (threshold, 1.0] to (0.0, 1.0]
-    return (value - threshold) / (1.0f - threshold);
+    // If locked value is negative, this is first read - use new value
+    if (lockedValue < 0.0f) {
+        return newValue;
+    }
+    
+    // Check if new value differs from locked value by more than threshold
+    if (fabsf(newValue - lockedValue) > threshold) {
+        return newValue;  // Update to new value
+    }
+    
+    return lockedValue;  // Stay locked at current value
 }
 
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     VFader* a = (VFader*)self;
     
-    // Get zero pad settings
-    bool zeroPadEnabled = (self->v[kParamZeroPad] > 0);
-    int padSize = self->v[kParamZeroPadSize];
+    // Get drift control setting
+    int driftLevel = self->v[kParamDriftControl];
     
     // Advance step counter and UI ticking
     a->stepCounter++;
@@ -671,8 +668,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         // 7-bit mode: send all changed faders
         for (int i = 0; i < 32; ++i) {
             float rawValue = a->internalFaders[i];
-            float currentValue = applyZeroPad(rawValue, zeroPadEnabled, padSize);
             float lastValue = a->lastMidiValues[i];
+            
+            // Apply drift control - lock value unless change exceeds threshold
+            float currentValue = applyDriftControl(rawValue, lastValue, driftLevel);
             
             // Note: Soft takeover removed for external I2C control
             // External controllers always have immediate control
@@ -734,8 +733,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         
         for (int i = 0; i < 32; ++i) {
             float rawValue = a->internalFaders[i];
-            float currentValue = applyZeroPad(rawValue, zeroPadEnabled, padSize);
             float lastValue = a->lastMidiValues[i];
+            
+            // Apply drift control - lock value unless change exceeds threshold
+            float currentValue = applyDriftControl(rawValue, lastValue, driftLevel);
             
             // Note: Soft takeover removed for external I2C control
             // External controllers always have immediate control
@@ -807,10 +808,13 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             continue;
         }
         
-        // Get the mapped fader value (0.0 to 1.0) and apply zero pad
+        // Get the mapped fader value (0.0 to 1.0)
         int faderIdx = faderMapping - 1;  // Convert 1-32 to 0-31
         float rawValue = a->internalFaders[faderIdx];
-        float faderValue = applyZeroPad(rawValue, zeroPadEnabled, padSize);
+        float lastValue = a->lastMidiValues[faderIdx];
+        
+        // Apply drift control - same as MIDI
+        float faderValue = applyDriftControl(rawValue, lastValue, driftLevel);
         
         // Convert to CV voltage (0-10V range)
         float voltage = faderValue * 10.0f;
