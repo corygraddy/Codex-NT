@@ -423,14 +423,13 @@ static void initParameters() {
     }
 }
 
-// Parameter pages: FADER page and CV OUTPUT page
-static uint8_t faderPageParams[11];  // FADER 1-8 + MIDI Mode + Pickup Mode + Debug Log
-static uint8_t cvOutputPageParams[24]; // 8 CV outputs + 8 modes + 8 fader mappings
-static _NT_parameterPage page_array[2];
+// Parameter pages: Single FADER page with all parameters
+static uint8_t faderPageParams[35];  // FADER 1-8 + MIDI Mode + Pickup Mode + Debug Log + 24 CV params
+static _NT_parameterPage page_array[1];
 static _NT_parameterPages pages;
 
 static void initPages() {
-    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, and Debug Log (hide PAGE to avoid confusion)
+    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Debug Log, then all CV output parameters
     for (int i = 0; i < 8; ++i) {
         faderPageParams[i] = kParamFader1 + i;
     }
@@ -438,22 +437,18 @@ static void initPages() {
     faderPageParams[9] = kParamPickupMode;
     faderPageParams[10] = kParamDebugLog;
     
-    page_array[0].name = "FADER";
-    page_array[0].numParams = 11;
-    page_array[0].params = faderPageParams;
-    
-    // CV OUTPUT page: All CV output parameters
+    // CV Output parameters at the bottom
     for (int i = 0; i < 8; ++i) {
-        cvOutputPageParams[i * 3 + 0] = kParamCvOut1 + (i * 2);      // CV Out bus
-        cvOutputPageParams[i * 3 + 1] = kParamCvOut1Mode + (i * 2);  // CV Out mode
-        cvOutputPageParams[i * 3 + 2] = kParamCvOut1Map + i;         // Fader mapping
+        faderPageParams[11 + i * 3 + 0] = kParamCvOut1 + (i * 2);      // CV Out bus
+        faderPageParams[11 + i * 3 + 1] = kParamCvOut1Mode + (i * 2);  // CV Out mode
+        faderPageParams[11 + i * 3 + 2] = kParamCvOut1Map + i;         // Fader mapping
     }
     
-    page_array[1].name = "CV OUTPUT";
-    page_array[1].numParams = 24;
-    page_array[1].params = cvOutputPageParams;
+    page_array[0].name = "VFADER";
+    page_array[0].numParams = 35;
+    page_array[0].params = faderPageParams;
     
-    pages.numPages = 2;
+    pages.numPages = 1;
     pages.pages = page_array;
 }
 
@@ -1174,6 +1169,9 @@ bool draw(_NT_algorithm* self) {
         a->debugSnapshot.pickupPivotValue[i] = a->pickupPivot[i];
         a->debugSnapshot.pickupStartValueArray[i] = a->pickupStartValue[i];
     }
+    
+    // Build number in bottom right corner (tiny font)
+    NT_drawText(236, 58, "B44", 15, kNT_textLeft, kNT_textTiny);
     
     return true; // keep suppressing default header; change to false if needed in next step
 }
@@ -2121,7 +2119,7 @@ static bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
 static const _NT_factory factory = {
     .guid = NT_MULTICHAR('V','F','D','R'),
     .name = "VFader",
-    .description = "VF.025 - 32 virtual faders, 7/14-bit MIDI CC, F8R control",
+    .description = "32 virtual faders, 7/14-bit MIDI CC, CV outputs, F8R control",
     .numSpecifications = 0,
     .specifications = NULL,
     .calculateStaticRequirements = NULL,
