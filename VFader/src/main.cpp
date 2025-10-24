@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 42  // P and F aligned vertically, fader fill now solid (kNT_rectangle)
+#define VFADER_BUILD 43  // Show fader number (1-32) instead of CC number
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
@@ -1011,19 +1011,11 @@ bool draw(_NT_algorithm* self) {
     snprintf(pageBuf, sizeof(pageBuf), "P%d", a->page);
     NT_drawText(rightAreaX, 20, pageBuf, 15, kNT_textLeft, kNT_textLarge);  // Was rightAreaX + 8, now rightAreaX to align with F
     
-    // CC number under page number - large with "F" prefix, moved down 6px
+    // Fader number under page number - large with "F" prefix, moved down 6px
     int selectedFaderIdx = a->sel - 1;  // 0-31
-    int midiMode = (int)(self->v[kParamMidiMode] + 0.5f);
-    int ccNumber;
-    if (midiMode == 0) {
-        // 7-bit mode: CC 1-32
-        ccNumber = selectedFaderIdx + 1;
-    } else {
-        // 14-bit mode: CC 0-31
-        ccNumber = selectedFaderIdx;
-    }
+    int faderNumber = selectedFaderIdx + 1;  // 1-32
     char ccBuf[8];
-    snprintf(ccBuf, sizeof(ccBuf), "F%d", ccNumber);
+    snprintf(ccBuf, sizeof(ccBuf), "F%d", faderNumber);
     NT_drawText(rightAreaX, 41, ccBuf, 15, kNT_textLeft, kNT_textLarge);  // Was 38, now 38 + 3 = 41
     
     // Category (chars 6-10) - moved left 3px and down 3px from previous position

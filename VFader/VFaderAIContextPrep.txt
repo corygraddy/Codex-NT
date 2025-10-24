@@ -1,0 +1,260 @@
+=== VFADER PROJECT CONTEXT FOR AI ASSISTANCE ===
+
+PROJECT OVERVIEW:
+VFader is a disting NT plugin that provides 32 virtual MIDI CC faders with advanced features including:
+- 4 pages of 8 faders each (32 total)
+- Customizable fader names and categories
+- Note mode (MIDI notes with scale filtering) or Number mode (0-100 range)
+- Pickup mode for smooth value transitions when switching pages
+- Macro fader system (one fader controls multiple others in Absolute or Relative mode)
+- 7-bit or 14-bit MIDI output
+- Custom UI with visual fader representation
+
+FILE STRUCTURE:
+- /VFader/src/main.cpp - Main plugin code (~2000 lines)
+- /VFader/Makefile - Build configuration
+- /VFader/BuildTransfer.sh - Script to compile and deploy to SD card
+- /distingNT_API/ - Expert Sleepers API (read-only reference)
+
+BUILD PROCESS:
+1. `make` - Compiles to build/VFader.o
+2. `./BuildTransfer.sh` - Copies to /Volumes/Untitled/programs/plug-ins/VFader.o and ejects SD card
+3. Or combine: `make && ./BuildTransfer.sh`
+
+CRITICAL CODE ARCHITECTURE:
+
+1. DATA STRUCTURES (lines 18-220):
+   - `struct VFader : public _NT_algorithm` - Main state container
+   - `float internalFaders[32]` - The actual fader values (0.0-1.0)
+   - `char faderNames[32][13]` - Names: 6 chars for name + 5 for category + null
+   - `FaderNoteSettings faderNoteSettings[32]` - Per-fader configuration
+   - All state is preserved in presets via JSON serialization
+
+2. PARAMETER DEFINITIONS (lines 325-360):
+   - kParamFader1-8: The 8 physical faders (what hardware maps to)
+   - kParamPage: Page selector (1-4)
+   - kParamMidiMode: 7-bit vs 14-bit MIDI output
+   - Parameters are EXTERNAL - they map to the 8 visible faders based on page
+
+3. CORE FUNCTIONS:
+   - `void step(_NT_algorithm* self)` (lines 400-600): Audio rate processing, MIDI output
+   - `bool draw(_NT_algorithm* self)` (lines 620-1050): Custom UI rendering
+   - `void customUi(_NT_algorithm* self, const _NT_uiData& data)` (lines 1055-1380): Handle encoder/pot input
+   - `void serialise(_NT_algorithm*, _NT_outputStream&)` (lines 1600-1850): Save state to JSON
+   
+4. KEY PATTERNS:
+
+   FADER INDEXING - VERY IMPORTANT:
+   - Parameters (kParamFader1-8): 1-based for display, 0-7 for array access
+   - Page: 1-4 for display
+   - sel (selected fader): 1-32 for display, (sel-1) for array access
+   - Internal arrays: Always 0-31 indexed
+   - Formula: internalFaderIndex = (page - 1) * 8 + (paramIndex)
+   
+   PICKUP MODE LOGIC:
+   - When fader not on current page, enters "pickup mode"
+   - Physical fader position doesn't affect internal value until it crosses the internal value
+   - Prevents jumps when switching pages
+   - See lines 450-490 for implementation
+
+   MACRO FADER SYSTEM:
+   - controlAllCount: how many faders to the right this controls (0 = disabled)
+   - controlAllMode: 0=Absolute (offset), 1=Relative (proportional scaling)
+   - Absolute: child = master + (child_reference - 0.5), clamped 0-1
+   - Relative: child = child_reference + (master - 0.5) * 2 * child_reference, clamped 0-1
+   - See lines 520-570 for implementation
+
+5. UI RENDERING (draw function):
+   
+   DISPLAY AREA: 256x64 pixels, origin top-left (0,0)
+   
+   TEXT SIZES (from API):
+   - kNT_textTiny: 3x5 pixel font
+   - kNT_textNormal: 8 point font
+   - kNT_textLarge: 21 point antialiased font
+   
+   SHAPE TYPES (from API):
+   - kNT_point, kNT_line
+   - kNT_box: unfilled rectangle
+   - kNT_rectangle: filled rectangle
+   - kNT_circle: unfilled
+   
+   COLORS: 0 (black) to 15 (white), grayscale
+   
+   FADER DISPLAY LAYOUT (lines 850-965):
+   - 8 columns, each 28px wide
+   - Fader bar: 12px wide, centered in column
+   - Value displayed above fader (note name or number)
+   - Name displayed vertically on left side
+   - Tick marks at 25%, 50%, 75%
+   - Solid fill grows from bottom (using kNT_rectangle)
+   - "M" indicator for macro master faders, "C" for children
+   
+   RIGHT SIDE DISPLAY (lines 1005-1030):
+   - P1-P4: Page number (large)
+   - F1-F32: Fader number (large)
+   - Category name (normal size)
+
+6. EDIT MODE (customUi function):
+   
+   THREE EDIT PAGES:
+   - Page 0: Name/Category editing (chars 0-5 name, 6-10 category)
+   - Page 1: Function settings (display mode, MIDI range, scale mask, macro)
+   - Page 2: Macro fader settings (count, mode)
+   
+   CONTROLS:
+   - Right encoder: Navigate through characters/settings
+   - Left encoder: Select which character/setting to edit
+   - Pot R: Switch between edit pages
+   - Right button (press): Enter/exit edit mode
+   
+   CHARACTER EDITING (lines 1095-1125):
+   - Character set: " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+   - Encoder scrolls through charset
+   - Left encoder moves cursor position
+
+7. MIDI OUTPUT (step function, lines 450-570):
+   
+   7-BIT MODE:
+   - Sends CC 1-32 on channel 1
+   - Value: 0-127 from fader 0.0-1.0
+   - Only sends on change (tracks lastMidiValues)
+   
+   14-BIT MODE:
+   - Sends CC 0-31 paired (MSB on CCx, LSB on CCx+32)
+   - Alternates MSB/LSB each step for efficiency
+   - Value: 0-16383 split into high/low bytes
+   
+   MIDI SEND FUNCTION:
+   - NT_sendMidiOut(uint32_t destMask, uint8_t byte0, uint8_t byte1, uint8_t byte2)
+   - destMask: kNT_destinationBreakout | kNT_destinationUSB
+   - byte0: status byte (0xB0 + channel-1 for CC)
+   - byte1: CC number
+   - byte2: value
+
+8. PRESET SERIALIZATION (serialise function):
+   
+   JSON STRUCTURE:
+   - Top level: displayLayout, faders[], faderNames[], noteSettings[], etc.
+   - displayLayout: UI state (buildVersion, currentPage, selectedFader, nameEditMode)
+   - All arrays automatically serialized by API
+   
+   STREAM API:
+   - stream.addMemberName("name") then stream.addNumber/addString/addBoolean/etc.
+   - stream.openObject() / closeObject() for nested objects
+   - stream.openArray() / closeArray() for arrays
+   - Arrays of primitives serialize automatically
+   - Complex arrays need manual iteration
+
+COMMON PITFALLS & LESSONS LEARNED:
+
+1. INDEXING BUGS:
+   - Always be crystal clear if a variable is 0-based or 1-based
+   - Use comments like "// 0-31" or "// 1-32" everywhere
+   - Convert immediately at function boundaries
+   - Example: `int currentFader = (a->sel - 1);  // 0-31 index`
+
+2. PRESET COMPATIBILITY:
+   - If you add new state variables, they won't be in old presets
+   - Initialize ALL state in struct declaration or constructor
+   - Don't assume loaded values are valid - add bounds checking
+   - Example: `if (a->nameEditFader > 31) a->nameEditFader = 0;`
+
+3. DRAWING PERFORMANCE:
+   - draw() is called every frame (~60fps)
+   - Keep drawing code efficient
+   - Don't do heavy calculations in draw() - cache in step() or customUi()
+
+4. POT/ENCODER HANDLING:
+   - Pots can be noisy - use deadband (we use 1.5%)
+   - Throttle pot updates to avoid flooding MIDI output
+   - Check `data.controls` bitmask before reading pot values
+   - Example: `if (data.controls & kNT_potL) { float potValue = data.pots[0]; }`
+
+5. BUTTON DEBOUNCING:
+   - Track lastButtonState to detect edges (press vs hold)
+   - Example: `bool pressed = (data.controls & kNT_encoderButtonR) && !(a->lastButtonState & kNT_encoderButtonR);`
+   - Update lastButtonState every frame
+
+6. MACRO FADER EDGE CASES:
+   - When master fader is at extreme (0.0 or 1.0), relative mode can clip children
+   - Need to clamp all child values to 0.0-1.0 range
+   - Must update children BEFORE they output MIDI (in step function)
+   - Reference values must be captured when macro is enabled
+
+7. FILL vs OUTLINE SHAPES:
+   - kNT_box is OUTLINE only (hollow)
+   - kNT_rectangle is FILLED
+   - We switched from box to rectangle for fader fill in Build 42
+
+8. TEXT ALIGNMENT:
+   - kNT_textLeft: x is left edge
+   - kNT_textCentre: x is center point  
+   - kNT_textRight: x is right edge
+   - Y is always top edge (not baseline)
+
+9. SCALE/NOTE SNAPPING:
+   - Need special handling for edges (0-5% always maps to min, 95-100% to max)
+   - Otherwise hard to hit exact top/bottom notes with physical fader
+   - Same applies to number mode value ranges
+
+10. ARRAY INITIALIZATION:
+    - Large arrays (32+ elements) should be initialized in declaration
+    - Example: `float array[32] = {0.5f, 0.5f, ...}` (all 32 values)
+    - Or use initialization function called from init()
+
+BUILD VERSION TRACKING:
+- #define VFADER_BUILD at top of file
+- Increment for every deployed change
+- Include brief description in comment
+- Current: Build 43
+
+USEFUL API FUNCTIONS:
+- NT_drawText(int x, int y, const char* str, int colour, alignment, size)
+- NT_drawShapeI(shape, int x0, y0, x1, y1, int colour)
+- NT_sendMidiOut(uint32_t destMask, byte0, byte1, byte2)
+- Data available in customUi: data.pots[0-2], data.encoders[0-1], data.controls bitmask
+
+DEBUGGING TIPS:
+- Add debug snapshot struct to capture state
+- Export debug data via preset JSON (see debugSnapshot in serialise)
+- Use build version display to confirm code is running
+- Test on hardware frequently - simulator behavior differs
+- Save presets often to avoid losing work
+
+FEATURE REQUESTS TO CONSIDER:
+- MIDI learn for CC assignments
+- Per-fader MIDI channel
+- CV input to control faders
+- Fader grouping/linking
+- Preset morphing
+- LFO modulation of faders
+- Randomization functions
+
+REPOSITORY:
+- GitHub: corygraddy/Codex-NT
+- Branch: main
+- Commit after each stable build
+- Push regularly to cloud backup
+
+HOW TO USE THIS CONTEXT:
+1. Paste this entire document into your AI conversation
+2. Describe the feature you want to add or bug to fix
+3. AI will have full context of architecture and can suggest specific code changes
+4. Always test on hardware after changes
+5. Update build number and commit when stable
+
+EXAMPLE WORKFLOW:
+```
+User: "I want to add a feature where holding left encoder button resets the selected fader to 50%"
+
+AI will know:
+- Where button handling is (customUi function)
+- How to detect button hold vs press (lastButtonState pattern)
+- How to access selected fader (a->sel - 1 for 0-based index)
+- How to update internal fader value (a->internalFaders[index])
+- Where to add the code (in customUi after button debouncing)
+- That MIDI update will happen automatically in next step()
+```
+
+Good luck building! The codebase is well-structured and ready for expansion.

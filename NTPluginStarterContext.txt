@@ -1,0 +1,535 @@
+=== DISTING NT PLUGIN DEVELOPMENT GUIDE ===
+
+OVERVIEW:
+This guide teaches you how to create plugins (called "algorithms") for the Expert Sleepers disting NT Eurorack module. Based on lessons learned from building VFader, a 32-fader MIDI controller with custom UI.
+
+PREREQUISITES:
+- macOS or Linux development environment
+- ARM cross-compiler toolchain (arm-none-eabi-gcc)
+- disting NT hardware or simulator
+- SD card for loading plugins
+- Text editor or IDE
+- Git for version control
+
+PROJECT SETUP:
+
+1. Clone the disting NT API:
+   ```bash
+   git clone https://github.com/expertsleepersltd/distingNT_API.git
+   cd distingNT_API
+   ```
+
+2. Create your plugin directory:
+   ```bash
+   mkdir MyPlugin
+   cd MyPlugin
+   mkdir src build include
+   ```
+
+3. Create Makefile (copy from examples and modify):
+   ```makefile
+   PLUGIN_NAME = MyPlugin
+   API_DIR = ../distingNT_API
+   
+   include $(API_DIR)/build/plugin.mk
+   ```
+
+4. Create BuildTransfer.sh script:
+   ```bash
+   #!/bin/bash
+   SD_VOLUME="/Volumes/Untitled"  # Adjust for your SD card name
+   
+   echo "Starting deployment of ${PLUGIN_NAME}.o ..."
+   
+   if [ ! -d "$SD_VOLUME" ]; then
+       echo "Error: SD card volume not found at $SD_VOLUME"
+       exit 1
+   fi
+   
+   cp "build/${PLUGIN_NAME}.o" "$SD_VOLUME/programs/plug-ins/"
+   diskutil eject "$SD_VOLUME"
+   echo "Deployment complete."
+   ```
+   
+   Make executable: `chmod +x BuildTransfer.sh`
+
+BASIC PLUGIN STRUCTURE:
+
+Your main.cpp file needs these components:
+
+```cpp
+#include <distingnt/api.h>
+#include <distingnt/serialisation.h>
+#include <cstdint>
+#include <cmath>
+
+#define PLUGIN_BUILD 1  // Version tracking
+
+// 1. STATE STRUCTURE
+struct MyPlugin : public _NT_algorithm {
+    // Your state variables here
+    float myValue = 0.5f;
+    uint8_t myCounter = 0;
+    
+    // Initialize any complex state
+    void init() {
+        // Setup code
+    }
+};
+
+// 2. PARAMETER DEFINITIONS
+enum Parameters {
+    kParamMyKnob,
+    kParamCount  // Always last - total count
+};
+
+// 3. INIT FUNCTION
+extern "C" void* create(_NT_algorithm* self) {
+    self->paramCount = kParamCount;
+    
+    // Describe parameters
+    self->paramDescriptors[kParamMyKnob].name = "My Knob";
+    self->paramDescriptors[kParamMyKnob].unit = "";
+    self->paramDescriptors[kParamMyKnob].minValue = 0.0f;
+    self->paramDescriptors[kParamMyKnob].maxValue = 1.0f;
+    self->paramDescriptors[kParamMyKnob].defaultValue = 0.5f;
+    
+    // Create and initialize state
+    MyPlugin* a = new(self) MyPlugin();
+    a->init();
+    return a;
+}
+
+// 4. AUDIO PROCESSING
+extern "C" void step(_NT_algorithm* self) {
+    MyPlugin* a = static_cast<MyPlugin*>(self);
+    
+    // Read parameters
+    float knobValue = self->v[kParamMyKnob];
+    
+    // Process audio
+    for (int i = 0; i < self->blockSize; i++) {
+        // Read inputs
+        float input = self->inputs[0][i];
+        
+        // Your DSP here
+        float output = input * knobValue;
+        
+        // Write outputs
+        self->outputs[0][i] = output;
+    }
+}
+
+// 5. PRESET SAVE
+extern "C" void serialise(_NT_algorithm* self, _NT_outputStream& stream) {
+    MyPlugin* a = static_cast<MyPlugin*>(self);
+    
+    stream.addMemberName("myValue");
+    stream.addNumber(a->myValue);
+    
+    stream.addMemberName("myCounter");
+    stream.addNumber(a->myCounter);
+}
+
+// 6. OPTIONAL: CUSTOM UI
+extern "C" bool draw(_NT_algorithm* self) {
+    MyPlugin* a = static_cast<MyPlugin*>(self);
+    
+    // Draw custom UI (256x64 pixels)
+    NT_drawText(10, 10, "Hello World", 15);
+    
+    return true;  // Suppress default UI
+}
+
+extern "C" uint32_t hasCustomUi(_NT_algorithm* self) {
+    // Return bitmask of controls you want to handle
+    return kNT_potL | kNT_encoderR;
+}
+
+extern "C" void customUi(_NT_algorithm* self, const _NT_uiData& data) {
+    MyPlugin* a = static_cast<MyPlugin*>(self);
+    
+    // Handle pot input
+    if (data.controls & kNT_potL) {
+        float potValue = data.pots[0];  // 0.0 to 1.0
+        a->myValue = potValue;
+    }
+    
+    // Handle encoder
+    if (data.encoders[1] != 0) {
+        a->myCounter += data.encoders[1];
+    }
+}
+```
+
+CRITICAL CONCEPTS:
+
+1. PARAMETERS vs STATE
+   - Parameters: External controls (knobs, CV inputs) defined in paramDescriptors
+   - State: Internal variables in your struct, preserved in presets
+   - Parameters are READ-ONLY in step() - use self->v[kParamX]
+   - State is READ-WRITE - use a->variableName
+   
+2. AUDIO PROCESSING (step function)
+   - Called once per audio block (default 24 samples at 48kHz)
+   - Access via self->inputs[channel][sample] and self->outputs[channel][sample]
+   - self->blockSize = number of samples to process
+   - self->sampleRate = sample rate (usually 48000)
+   - Keep it efficient - runs at audio rate!
+
+3. CUSTOM UI (draw function)
+   - Called ~60 times per second
+   - Display is 256x64 pixels, origin at top-left (0,0)
+   - Return true to suppress default parameter UI
+   - Return false to show default UI with your additions
+   
+4. CONTROLS (customUi function)
+   - data.pots[0-2]: Pot values (0.0 to 1.0), left/center/right
+   - data.encoders[0-1]: Encoder deltas (-n to +n), left/right
+   - data.controls: Bitmask of active controls
+   - Always check bitmask before reading values!
+   
+   Available controls:
+   - kNT_potL, kNT_potC, kNT_potR (pots)
+   - kNT_encoderL, kNT_encoderR (encoders)
+   - kNT_encoderButtonL, kNT_encoderButtonR (encoder buttons)
+
+5. DRAWING API
+   
+   Text:
+   - NT_drawText(int x, int y, const char* str, int colour=15, 
+                 _NT_textAlignment align=kNT_textLeft, 
+                 _NT_textSize size=kNT_textNormal)
+   
+   Text sizes:
+   - kNT_textTiny: 3x5 pixel font
+   - kNT_textNormal: 8 point font
+   - kNT_textLarge: 21 point antialiased
+   
+   Alignment:
+   - kNT_textLeft: x is left edge
+   - kNT_textCentre: x is center
+   - kNT_textRight: x is right edge
+   
+   Shapes:
+   - NT_drawShapeI(_NT_shape shape, int x0, int y0, int x1, int y1, int colour=15)
+   - NT_drawShapeF(_NT_shape shape, float x0, float y0, float x1, float y1, float colour=15)
+   
+   Shape types:
+   - kNT_point
+   - kNT_line
+   - kNT_box (outline only)
+   - kNT_rectangle (filled)
+   - kNT_circle (outline only)
+   
+   Colors: 0 (black) to 15 (white), grayscale
+
+6. MIDI OUTPUT
+   - NT_sendMidiOut(uint32_t destMask, uint8_t byte0, uint8_t byte1, uint8_t byte2)
+   
+   Destinations (OR together):
+   - kNT_destinationBreakout: Hardware MIDI jack
+   - kNT_destinationUSB: USB MIDI
+   - kNT_destinationSelectBus: Internal routing
+   - kNT_destinationInternal: Internal synth
+   
+   Example CC message:
+   ```cpp
+   uint8_t channel = 0;  // 0-15
+   uint8_t ccNumber = 1;
+   uint8_t value = 64;  // 0-127
+   NT_sendMidiOut(kNT_destinationBreakout | kNT_destinationUSB,
+                  0xB0 + channel,  // CC status
+                  ccNumber,
+                  value);
+   ```
+
+7. PRESET SERIALIZATION
+   - Use JSON via stream API
+   - Nested objects: stream.openObject() / closeObject()
+   - Arrays: stream.openArray() / closeArray()
+   - Values: addMemberName() then addNumber/addString/addBoolean
+   
+   Example:
+   ```cpp
+   stream.addMemberName("myObject");
+   stream.openObject();
+       stream.addMemberName("value1");
+       stream.addNumber(a->value1);
+       stream.addMemberName("array");
+       stream.openArray();
+           for (int i = 0; i < 10; i++) {
+               stream.addNumber(a->myArray[i]);
+           }
+       stream.closeArray();
+   stream.closeObject();
+   ```
+
+COMMON PATTERNS:
+
+1. BUTTON DEBOUNCING
+   ```cpp
+   struct MyPlugin : public _NT_algorithm {
+       uint16_t lastButtonState = 0;
+   };
+   
+   void customUi(_NT_algorithm* self, const _NT_uiData& data) {
+       MyPlugin* a = static_cast<MyPlugin*>(self);
+       
+       // Detect button press (not hold)
+       bool rightPressed = (data.controls & kNT_encoderButtonR) && 
+                          !(a->lastButtonState & kNT_encoderButtonR);
+       
+       if (rightPressed) {
+           // Handle button press
+       }
+       
+       a->lastButtonState = data.controls;
+   }
+   ```
+
+2. POT DEADBAND/THROTTLING
+   ```cpp
+   struct MyPlugin : public _NT_algorithm {
+       float lastPotValue = -1.0f;
+       float potDeadband = 0.015f;  // 1.5%
+   };
+   
+   void customUi(_NT_algorithm* self, const _NT_uiData& data) {
+       MyPlugin* a = static_cast<MyPlugin*>(self);
+       
+       if (data.controls & kNT_potL) {
+           float potValue = data.pots[0];
+           float delta = fabsf(potValue - a->lastPotValue);
+           
+           if (delta > a->potDeadband) {
+               // Update value
+               a->myParameter = potValue;
+               a->lastPotValue = potValue;
+           }
+       }
+   }
+   ```
+
+3. MENU NAVIGATION
+   ```cpp
+   struct MyPlugin : public _NT_algorithm {
+       uint8_t menuPage = 0;
+       uint8_t menuItem = 0;
+   };
+   
+   void customUi(_NT_algorithm* self, const _NT_uiData& data) {
+       MyPlugin* a = static_cast<MyPlugin*>(self);
+       
+       // Left encoder: change page
+       if (data.encoders[0] != 0) {
+           a->menuPage += data.encoders[0];
+           if (a->menuPage < 0) a->menuPage = 0;
+           if (a->menuPage > 2) a->menuPage = 2;
+       }
+       
+       // Right encoder: change item
+       if (data.encoders[1] != 0) {
+           a->menuItem += data.encoders[1];
+           // Bounds check based on page
+       }
+   }
+   ```
+
+4. STATE INITIALIZATION
+   ```cpp
+   struct MyPlugin : public _NT_algorithm {
+       float values[32] = {0};  // Initialize in declaration
+       
+       void init() {
+           // Complex initialization
+           for (int i = 0; i < 32; i++) {
+               values[i] = 0.5f;
+           }
+       }
+   };
+   ```
+
+BUILDING & TESTING:
+
+1. Build:
+   ```bash
+   make clean
+   make
+   ```
+   
+2. Deploy:
+   ```bash
+   ./BuildTransfer.sh
+   ```
+   
+3. On disting NT:
+   - Insert SD card
+   - Navigate to Programs > Plug-ins
+   - Select your plugin
+   - Test functionality
+
+DEBUGGING STRATEGIES:
+
+1. Version Display
+   - Show build number on screen to confirm code is running
+   - Example: `NT_drawText(10, 10, "v42", 15);`
+
+2. Visual Debug Output
+   - Display variable values on screen
+   - Example: 
+   ```cpp
+   char buf[32];
+   snprintf(buf, sizeof(buf), "Val: %.2f", a->myValue);
+   NT_drawText(10, 20, buf, 15);
+   ```
+
+3. Debug Snapshot in Preset
+   - Add debug struct to capture state
+   - Export via serialise() for analysis
+   - Save preset and examine JSON on computer
+
+4. LED Blinking
+   - Use disting LEDs for status indication
+   - Check API documentation for LED control
+
+5. MIDI Monitor
+   - Use MIDI monitor software on computer
+   - Verify MIDI output is correct
+   - Check timing and values
+
+PERFORMANCE CONSIDERATIONS:
+
+1. Audio Rate (step function)
+   - Keep it minimal and fast
+   - Avoid: malloc, file I/O, heavy math
+   - Pre-calculate lookup tables in init()
+   - Use integer math where possible
+   - Profile critical sections
+
+2. UI Rate (draw function)
+   - Called ~60fps, but still be efficient
+   - Don't recalculate every frame - cache results
+   - Avoid complex string operations
+   - Use simple shapes over complex ones
+
+3. Memory Management
+   - No dynamic allocation in audio code
+   - Fixed-size arrays preferred
+   - Watch stack usage (no huge arrays on stack)
+   - Use struct members for persistent data
+
+COMMON PITFALLS:
+
+1. **Forgetting to check data.controls bitmask**
+   - Always check before reading pot/encoder values
+   - Reading inactive controls gives garbage
+
+2. **Index confusion (0-based vs 1-based)**
+   - Parameters: Often 0-based in code, 1-based for display
+   - Always comment which convention you're using
+   - Convert at boundaries: `int index = displayValue - 1;`
+
+3. **Not initializing state**
+   - All struct members must have default values
+   - Or initialize in init() function
+   - Preset loading won't set uninitialized values
+
+4. **Assuming preset data is valid**
+   - Old presets won't have new fields
+   - Add bounds checking when loading
+   - Example: `if (a->value > MAX) a->value = DEFAULT;`
+
+5. **Box vs Rectangle confusion**
+   - kNT_box is outline only (hollow)
+   - kNT_rectangle is filled
+   - Use rectangle for filled shapes
+
+6. **Button hold vs press**
+   - Must track last button state
+   - Edge detection: `pressed && !lastPressed`
+   - Update lastButtonState every frame
+
+7. **Pot noise**
+   - Pots are noisy - use deadband
+   - Throttle updates to avoid flooding
+   - Typical deadband: 1-2%
+
+8. **MIDI flooding**
+   - Only send MIDI on value change
+   - Track last sent values
+   - Throttle high-frequency changes
+
+TESTING CHECKLIST:
+
+- [ ] All parameters work as expected
+- [ ] UI displays correctly
+- [ ] Encoders and buttons respond properly
+- [ ] Preset save/load preserves all state
+- [ ] No crashes or freezes
+- [ ] MIDI output (if applicable) is correct
+- [ ] Audio processing (if applicable) sounds good
+- [ ] Edge cases handled (min/max values, wrapping)
+- [ ] Compatible with old presets (if updating existing plugin)
+
+DOCUMENTATION:
+
+Create a README.md with:
+- Plugin description and features
+- Parameter descriptions
+- UI instructions
+- MIDI implementation (if applicable)
+- Known issues and limitations
+- Version history
+
+DISTRIBUTION:
+
+1. Test thoroughly on hardware
+2. Increment build version
+3. Commit to git
+4. Tag release: `git tag v1.0.0`
+5. Push to GitHub
+6. Share .o file with users
+7. Provide installation instructions
+
+USEFUL RESOURCES:
+
+- Expert Sleepers disting NT documentation
+- distingNT_API example projects
+- disting NT forum for community support
+- MIDI specification for protocol details
+
+EXAMPLE PROJECT IDEAS:
+
+Beginner:
+- Simple waveshaper with CV control
+- LFO with multiple waveforms
+- Clock divider/multiplier
+- Sample & hold
+
+Intermediate:
+- Sequencer with step editing
+- Envelope generator with custom curves
+- MIDI arpeggiator
+- Quantizer with custom scales
+
+Advanced:
+- Granular processor
+- Wavetable synthesizer
+- Complex modulation matrix
+- Multi-effect processor
+
+TIPS FROM VFADER DEVELOPMENT:
+
+1. Start simple, add features incrementally
+2. Test on hardware early and often
+3. Comment your code extensively
+4. Use clear variable names
+5. Organize code into logical functions
+6. Keep draw() and step() lean
+7. Version control everything
+8. Save presets frequently during development
+9. Ask for help in the forum
+10. Share your work with the community!
+
+Good luck with your disting NT plugin development!
