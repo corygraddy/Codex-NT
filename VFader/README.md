@@ -1,6 +1,6 @@
 # VFader
 
-**Build 44** - 32 Virtual Faders with MIDI CC and CV Output for Disting NT
+**Build 43** - 32 Virtual Faders with MIDI CC and CV Output for Disting NT
 
 ## Overview
 
@@ -182,7 +182,7 @@ CV outputs generate 0-10V based on the mapped fader's position (0.0-1.0 → 0-10
 ## Technical Specifications
 
 - **Algorithm GUID**: VFDR
-- **Build Version**: 44
+- **Build Version**: 43
 - **Memory Usage**: Optimized for Disting NT SRAM
 - **MIDI Channel**: 1 (hardcoded)
 - **MIDI Destinations**: USB + Internal
@@ -217,12 +217,12 @@ Enable Debug Log parameter and save a preset to capture detailed state informati
 
 ## Version History
 
-### Build 44 (October 2025)
+### Build 43 (October 2025)
 - Added 8 CV outputs with fader mapping
 - CV outputs generate 0-10V based on fader position
 - Configurable output bus routing (1-28)
 - Add/Replace output modes
-- Build number display in UI (bottom right corner)
+- Build number display in UI (bottom right corner as "B43")
 - Improved parameter page layout (single scrollable page)
 - Updated description to include CV outputs
 
