@@ -1,3 +1,8 @@
 .DS_Store
 example projects/
 preset debug/
+references/
+build/
+VFader/build/
+PluginTemplate/build/
+.venv/
