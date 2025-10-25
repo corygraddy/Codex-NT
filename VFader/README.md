@@ -1,15 +1,14 @@
 # VFader
 
-**Build 45** - 32 Virtual Faders with MIDI CC for Disting NT
+**Build 46** - 32 Virtual Faders with MIDI CC for Disting NT
 
 ## Overview
 
-VFader is a Disting NT algorithm that provides 32 virtual faders organized into 4 pages of 8 faders each. Each fader can be controlled via the three pots (L, C, R) and outputs both MIDI CC messages (7-bit or 14-bit).
+VFader is a Disting NT algorithm that provides 32 virtual faders organized into 4 pages of 8 faders each. Each fader can be controlled via the three pots (L, C, R) and outputs MIDI CC messages (7-bit or 14-bit).
 
 ## Key Features
 
 - **32 Virtual Faders**: 4 pages × 8 faders per page
-- **8 CV Outputs**: Direct voltage control (0-10V) from any fader
 - **Dual Control Modes**: 
   - **Note Mode**: Send specific MIDI notes with customizable scales
   - **Number Mode**: Send scaled values (0-100 range, customizable)
@@ -160,21 +159,16 @@ Enable or disable fader level changes via the three pots:
 
 ## Use Cases
 
-### Controlling External Modules via CV
-- Map VFader outputs directly to module CV inputs (V/Oct, filter cutoff, etc.)
-- No need for separate MIDI→CV conversion
-- Control up to 8 parameters simultaneously
-- Perfect for complex patches with multiple modules
-
 ### Controlling a DAW
 - Map VFader's MIDI CCs to DAW mixer faders, plugin parameters, or automation
 - Use 14-bit mode for smooth, high-resolution control
 - Create presets for different mixing sessions
 
-### Modular Control
+### Modular Control via MIDI
 - Control other Disting NT algorithms via internal MIDI routing
 - Use Note mode to sequence melodic content
-- Use Number mode for CV-like parameter control
+- Use Number mode for parameter control
+- Route MIDI to external MIDI→CV converters for modular control
 
 ### External MIDI Gear
 - Control hardware synths, effects, or lighting
@@ -185,7 +179,7 @@ Enable or disable fader level changes via the three pots:
 - Map F8R's faders to VFader's FADER 1-8 parameters
 - Control 8 faders simultaneously per page
 - Switch pages for 32 total faders under F8R control
-- CV outputs enable direct modular control alongside MIDI
+- Use MIDI output to control external gear or DAW
 
 ## Tips & Tricks
 
@@ -204,12 +198,10 @@ Enable or disable fader level changes via the three pots:
 ## Technical Specifications
 
 - **Algorithm GUID**: VFDR
-- **Build Version**: 45
+- **Build Version**: 46
 - **Memory Usage**: Optimized for Disting NT SRAM
 - **MIDI Channel**: 1 (hardcoded)
 - **MIDI Destinations**: USB + Internal
-- **CV Outputs**: 8 configurable outputs, 0-10V range
-- **Output Buses**: Routes to any of 28 disting NT buses
 - **Preset Format**: JSON with full state serialization
 
 ## Troubleshooting
@@ -218,12 +210,7 @@ Enable or disable fader level changes via the three pots:
 - Check that the correct page is selected
 - Verify Pickup Mode settings (may need to "catch" the value in Catch mode)
 - Ensure the pot is mapped to the correct FADER parameter
-
-### CV output not working
-- Check that the CV output is mapped to a fader (not "None")
-- Verify the output bus routing matches your patch
-- Ensure the output mode (Add/Replace) is appropriate
-- Check that the mapped fader has a non-zero value
+- Check that Pot Control is set to "On" (not "Off")
 
 ### MIDI not received by destination
 - Verify MIDI routing in Disting NT settings
@@ -234,10 +221,13 @@ Enable or disable fader level changes via the three pots:
 - Enable **Catch** pickup mode to prevent jumps
 - Alternatively, use **Scaled** mode and adjust pots after page switch
 
-### Debug Mode
-Enable Debug Log parameter and save a preset to capture detailed state information in the JSON file.
-
 ## Version History
+
+### Build 46 (October 2025)
+- **Removed CV output functionality** (abandoned feature)
+- Removed all CV output parameters from parameter page
+- Removed CV output generation code from step function
+- Cleaner parameter UI with only essential controls
 
 ### Build 45 (October 2025)
 - **Increased pot deadband** from 1.5% to 3% for better touch sensitivity
@@ -258,13 +248,11 @@ Enable Debug Log parameter and save a preset to capture detailed state informati
 - Removed debug logging feature
 
 ### Build 43 (October 2025)
-- Added 8 CV outputs with fader mapping
-- CV outputs generate 0-10V based on fader position
-- Configurable output bus routing (1-28)
-- Add/Replace output modes
-- Build number display in UI (bottom right corner as "B43")
+- Added macro fader functionality (gang fader control)
+- Absolute and Relative control modes for macro faders
+- Visual indicators (M and C) for macro and child faders
+- Build number display in UI (bottom right corner)
 - Improved parameter page layout (single scrollable page)
-- Updated description to include CV outputs
 
 ### v1.0 (October 2025)
 - Initial release

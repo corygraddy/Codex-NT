@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 45  // Increase pot deadband (3%) and fix Relative mode macro fader snapping
+#define VFADER_BUILD 46  // Remove CV output parameters and generation code
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
@@ -428,12 +428,12 @@ static void initParameters() {
 }
 
 // Parameter pages: Single FADER page with all parameters
-static uint8_t faderPageParams[37];  // FADER 1-8 + MIDI Mode + Pickup Mode + Pot Control + Drift Control + 24 CV params
+static uint8_t faderPageParams[12];  // FADER 1-8 + MIDI Mode + Pickup Mode + Pot Control + Drift Control
 static _NT_parameterPage page_array[1];
 static _NT_parameterPages pages;
 
 static void initPages() {
-    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Pot Control, Drift Control, then all CV output parameters
+    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Pot Control, Drift Control
     for (int i = 0; i < 8; ++i) {
         faderPageParams[i] = kParamFader1 + i;
     }
@@ -442,15 +442,8 @@ static void initPages() {
     faderPageParams[10] = kParamPotControl;
     faderPageParams[11] = kParamDriftControl;
     
-    // CV Output parameters at the bottom
-    for (int i = 0; i < 8; ++i) {
-        faderPageParams[12 + i * 3 + 0] = kParamCvOut1 + (i * 2);      // CV Out bus
-        faderPageParams[12 + i * 3 + 1] = kParamCvOut1Mode + (i * 2);  // CV Out mode
-        faderPageParams[12 + i * 3 + 2] = kParamCvOut1Map + i;         // Fader mapping
-    }
-    
     page_array[0].name = "VFADER";
-    page_array[0].numParams = 37;
+    page_array[0].numParams = 12;
     page_array[0].params = faderPageParams;
     
     pages.numPages = 1;
@@ -766,49 +759,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         
         // Toggle phase for next step
         a->send14bitPhase = !a->send14bitPhase;
-    }
-    
-    // ========== CV OUTPUT GENERATION ==========
-    // Generate CV outputs based on fader mappings
-    int numFrames = numFramesBy4 * 4;
-    
-    for (int i = 0; i < 8; ++i) {
-        // Get parameters for this CV output
-        int cvOutParam = kParamCvOut1 + (i * 2);
-        int cvModeParam = kParamCvOut1Mode + (i * 2);
-        int mapParam = kParamCvOut1Map + i;
-        
-        int cvOutputIdx = self->v[cvOutParam] - 1;  // Bus index (0-27)
-        bool cvReplace = self->v[cvModeParam];      // 0=add, 1=replace
-        int faderMapping = self->v[mapParam];       // 0=None, 1-32=Fader 1-32
-        
-        // Skip if no fader mapped or invalid output
-        if (faderMapping == 0 || cvOutputIdx < 0 || cvOutputIdx >= 28) {
-            continue;
-        }
-        
-        // Get the mapped fader value (0.0 to 1.0)
-        int faderIdx = faderMapping - 1;  // Convert 1-32 to 0-31
-        float rawValue = a->internalFaders[faderIdx];
-        float lastValue = a->lastMidiValues[faderIdx];
-        
-        // Apply drift control - same as MIDI
-        float faderValue = applyDriftControl(rawValue, lastValue, driftLevel);
-        
-        // Convert to CV voltage (0-10V range)
-        float voltage = faderValue * 10.0f;
-        
-        // Get pointer to output bus
-        float* cvOutput = busFrames + (cvOutputIdx * numFrames);
-        
-        // Write DC voltage to all frames
-        for (int frame = 0; frame < numFrames; ++frame) {
-            if (cvReplace) {
-                cvOutput[frame] = voltage;
-            } else {
-                cvOutput[frame] += voltage;
-            }
-        }
     }
 }
 
@@ -1201,7 +1151,7 @@ bool draw(_NT_algorithm* self) {
     
     
     // Build number in bottom right corner (tiny font)
-    NT_drawText(236, 60, "B45", 15, kNT_textLeft, kNT_textTiny);
+    NT_drawText(236, 60, "B46", 15, kNT_textLeft, kNT_textTiny);
     
     return true; // keep suppressing default header; change to false if needed in next step
 }
