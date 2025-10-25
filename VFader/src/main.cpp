@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 44  // Add Pot Control parameter to enable/disable pot input
+#define VFADER_BUILD 45  // Increase pot deadband (3%) and fix Relative mode macro fader snapping
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
@@ -189,7 +189,7 @@ struct VFader : public _NT_algorithm {
     float potLast[3] = { -1.0f, -1.0f, -1.0f };
     uint32_t potLastStep[3] = { 0, 0, 0 };
     uint8_t minStepsBetweenPotWrites = 2;
-    float potDeadband = 0.015f;  // Minimum change required (1.5%) to update fader
+    float potDeadband = 0.03f;  // Minimum change required (3%) to update fader - increased from 1.5% for better touch sensitivity
     uint32_t stepCounter = 0;
     
     // DEBUG tracking - captures state for JSON export
@@ -618,13 +618,19 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                         float shift = gangLogical - 0.5f;
                         newValue = refValue + shift;
                     } else {
-                        // Relative mode: all children reach 0 and 1.0 together (proportional scaling)
+                        // Relative mode: proportional scaling from reference position
+                        // Reference value is the child's position when macro is at 0.5 (center)
+                        // As macro moves from 0.5, children scale proportionally
+                        
                         if (gangValue <= 0.5f) {
-                            // Map gang [0.0 to 0.5] → child [0.0 to refValue]
-                            newValue = refValue * (gangValue / 0.5f);
+                            // Macro is in lower half [0.0 to 0.5]
+                            // Map: macro 0.0→child reaches 0.0, macro 0.5→child stays at refValue
+                            float scaleFactor = gangValue / 0.5f;  // 0.0 to 1.0
+                            newValue = refValue * scaleFactor;
                         } else {
-                            // Map gang [0.5 to 1.0] → child [refValue to 1.0]
-                            float t = (gangValue - 0.5f) / 0.5f;
+                            // Macro is in upper half [0.5 to 1.0]
+                            // Map: macro 0.5→child stays at refValue, macro 1.0→child reaches 1.0
+                            float t = (gangValue - 0.5f) / 0.5f;  // 0.0 to 1.0
                             newValue = refValue + ((1.0f - refValue) * t);
                         }
                     }
@@ -635,6 +641,12 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     
                     // Update child fader
                     a->internalFaders[childIdx] = newValue;
+                    
+                    // In Relative mode, update reference to track current child position
+                    // This allows manual child adjustments to be preserved
+                    if (mode == 1) {
+                        a->faderReferenceValues[childIdx] = newValue;
+                    }
                 }
                 
                 // Update last gang value
@@ -1189,7 +1201,7 @@ bool draw(_NT_algorithm* self) {
     
     
     // Build number in bottom right corner (tiny font)
-    NT_drawText(236, 60, "B44", 15, kNT_textLeft, kNT_textTiny);
+    NT_drawText(236, 60, "B45", 15, kNT_textLeft, kNT_textTiny);
     
     return true; // keep suppressing default header; change to false if needed in next step
 }

@@ -1,6 +1,6 @@
 # VFader
 
-**Build 44** - 32 Virtual Faders with MIDI CC for Disting NT
+**Build 45** - 32 Virtual Faders with MIDI CC for Disting NT
 
 ## Overview
 
@@ -75,6 +75,35 @@ Select which notes in the chromatic scale are active:
 - Inactive notes shown in color 7
 - Only active notes will be sent when moving the fader
 - Useful for constraining to specific scales (pentatonic, major, minor, etc.)
+
+### Macro Fader Settings
+
+From name edit mode, turn **Right Pot** to page 3 to access macro fader settings. A macro fader controls multiple child faders to the right of it.
+
+#### Control Count (0-31)
+- **Off (0)**: Fader operates independently
+- **1-31**: Number of faders to the right that this fader will control
+- Maximum count is limited by faders remaining (can't control beyond fader 32)
+- Cannot overlap with another macro fader
+
+#### Control Mode
+- **Absolute**: Children move in parallel with the macro fader
+  - When macro moves up/down, all children move by the same amount
+  - Maintains relative spacing between children
+  - Best for groups that should move together (e.g., mix bus faders)
+
+- **Relative**: Children scale proportionally based on macro position
+  - Macro at 50% (center): children stay at their current positions
+  - Macro below 50%: children scale toward 0.0 proportionally
+  - Macro above 50%: children scale toward 1.0 proportionally
+  - Manual child adjustments are preserved - reference values update continuously
+  - Best for dynamic control (e.g., overall volume while preserving mix balance)
+
+**Visual Indicators:**
+- Macro faders show "M" on the right side
+- Child faders show "C" on the right side
+
+**Note:** When you manually adjust a child fader, its reference value updates. In Relative mode, this new position becomes the scaling reference for future macro movements.
 
 ## Parameters
 
@@ -175,7 +204,7 @@ Enable or disable fader level changes via the three pots:
 ## Technical Specifications
 
 - **Algorithm GUID**: VFDR
-- **Build Version**: 44
+- **Build Version**: 45
 - **Memory Usage**: Optimized for Disting NT SRAM
 - **MIDI Channel**: 1 (hardcoded)
 - **MIDI Destinations**: USB + Internal
@@ -209,6 +238,16 @@ Enable or disable fader level changes via the three pots:
 Enable Debug Log parameter and save a preset to capture detailed state information in the JSON file.
 
 ## Version History
+
+### Build 45 (October 2025)
+- **Increased pot deadband** from 1.5% to 3% for better touch sensitivity
+- Pots now require more movement before triggering value changes
+- Reduces accidental changes from light touches
+- **Fixed Relative mode macro fader behavior**
+- Child faders no longer snap back to old positions after manual adjustment
+- Reference values now update continuously in Relative mode
+- Manual child fader changes are preserved when macro fader moves
+- Proportional scaling maintains proper relationships between children
 
 ### Build 44 (October 2025)
 - Added **Pot Control** parameter to enable/disable pot input
