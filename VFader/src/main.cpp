@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 47  // Fix macro fader initialization - children no longer reset on first movement
+#define VFADER_BUILD 48  // Reduce drift control settings: remove High (2%), Med becomes High (1%)
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
@@ -265,7 +265,7 @@ enum {
     kParamMidiMode,      // MIDI mode: 0=7-bit, 1=14-bit
     kParamPickupMode,    // Pickup mode: 0=Scaled, 1=Catch
     kParamPotControl,    // Pot control: 0=On, 1=Off
-    kParamDriftControl,  // Drift control: 0=Off, 1=Low, 2=Med, 3=High
+    kParamDriftControl,  // Drift control: 0=Off, 1=Low, 2=High
     // CV Output parameters (output bus selection)
     kParamCvOut1,
     kParamCvOut1Mode,
@@ -299,7 +299,7 @@ static const char* const pageStrings[] = { "Page 1", "Page 2", "Page 3", "Page 4
 static const char* const midiModeStrings[] = { "7-bit CC", "14-bit CC", NULL };
 static const char* const pickupModeStrings[] = { "Scaled", "Catch", NULL };
 static const char* const potControlStrings[] = { "On", "Off", NULL };
-static const char* const driftControlStrings[] = { "Off", "Low", "Med", "High", NULL };
+static const char* const driftControlStrings[] = { "Off", "Low", "High", NULL };
 
 // Fader mapping strings for CV outputs: None, Fader 1-32
 static const char* const faderMapStrings[] = {
@@ -368,7 +368,7 @@ static void initParameters() {
     // DRIFT CONTROL parameter
     parameters[kParamDriftControl].name = "Drift Ctrl";
     parameters[kParamDriftControl].min = 0;
-    parameters[kParamDriftControl].max = 3;  // 0=Off, 1=Low, 2=Med, 3=High
+    parameters[kParamDriftControl].max = 2;  // 0=Off, 1=Low, 2=High
     parameters[kParamDriftControl].def = 0;  // Default to Off
     parameters[kParamDriftControl].unit = kNT_unitEnum;
     parameters[kParamDriftControl].scaling = kNT_scalingNone;
@@ -523,12 +523,11 @@ static inline float applyDriftControl(float newValue, float lockedValue, int dri
         return newValue;  // No drift control
     }
     
-    // Drift thresholds: Low=0.5%, Med=1%, High=2%
+    // Drift thresholds: Low=0.5%, High=1%
     float threshold;
     switch (driftLevel) {
         case 1: threshold = 0.005f; break;  // Low
-        case 2: threshold = 0.01f; break;   // Med
-        case 3: threshold = 0.02f; break;   // High
+        case 2: threshold = 0.01f; break;   // High
         default: threshold = 0.0f; break;
     }
     
@@ -1149,9 +1148,8 @@ bool draw(_NT_algorithm* self) {
     }
     NT_drawText(rightAreaX - 5, catY, catBuf, 15, kNT_textLeft, kNT_textNormal);  // Changed back to kNT_textNormal
     
-    
     // Build number in bottom right corner (tiny font)
-    NT_drawText(236, 60, "B47", 15, kNT_textLeft, kNT_textTiny);
+    NT_drawText(236, 60, "B48", 15, kNT_textLeft, kNT_textTiny);
     
     return true; // keep suppressing default header; change to false if needed in next step
 }

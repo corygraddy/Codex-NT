@@ -1,6 +1,6 @@
 # VFader
 
-**Build 47** - 32 Virtual Faders with MIDI CC for Disting NT
+**Build 48** - 32 Virtual Faders with MIDI CC for Disting NT
 
 ## Overview
 
@@ -222,6 +222,13 @@ Enable or disable fader level changes via the three pots:
 - Alternatively, use **Scaled** mode and adjust pots after page switch
 
 ## Version History
+
+### Build 48 (October 2025)
+- **Reduced drift control settings** to fix catch mode issues
+- Removed "High" setting (was 2% threshold)
+- "Med" renamed to "High" (1% threshold)
+- Options now: Off, Low (0.5%), High (1%)
+- Fixes issue where catch mode couldn't be reached when fader at zero with High drift setting
 
 ### Build 47 (October 2025)
 - **Fixed macro fader initialization bug**
