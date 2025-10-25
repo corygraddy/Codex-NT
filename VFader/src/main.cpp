@@ -248,13 +248,8 @@ struct VFader : public _NT_algorithm {
     DebugSnapshot debugSnapshot = {};  // Zero-initialize all members
     
     // Constructor to set non-zero defaults
-    VFader() {
-        debugSnapshot.currentPage = 1;
-        debugSnapshot.currentSel = 1;
-        debugSnapshot.selectedFaderBottomMidi = 36;
-        debugSnapshot.selectedFaderTopMidi = 96;
-        debugSnapshot.lastMidiValue0 = -1.0f;
-        debugSnapshot.lastPickupPivot = -1.0f;
+        // Constructor
+        VFader() {}
     }
 };
 
@@ -271,7 +266,6 @@ enum {
     kParamPage,          // Page selector (0-7, displayed as Page 1-8)
     kParamMidiMode,      // MIDI mode: 0=7-bit, 1=14-bit
     kParamPickupMode,    // Pickup mode: 0=Scaled, 1=Catch
-    kParamDebugLog,      // Debug logging: 0=Off, 1=On
     kParamDriftControl,  // Drift control: 0=Off, 1=Low, 2=Med, 3=High
     // CV Output parameters (output bus selection)
     kParamCvOut1,
@@ -305,7 +299,6 @@ enum {
 static const char* const pageStrings[] = { "Page 1", "Page 2", "Page 3", "Page 4", NULL };
 static const char* const midiModeStrings[] = { "7-bit CC", "14-bit CC", NULL };
 static const char* const pickupModeStrings[] = { "Scaled", "Catch", NULL };
-static const char* const debugLogStrings[] = { "Off", "On", NULL };
 static const char* const driftControlStrings[] = { "Off", "Low", "Med", "High", NULL };
 
 // Fader mapping strings for CV outputs: None, Fader 1-32
@@ -363,14 +356,6 @@ static void initParameters() {
     parameters[kParamPickupMode].scaling = kNT_scalingNone;
     parameters[kParamPickupMode].enumStrings = pickupModeStrings;
     
-    // DEBUG LOG parameter
-    parameters[kParamDebugLog].name = "Debug Log";
-    parameters[kParamDebugLog].min = 0;
-    parameters[kParamDebugLog].max = 1;  // 0=Off, 1=On
-    parameters[kParamDebugLog].def = 0;  // Default to Off
-    parameters[kParamDebugLog].unit = kNT_unitEnum;
-    parameters[kParamDebugLog].scaling = kNT_scalingNone;
-    parameters[kParamDebugLog].enumStrings = debugLogStrings;
     
     // DRIFT CONTROL parameter
     parameters[kParamDriftControl].name = "Drift Ctrl";
@@ -440,14 +425,13 @@ static _NT_parameterPage page_array[1];
 static _NT_parameterPages pages;
 
 static void initPages() {
-    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Debug Log, Drift Control, then all CV output parameters
+    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Drift Control, then all CV output parameters
     for (int i = 0; i < 8; ++i) {
         faderPageParams[i] = kParamFader1 + i;
     }
     faderPageParams[8] = kParamMidiMode;
     faderPageParams[9] = kParamPickupMode;
-    faderPageParams[10] = kParamDebugLog;
-    faderPageParams[11] = kParamDriftControl;
+    faderPageParams[10] = kParamDriftControl;
     
     // CV Output parameters at the bottom
     for (int i = 0; i < 8; ++i) {
@@ -574,13 +558,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         a->uiActive = false; 
     }
     
-    // Update debug snapshot every 2000 steps (~40ms)
-    if (a->stepCounter % 2000 == 0) {
-        a->debugSnapshot.stepCount = a->stepCounter;
-        a->debugSnapshot.fader0Value = a->internalFaders[0];
-        a->debugSnapshot.lastMidiValue0 = a->lastMidiValues[0];
-        a->debugSnapshot.hasControl0 = !a->inPickupMode[0];  // inverted: true = normal, false = pickup
-    }
     
     // Apply gang fader transformations
     // Only apply when the gang fader itself has changed
@@ -697,21 +674,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     if (midiValue > 127) midiValue = 127;
                 }
                 
-                // Debug tracking for selected fader
-                if (i == (a->sel - 1)) {
-                    a->debugSnapshot.selectedFaderDisplayMode = a->faderNoteSettings[i].displayMode;
-                    a->debugSnapshot.selectedFaderBottomMidi = a->faderNoteSettings[i].bottomMidi;
-                    a->debugSnapshot.selectedFaderTopMidi = a->faderNoteSettings[i].topMidi;
-                    a->debugSnapshot.selectedFaderBottomValue = a->faderNoteSettings[i].bottomValue;
-                    a->debugSnapshot.selectedFaderTopValue = a->faderNoteSettings[i].topValue;
-                    a->debugSnapshot.lastSentMidiValue = midiValue;
-                    a->debugSnapshot.lastSentFaderValue = currentValue;
-                    if (a->faderNoteSettings[i].displayMode == 1) {
-                        a->debugSnapshot.snappedNoteValue = midiValue;
-                    } else {
-                        a->debugSnapshot.scaledNumberValue = (uint8_t)scaledValue;
-                    }
-                }
                 
                 // Send MIDI CC (CC number is i+1, so fader 0 → CC #1)
                 uint8_t ccNumber = (uint8_t)(i + 1);
@@ -721,10 +683,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 // Update last sent value
                 a->lastMidiValues[i] = currentValue;
                 
-                // Track debug info for fader 0
-                if (i == 0) {
-                    a->debugSnapshot.midiSentCount++;
-                }
             }
         }
     } else {
@@ -1215,14 +1173,6 @@ bool draw(_NT_algorithm* self) {
     }
     NT_drawText(rightAreaX - 5, catY, catBuf, 15, kNT_textLeft, kNT_textNormal);  // Changed back to kNT_textNormal
     
-    // DEBUG: Capture pickup mode state for all faders
-    for (int i = 0; i < 32; i++) {
-        a->debugSnapshot.pickupModeActive[i] = a->inPickupMode[i];
-        a->debugSnapshot.internalFaderValue[i] = a->internalFaders[i];
-        a->debugSnapshot.physicalFaderValue[i] = a->physicalFaderPos[i];
-        a->debugSnapshot.pickupPivotValue[i] = a->pickupPivot[i];
-        a->debugSnapshot.pickupStartValueArray[i] = a->pickupStartValue[i];
-    }
     
     // Build number in bottom right corner (tiny font)
     NT_drawText(236, 60, "B45", 15, kNT_textLeft, kNT_textTiny);
@@ -1247,15 +1197,6 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     bool rightButtonPressed = (data.controls & kNT_encoderButtonR) && !(a->lastButtonState & kNT_encoderButtonR);
     a->lastButtonState = data.controls;
     
-    // DEBUG: Update UI state tracking
-    a->debugSnapshot.lastButtonState = a->lastButtonState;
-    a->debugSnapshot.nameEditModeActive = a->nameEditMode;
-    a->debugSnapshot.nameEditFaderIdx = a->nameEditFader;
-    a->debugSnapshot.nameEditCursorPos = a->nameEditPos;
-    a->debugSnapshot.currentPage = a->page;
-    a->debugSnapshot.currentSel = a->sel;
-    a->debugSnapshot.nameEditPageNum = a->nameEditPage;
-    a->debugSnapshot.nameEditSettingIdx = a->nameEditSettingPos;
     
     // NAME EDIT MODE
     if (a->nameEditMode) {
@@ -1266,10 +1207,8 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         if (encoderDelta < -1) encoderDelta = -1;
         
         if (encoderDelta != 0) {
-            a->debugSnapshot.uiFreezeCounter++;
             if (a->nameEditPage == 0) {
                 // PAGE 1: Editing name/category characters
-                a->debugSnapshot.encoderRCount++;
                 char* name = a->faderNames[a->nameEditFader];
                 char c = name[a->nameEditPos];
                 
@@ -1450,7 +1389,6 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         
         // Left encoder: move cursor position (page 1) or setting selection (page 2/3)
         if (data.encoders[0] != 0) {
-            a->debugSnapshot.encoderLCount++;
             if (a->nameEditPage == 0) {
                 // PAGE 1: Move character position
                 int newPos = (int)a->nameEditPos + data.encoders[0];
@@ -1627,8 +1565,6 @@ void parameterChanged(_NT_algorithm* self, int p) {
         
         // Debug tracking for fader 0
         if (internalIdx == 0) {
-            a->debugSnapshot.lastPhysicalPos = v;
-            a->debugSnapshot.lastMismatch = mismatch;
         }
         
         // Decide whether to use pickup mode or absolute mode
@@ -1642,9 +1578,6 @@ void parameterChanged(_NT_algorithm* self, int p) {
                 
                 // Debug tracking for fader 0
                 if (internalIdx == 0) {
-                    a->debugSnapshot.pickupEnterCount++;
-                    a->debugSnapshot.lastPickupPivot = v;
-                    a->debugSnapshot.lastPickupStartValue = currentValue;
                 }
                 // Don't change value yet - will calculate on next call
             } else {
@@ -1663,7 +1596,6 @@ void parameterChanged(_NT_algorithm* self, int p) {
                     a->internalFaders[internalIdx] = v;
                     
                     if (internalIdx == 0) {
-                        a->debugSnapshot.pickupExitCount++;
                     }
                 }
                 // Otherwise, don't update the value - just wait for catch
@@ -1713,8 +1645,6 @@ void parameterChanged(_NT_algorithm* self, int p) {
                 
                 // Debug tracking for fader 0
                 if (internalIdx == 0) {
-                    a->debugSnapshot.lastCaughtUpUp = (physicalDelta > 0 && caughtUp);
-                    a->debugSnapshot.lastCaughtUpDown = (physicalDelta < 0 && caughtUp);
                 }
                 
                 if (caughtUp) {
@@ -1725,7 +1655,6 @@ void parameterChanged(_NT_algorithm* self, int p) {
                     
                     // Debug tracking for fader 0
                     if (internalIdx == 0) {
-                        a->debugSnapshot.pickupExitCount++;
                     }
                 } else {
                     // Still in pickup - use scaled value
@@ -1758,9 +1687,6 @@ void parameterChanged(_NT_algorithm* self, int p) {
         
         // Track debug info for FADER 1 (internalIdx 0 on page 0)
         if (internalIdx == 0) {
-            a->debugSnapshot.paramChangedCount++;
-            a->debugSnapshot.lastParamChangedValue = v;
-            a->debugSnapshot.lastParamChangedStep = a->stepCounter;
         }
     }
     // Handle PAGE changes: just update display value and set flag
