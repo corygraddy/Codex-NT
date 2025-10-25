@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 43  // Show fader number (1-32) instead of CC number
+#define VFADER_BUILD 44  // Add Pot Control parameter to enable/disable pot input
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
@@ -247,10 +247,8 @@ struct VFader : public _NT_algorithm {
     
     DebugSnapshot debugSnapshot = {};  // Zero-initialize all members
     
-    // Constructor to set non-zero defaults
-        // Constructor
-        VFader() {}
-    }
+    // Constructor
+    VFader() {}
 };
 
 // parameters - 8 FADER + 1 PAGE + 1 MIDI MODE + 1 PICKUP MODE + 1 DEBUG = 12 total
@@ -266,6 +264,7 @@ enum {
     kParamPage,          // Page selector (0-7, displayed as Page 1-8)
     kParamMidiMode,      // MIDI mode: 0=7-bit, 1=14-bit
     kParamPickupMode,    // Pickup mode: 0=Scaled, 1=Catch
+    kParamPotControl,    // Pot control: 0=On, 1=Off
     kParamDriftControl,  // Drift control: 0=Off, 1=Low, 2=Med, 3=High
     // CV Output parameters (output bus selection)
     kParamCvOut1,
@@ -299,6 +298,7 @@ enum {
 static const char* const pageStrings[] = { "Page 1", "Page 2", "Page 3", "Page 4", NULL };
 static const char* const midiModeStrings[] = { "7-bit CC", "14-bit CC", NULL };
 static const char* const pickupModeStrings[] = { "Scaled", "Catch", NULL };
+static const char* const potControlStrings[] = { "On", "Off", NULL };
 static const char* const driftControlStrings[] = { "Off", "Low", "Med", "High", NULL };
 
 // Fader mapping strings for CV outputs: None, Fader 1-32
@@ -356,6 +356,14 @@ static void initParameters() {
     parameters[kParamPickupMode].scaling = kNT_scalingNone;
     parameters[kParamPickupMode].enumStrings = pickupModeStrings;
     
+    // POT CONTROL parameter
+    parameters[kParamPotControl].name = "Pot Control";
+    parameters[kParamPotControl].min = 0;
+    parameters[kParamPotControl].max = 1;  // 0=On, 1=Off
+    parameters[kParamPotControl].def = 0;  // Default to On
+    parameters[kParamPotControl].unit = kNT_unitEnum;
+    parameters[kParamPotControl].scaling = kNT_scalingNone;
+    parameters[kParamPotControl].enumStrings = potControlStrings;
     
     // DRIFT CONTROL parameter
     parameters[kParamDriftControl].name = "Drift Ctrl";
@@ -420,18 +428,19 @@ static void initParameters() {
 }
 
 // Parameter pages: Single FADER page with all parameters
-static uint8_t faderPageParams[36];  // FADER 1-8 + MIDI Mode + Pickup Mode + Debug Log + Drift Control + 24 CV params
+static uint8_t faderPageParams[37];  // FADER 1-8 + MIDI Mode + Pickup Mode + Pot Control + Drift Control + 24 CV params
 static _NT_parameterPage page_array[1];
 static _NT_parameterPages pages;
 
 static void initPages() {
-    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Drift Control, then all CV output parameters
+    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Pot Control, Drift Control, then all CV output parameters
     for (int i = 0; i < 8; ++i) {
         faderPageParams[i] = kParamFader1 + i;
     }
     faderPageParams[8] = kParamMidiMode;
     faderPageParams[9] = kParamPickupMode;
-    faderPageParams[10] = kParamDriftControl;
+    faderPageParams[10] = kParamPotControl;
+    faderPageParams[11] = kParamDriftControl;
     
     // CV Output parameters at the bottom
     for (int i = 0; i < 8; ++i) {
@@ -441,7 +450,7 @@ static void initPages() {
     }
     
     page_array[0].name = "VFADER";
-    page_array[0].numParams = 36;
+    page_array[0].numParams = 37;
     page_array[0].params = faderPageParams;
     
     pages.numPages = 1;
@@ -1088,13 +1097,18 @@ bool draw(_NT_algorithm* self) {
         int underlineY = faderBottom + 2;
         int underlineStartX = faderX - 4;
         int underlineEndX = faderX + faderWidth + 4;
+        
+        // Check pot control setting
+        int potControl = (int)(self->v[kParamPotControl] + 0.5f);
+        
         if (isSel) {
             // Solid line for active fader (3px thick)
             NT_drawShapeI(kNT_line, underlineStartX, underlineY, underlineEndX, underlineY, 15);
             NT_drawShapeI(kNT_line, underlineStartX, underlineY + 1, underlineEndX, underlineY + 1, 15);
             NT_drawShapeI(kNT_line, underlineStartX, underlineY + 2, underlineEndX, underlineY + 2, 15);
-        } else if (i == localSel - 1 || i == localSel + 1) {
+        } else if ((i == localSel - 1 || i == localSel + 1) && potControl == 0) {
             // Dotted line for adjacent faders (3px thick, draw every other pixel)
+            // Only show if pot control is ON (0)
             for (int dotX = underlineStartX; dotX <= underlineEndX; dotX += 2) {
                 NT_drawShapeI(kNT_line, dotX, underlineY, dotX, underlineY, 7);
                 NT_drawShapeI(kNT_line, dotX, underlineY + 1, dotX, underlineY + 1, 7);
@@ -1175,7 +1189,7 @@ bool draw(_NT_algorithm* self) {
     
     
     // Build number in bottom right corner (tiny font)
-    NT_drawText(236, 60, "B45", 15, kNT_textLeft, kNT_textTiny);
+    NT_drawText(236, 60, "B44", 15, kNT_textLeft, kNT_textTiny);
     
     return true; // keep suppressing default header; change to false if needed in next step
 }
@@ -1485,44 +1499,50 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     uint32_t algIndex = NT_algorithmIndex(self);
     uint32_t paramOffset = NT_parameterOffset();
     
-    // Left pot controls fader to the LEFT of selected (does nothing if first fader selected)
-    if (data.controls & kNT_potL) {
-        if (colInPage > 0) {  // Only active if not first fader
-            float potValue = data.pots[0];
-            // Apply deadband - only update if change is significant
-            if (a->potLast[0] < 0.0f || fabsf(potValue - a->potLast[0]) > a->potDeadband) {
-                int targetCol = colInPage - 1;
-                int faderParam = targetCol;  // FADER 1-8 maps to 0-7
-                int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
-                NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
-                a->potLast[0] = potValue;
+    // Check if pot control is enabled (0=On, 1=Off)
+    int potControl = (int)(self->v[kParamPotControl] + 0.5f);
+    
+    // Only process pot input if pot control is ON
+    if (potControl == 0) {
+        // Left pot controls fader to the LEFT of selected (does nothing if first fader selected)
+        if (data.controls & kNT_potL) {
+            if (colInPage > 0) {  // Only active if not first fader
+                float potValue = data.pots[0];
+                // Apply deadband - only update if change is significant
+                if (a->potLast[0] < 0.0f || fabsf(potValue - a->potLast[0]) > a->potDeadband) {
+                    int targetCol = colInPage - 1;
+                    int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+                    int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
+                    NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                    a->potLast[0] = potValue;
+                }
             }
         }
-    }
-    
-    // Center pot always controls the SELECTED fader's column
-    if (data.controls & kNT_potC) {
-        float potValue = data.pots[1];
-        // Apply deadband - only update if change is significant
-        if (a->potLast[1] < 0.0f || fabsf(potValue - a->potLast[1]) > a->potDeadband) {
-            int faderParam = colInPage;  // FADER 1-8 maps to 0-7
-            int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
-            NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
-            a->potLast[1] = potValue;
-        }
-    }
-    
-    // Right pot controls fader to the RIGHT of selected (does nothing if last fader selected)
-    if (data.controls & kNT_potR) {
-        if (colInPage < 7) {  // Only active if not last fader
-            float potValue = data.pots[2];
+        
+        // Center pot always controls the SELECTED fader's column
+        if (data.controls & kNT_potC) {
+            float potValue = data.pots[1];
             // Apply deadband - only update if change is significant
-            if (a->potLast[2] < 0.0f || fabsf(potValue - a->potLast[2]) > a->potDeadband) {
-                int targetCol = colInPage + 1;
-                int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+            if (a->potLast[1] < 0.0f || fabsf(potValue - a->potLast[1]) > a->potDeadband) {
+                int faderParam = colInPage;  // FADER 1-8 maps to 0-7
                 int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
                 NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
-                a->potLast[2] = potValue;
+                a->potLast[1] = potValue;
+            }
+        }
+        
+        // Right pot controls fader to the RIGHT of selected (does nothing if last fader selected)
+        if (data.controls & kNT_potR) {
+            if (colInPage < 7) {  // Only active if not last fader
+                float potValue = data.pots[2];
+                // Apply deadband - only update if change is significant
+                if (a->potLast[2] < 0.0f || fabsf(potValue - a->potLast[2]) > a->potDeadband) {
+                    int targetCol = colInPage + 1;
+                    int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+                    int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
+                    NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                    a->potLast[2] = potValue;
+                }
             }
         }
     }
@@ -1705,140 +1725,6 @@ static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
     
     // Clear the modified flag when saving
     a->namesModified = false;
-    
-    // Write debug snapshot (only if debug logging is enabled)
-    int debugEnabled = (int)(self->v[kParamDebugLog] + 0.5f);
-    if (debugEnabled) {
-        stream.addMemberName("debug");
-        stream.openObject();
-            stream.addMemberName("stepCount");
-            stream.addNumber((int)a->debugSnapshot.stepCount);
-            
-            stream.addMemberName("fader0Value");
-            stream.addNumber(a->debugSnapshot.fader0Value);
-            
-            stream.addMemberName("lastMidiValue0");
-            stream.addNumber(a->debugSnapshot.lastMidiValue0);
-            
-            stream.addMemberName("hasControl0");
-            stream.addBoolean(a->debugSnapshot.hasControl0);
-            
-            stream.addMemberName("paramChangedCount");
-            stream.addNumber(a->debugSnapshot.paramChangedCount);
-            
-            stream.addMemberName("midiSentCount");
-            stream.addNumber(a->debugSnapshot.midiSentCount);
-            
-            stream.addMemberName("lastParamChangedValue");
-            stream.addNumber(a->debugSnapshot.lastParamChangedValue);
-            
-            stream.addMemberName("lastParamChangedStep");
-            stream.addNumber((int)a->debugSnapshot.lastParamChangedStep);
-            
-            stream.addMemberName("pickupEnterCount");
-            stream.addNumber(a->debugSnapshot.pickupEnterCount);
-            
-            stream.addMemberName("pickupExitCount");
-            stream.addNumber(a->debugSnapshot.pickupExitCount);
-            
-            stream.addMemberName("lastPhysicalPos");
-            stream.addNumber(a->debugSnapshot.lastPhysicalPos);
-            
-            stream.addMemberName("lastPickupPivot");
-            stream.addNumber(a->debugSnapshot.lastPickupPivot);
-            
-            stream.addMemberName("lastPickupStartValue");
-            stream.addNumber(a->debugSnapshot.lastPickupStartValue);
-            
-            stream.addMemberName("lastMismatch");
-            stream.addNumber(a->debugSnapshot.lastMismatch);
-            
-            stream.addMemberName("lastCaughtUpUp");
-            stream.addBoolean(a->debugSnapshot.lastCaughtUpUp);
-            
-            stream.addMemberName("lastCaughtUpDown");
-            stream.addBoolean(a->debugSnapshot.lastCaughtUpDown);
-            
-            stream.addMemberName("lastButtonState");
-            stream.addNumber(a->debugSnapshot.lastButtonState);
-            
-            stream.addMemberName("nameEditModeActive");
-            stream.addBoolean(a->debugSnapshot.nameEditModeActive);
-            
-            stream.addMemberName("nameEditFaderIdx");
-            stream.addNumber(a->debugSnapshot.nameEditFaderIdx);
-            
-            stream.addMemberName("nameEditCursorPos");
-            stream.addNumber(a->debugSnapshot.nameEditCursorPos);
-            
-            stream.addMemberName("encoderLCount");
-            stream.addNumber(a->debugSnapshot.encoderLCount);
-            
-            stream.addMemberName("encoderRCount");
-            stream.addNumber(a->debugSnapshot.encoderRCount);
-            
-            stream.addMemberName("currentPage");
-            stream.addNumber(a->debugSnapshot.currentPage);
-            
-            stream.addMemberName("currentSel");
-            stream.addNumber(a->debugSnapshot.currentSel);
-            
-            stream.addMemberName("nameEditPageNum");
-            stream.addNumber(a->debugSnapshot.nameEditPageNum);
-            
-            stream.addMemberName("nameEditSettingIdx");
-            stream.addNumber(a->debugSnapshot.nameEditSettingIdx);
-            
-            stream.addMemberName("uiFreezeCounter");
-            stream.addNumber(a->debugSnapshot.uiFreezeCounter);
-            
-            // Note mode debug tracking
-            stream.addMemberName("noteDebug");
-            stream.openObject();
-                stream.addMemberName("selectedFaderDisplayMode");
-                stream.addNumber(a->debugSnapshot.selectedFaderDisplayMode);
-                stream.addMemberName("selectedFaderBottomMidi");
-                stream.addNumber(a->debugSnapshot.selectedFaderBottomMidi);
-                stream.addMemberName("selectedFaderTopMidi");
-                stream.addNumber(a->debugSnapshot.selectedFaderTopMidi);
-                stream.addMemberName("selectedFaderBottomValue");
-                stream.addNumber(a->debugSnapshot.selectedFaderBottomValue);
-                stream.addMemberName("selectedFaderTopValue");
-                stream.addNumber(a->debugSnapshot.selectedFaderTopValue);
-                stream.addMemberName("lastSentMidiValue");
-                stream.addNumber(a->debugSnapshot.lastSentMidiValue);
-                stream.addMemberName("lastSentFaderValue");
-                stream.addNumber(a->debugSnapshot.lastSentFaderValue);
-                stream.addMemberName("snappedNoteValue");
-                stream.addNumber(a->debugSnapshot.snappedNoteValue);
-                stream.addMemberName("scaledNumberValue");
-                stream.addNumber(a->debugSnapshot.scaledNumberValue);
-            stream.closeObject();
-            
-            // Pickup indicator debug - detailed state for all 32 faders
-            stream.addMemberName("pickupDebug");
-            stream.openArray();
-            for (int i = 0; i < 32; i++) {
-                stream.openObject();
-                    stream.addMemberName("faderIdx");
-                    stream.addNumber(i);
-                    stream.addMemberName("pickupActive");
-                    stream.addBoolean(a->debugSnapshot.pickupModeActive[i]);
-                    stream.addMemberName("internalValue");
-                    stream.addNumber(a->debugSnapshot.internalFaderValue[i]);
-                    stream.addMemberName("physicalValue");
-                    stream.addNumber(a->debugSnapshot.physicalFaderValue[i]);
-                    stream.addMemberName("pivotValue");
-                    stream.addNumber(a->debugSnapshot.pickupPivotValue[i]);
-                    stream.addMemberName("startValue");
-                    stream.addNumber(a->debugSnapshot.pickupStartValueArray[i]);
-                    stream.addMemberName("mismatch");
-                    stream.addNumber(fabsf(a->debugSnapshot.physicalFaderValue[i] - a->debugSnapshot.internalFaderValue[i]));
-                stream.closeObject();
-            }
-            stream.closeArray();
-        stream.closeObject();
-    }
     
     // Write display layout info for debugging/screenshots
     stream.addMemberName("displayLayout");

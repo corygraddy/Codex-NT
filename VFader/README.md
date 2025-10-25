@@ -1,27 +1,21 @@
 # VFader
 
-**Build 43** - 32 Virtual Faders with MIDI CC and CV Output for Disting NT
+**Build 44** - 32 Virtual Faders with MIDI CC for Disting NT
 
 ## Overview
 
-VFader is a Disting NT algorithm that provides 32 virtual faders organized into 4 pages of 8 faders each. Each fader can be controlled via the three pots (L, C, R) and outputs both MIDI CC messages (7-bit or 14-bit) and direct CV outputs.
+VFader is a Disting NT algorithm that provides 32 virtual faders organized into 4 pages of 8 faders each. Each fader can be controlled via the three pots (L, C, R) and outputs both MIDI CC messages (7-bit or 14-bit).
 
 ## Key Features
 
 - **32 Virtual Faders**: 4 pages × 8 faders per page
 - **8 CV Outputs**: Direct voltage control (0-10V) from any fader
 - **Dual Control Modes**: 
-  - **Note Mode**: Send specific MIDI notes with customizable chromatic scales
+  - **Note Mode**: Send specific MIDI notes with customizable scales
   - **Number Mode**: Send scaled values (0-100 range, customizable)
 - **MIDI Output**: 
   - 7-bit CC (CC 1-32, values 0-127)
   - 14-bit CC (CC 0-31 MSB paired with CC 32-63 LSB, values 0-16383)
-- **CV Output**:
-  - 8 configurable CV outputs
-  - Route to any of 28 disting NT output buses
-  - Map each CV output to any of the 32 faders
-  - Add or Replace output modes
-  - 0-10V range based on fader position
 - **Pickup Modes**: 
   - **Scaled**: Physical pot position scales the fader's range
   - **Catch**: Fader doesn't change until pot catches the current value
@@ -98,24 +92,23 @@ Selects which page (1-4) is currently active. Hidden from parameter page but acc
 ### Pickup Mode
 Controls how physical pot movement affects the virtual fader:
 - **Scaled**: Pot position (0-100%) scales the fader's configured range
-  - Example: With range 20-80, pot at 50% sets value to 50
 - **Catch**: Fader value doesn't change until pot "catches up" to it
   - Prevents value jumps when switching pages
   - Pot must cross the current fader value before changes take effect
 - Default: Catch
 
-### Debug Log
-- **Off**: Normal operation
-- **On**: Captures detailed state information in preset JSON for troubleshooting
-- Default: Off
-
-### CV Out 1-8
-Each CV output has three parameters (scroll down on the VFADER parameter page):
-- **CV Out N**: Select output bus (1-28)
-- **CV Out N mode**: Add (mix with existing signal) or Replace (overwrite)
-- **CV Out N Fader**: Map to a fader (None, or Fader 1-32)
-
-CV outputs generate 0-10V based on the mapped fader's position (0.0-1.0 → 0-10V).
+### Pot Control
+Enable or disable fader level changes via the three pots:
+- **On**: Pots control fader levels (default)
+  - Left pot controls the fader to the left of selected
+  - Center pot controls the selected fader
+  - Right pot controls the fader to the right of selected
+  - Dotted lines appear under adjacent faders to show pot mapping
+- **Off**: Pots do not change fader levels
+  - Only the solid line appears under the selected fader
+  - All three pots are disabled in this mode
+  - Useful when you want to prevent accidental pot changes
+- Default: On
 
 ## MIDI Output Details
 
@@ -182,7 +175,7 @@ CV outputs generate 0-10V based on the mapped fader's position (0.0-1.0 → 0-10
 ## Technical Specifications
 
 - **Algorithm GUID**: VFDR
-- **Build Version**: 43
+- **Build Version**: 44
 - **Memory Usage**: Optimized for Disting NT SRAM
 - **MIDI Channel**: 1 (hardcoded)
 - **MIDI Destinations**: USB + Internal
@@ -216,6 +209,14 @@ CV outputs generate 0-10V based on the mapped fader's position (0.0-1.0 → 0-10
 Enable Debug Log parameter and save a preset to capture detailed state information in the JSON file.
 
 ## Version History
+
+### Build 44 (October 2025)
+- Added **Pot Control** parameter to enable/disable pot input
+- When Pot Control is Off, all three pots are disabled
+- GUI updated: dotted lines only appear when Pot Control is On
+- Only the solid line under selected fader shows when pots are disabled
+- Prevents accidental fader changes from pot movement
+- Removed debug logging feature
 
 ### Build 43 (October 2025)
 - Added 8 CV outputs with fader mapping
