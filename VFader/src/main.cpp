@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 46  // Remove CV output parameters and generation code
+#define VFADER_BUILD 47  // Fix macro fader initialization - children no longer reset on first movement
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
@@ -1151,7 +1151,7 @@ bool draw(_NT_algorithm* self) {
     
     
     // Build number in bottom right corner (tiny font)
-    NT_drawText(236, 60, "B46", 15, kNT_textLeft, kNT_textTiny);
+    NT_drawText(236, 60, "B47", 15, kNT_textLeft, kNT_textTiny);
     
     return true; // keep suppressing default header; change to false if needed in next step
 }
@@ -1344,8 +1344,9 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                                     // Set reference to current position (don't snap!)
                                     a->faderReferenceValues[childIdx] = a->internalFaders[childIdx];
                                 }
-                                // Initialize lastGangValues to -1.0 to trigger first update
-                                a->lastGangValues[faderIdx] = -1.0f;
+                                // Initialize lastGangValues to current macro position (not -1.0!)
+                                // This prevents the first macro movement from causing incorrect transforms
+                                a->lastGangValues[faderIdx] = a->internalFaders[faderIdx];
                             }
                             
                             settingsChanged = true;

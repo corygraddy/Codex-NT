@@ -1,6 +1,6 @@
 # VFader
 
-**Build 46** - 32 Virtual Faders with MIDI CC for Disting NT
+**Build 47** - 32 Virtual Faders with MIDI CC for Disting NT
 
 ## Overview
 
@@ -198,7 +198,7 @@ Enable or disable fader level changes via the three pots:
 ## Technical Specifications
 
 - **Algorithm GUID**: VFDR
-- **Build Version**: 46
+- **Build Version**: 47
 - **Memory Usage**: Optimized for Disting NT SRAM
 - **MIDI Channel**: 1 (hardcoded)
 - **MIDI Destinations**: USB + Internal
@@ -222,6 +222,13 @@ Enable or disable fader level changes via the three pots:
 - Alternatively, use **Scaled** mode and adjust pots after page switch
 
 ## Version History
+
+### Build 47 (October 2025)
+- **Fixed macro fader initialization bug**
+- Children no longer reset/snap on first macro fader movement
+- `lastGangValues` now initialized to current macro position (not -1.0)
+- Children maintain their positions when macro is first created
+- Proper transformation from the moment macro is activated
 
 ### Build 46 (October 2025)
 - **Removed CV output functionality** (abandoned feature)
