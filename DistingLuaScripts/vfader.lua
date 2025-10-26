@@ -19,12 +19,13 @@ return {
         }
         self._faderBase = #params -- index before appending, so first fader will be base+1
         for i = 1, self.TOTAL do
-            table.insert(params, { string.format("Fader %02d", i), 0, 1000, 0, kNone, kBy1000 })
+            -- Fader values: 0..16383 (full 14-bit resolution) for smooth 14-bit MIDI CC
+            table.insert(params, { string.format("Fader %02d", i), 0, 16383, 0, kNone })
         end
 
         -- Track last values to detect changes originated by mappings (MIDI/I2C)
     self._last = {}
-    for i = 1, self.TOTAL do self._last[i] = 0.0 end
+    for i = 1, self.TOTAL do self._last[i] = 0 end
     -- Track if a fader has ever been assigned/changed (for UI '-/-' vs 'msb/lsb')
     self._everSet = {}
     for i = 1, self.TOTAL do self._everSet[i] = false end
@@ -51,9 +52,10 @@ return {
         -- Detect changes and enqueue indices (deduplicated)
         for i = 1, self.TOTAL do
             local pIdx = base + i
-            local v = self.parameters[pIdx] or 0.0 -- 0..1 via kBy1000
-            if v < 0 then v = 0 elseif v > 1 then v = 1 end
-            if math.abs(v - (self._last[i] or -1)) > 0.0005 then
+            local v = self.parameters[pIdx] or 0 -- 0..16383 (14-bit)
+            -- Clamp to valid 14-bit range
+            if v < 0 then v = 0 elseif v > 16383 then v = 16383 end
+            if math.abs(v - (self._last[i] or -1)) > 0 then
                 self._last[i] = v
                 self._everSet[i] = true
                 if not self._pendingInQ[i] then
@@ -67,8 +69,9 @@ return {
         while budget > 0 and #self._pendingQ > 0 do
             local i = table.remove(self._pendingQ, 1)
             self._pendingInQ[i] = nil
-            local v = self._last[i] or 0.0
-            local full = math.floor(v * 16383 + 0.5)
+            local v = self._last[i] or 0
+            -- v is already 0..16383, use directly
+            local full = math.floor(v + 0.5)
             local msb = math.floor(full / 128)
             local lsb = full % 128
             local msbCC, lsbCC
@@ -145,9 +148,10 @@ return {
             local col_end_x = i * col_width
             local x_center = col_start_x + (col_width / 2)
 
-            local v = self.parameters[base + idx] or 0.0
-            if v < 0 then v = 0 elseif v > 1 then v = 1 end
-            local valueStr = tostring(math.floor(v * 100 + 0.5))
+            local v = self.parameters[base + idx] or 0
+            if v < 0 then v = 0 elseif v > 16383 then v = 16383 end
+            -- Display value as percent (0-100%), internal is 14-bit (0-16383)
+            local valueStr = string.format("%d%%", math.floor((v / 16383) * 100 + 0.5))
             local nameStr = string.format("FADR %02d", idx)
 
             local shift = nameShift[i] or 0
@@ -225,7 +229,9 @@ return {
         local localSel = ((self.sel - 1) % self.PER_PAGE) + 1
         local leftLocal = (localSel > 1) and (localSel - 1) or 1
         local idx = (self.page - 1) * self.PER_PAGE + leftLocal
-        setParameterNormalized(self.algorithmIndex, self.parameterOffset + base + idx, value, false)
+        -- Convert normalized 0..1 to 0..16383
+        local val14bit = math.floor(value * 16383 + 0.5)
+        setParameter(self.algorithmIndex, self.parameterOffset + base + idx, val14bit, false)
     end,
 
     -- Optional: allow tweaking selected fader locally (good for testing without I2C)
@@ -233,8 +239,9 @@ return {
         value = math.max(0.0, math.min(1.0, value or 0.0))
         local base = self._faderBase or 1
         local pIdx = base + (self.sel or 1)
-        -- Use setParameterNormalized so mappings/automation are consistent
-        setParameterNormalized(self.algorithmIndex, self.parameterOffset + pIdx, value, false)
+        -- Convert normalized 0..1 to 0..16383
+        local val14bit = math.floor(value * 16383 + 0.5)
+        setParameter(self.algorithmIndex, self.parameterOffset + pIdx, val14bit, false)
     end,
 
     pot3Turn = function(self, value)
@@ -243,6 +250,8 @@ return {
         local localSel = ((self.sel - 1) % self.PER_PAGE) + 1
         local rightLocal = (localSel < self.PER_PAGE) and (localSel + 1) or self.PER_PAGE
         local idx = (self.page - 1) * self.PER_PAGE + rightLocal
-        setParameterNormalized(self.algorithmIndex, self.parameterOffset + base + idx, value, false)
+        -- Convert normalized 0..1 to 0..16383
+        local val14bit = math.floor(value * 16383 + 0.5)
+        setParameter(self.algorithmIndex, self.parameterOffset + base + idx, val14bit, false)
     end,
 }

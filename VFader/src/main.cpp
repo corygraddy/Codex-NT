@@ -6,14 +6,15 @@
 #include <cmath>
 #include <cstring>
 
-#define VFADER_BUILD 48  // Reduce drift control settings: remove High (2%), Med becomes High (1%)
+#define VFADER_BUILD 49  // Full 14-bit resolution: parameters 0-16383
 
 // VFader: Simple paging architecture with MIDI output
 // - 8 FADER parameters (external controls, what F8R maps to)
 // - 1 PAGE parameter (selects which 8 of 32 internal faders to control)
 // - 1 MIDI MODE parameter (7-bit or 14-bit MIDI CC output)
-// - 32 internal faders stored in state (not as parameters)
+// - 32 internal faders stored in state (0.0-1.0)
 // - Outputs: MIDI CC 1-32 (7-bit) or CC 0-31 (14-bit with standard pairing)
+// - Parameters accept 0-16383 for full 14-bit MIDI resolution
 // - Users can route MIDI to CV using disting's MIDI→CV converter
 
 struct VFader : public _NT_algorithm {
@@ -28,15 +29,22 @@ struct VFader : public _NT_algorithm {
     
     // Pickup mode: track physical fader position for relative control
     float physicalFaderPos[32] = {0};  // Last known physical position (0.0-1.0 from parameter)
+    float lastPhysicalPos[32] = {0};   // Previous physical position to detect direction
     float pickupPivot[32] = {-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
                               -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
                               -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
                               -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};  // Physical position when entering pickup mode
     float pickupStartValue[32] = {0};  // Value when entering pickup mode
     bool inPickupMode[32] = {false};  // Whether fader is in pickup/relative mode
+    bool inSlewMode[32] = {false};    // Whether fader is slewing to catch target
+    float slewTarget[32] = {0};       // Target value for slewing
+    uint8_t pickupSettleFrames[32] = {0};  // Frames to wait after exiting pickup before re-entering (prevent jitter)
     
     // For 14-bit: alternate between sending MSB and LSB across steps
     bool send14bitPhase = false;  // false = send MSB, true = send LSB
+    
+    // Sticky endpoints: hold min/max values for a few frames to ensure they register
+    uint8_t endpointHoldCounter[32] = {0};  // Frames remaining to hold endpoint value
     
     // UI state
     uint8_t page = 1;    // 1..4 (for display)
@@ -317,15 +325,15 @@ static char faderNames[8][12];
 
 // Initialize parameter definitions
 static void initParameters() {
-    // FADER 1-8 parameters
+    // FADER 1-8 parameters (0-16383 for full 14-bit MIDI resolution)
     for (int i = 0; i < 8; ++i) {
         snprintf(faderNames[i], sizeof(faderNames[i]), "FADER %d", i + 1);
         parameters[kParamFader1 + i].name = faderNames[i];
         parameters[kParamFader1 + i].min = 0;
-        parameters[kParamFader1 + i].max = 1000;
+        parameters[kParamFader1 + i].max = 16383;  // Full 14-bit range
         parameters[kParamFader1 + i].def = 0;
         parameters[kParamFader1 + i].unit = kNT_unitNone;
-        parameters[kParamFader1 + i].scaling = kNT_scaling1000;
+        parameters[kParamFader1 + i].scaling = kNT_scalingNone;
         parameters[kParamFader1 + i].enumStrings = NULL;
     }
     
@@ -725,10 +733,28 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     uint8_t noteValue = (uint8_t)a->snapToActiveNote(currentValue, a->faderNoteSettings[i]);
                     full = noteValue << 7;  // Shift to MSB position for 14-bit
                 } else {
-                    // Number mode: snap to value range (0-100), scale to 14-bit (0-16383)
-                    int scaledValue = a->snapToValueRange(currentValue, a->faderNoteSettings[i]);
-                    // Map 0-100 to 0-16383
-                    full = (scaledValue * 16383) / 100;
+                    // Number mode: use full 0.0-1.0 resolution, scale directly to 14-bit (0-16383)
+                    // Add deadzone at min/max for reliable endpoint hitting
+                    float scaledValue = currentValue;
+                    bool isAtEndpoint = false;
+                    
+                    if (scaledValue < 0.01f) {
+                        scaledValue = 0.0f;      // Snap to min
+                        isAtEndpoint = true;
+                    }
+                    if (scaledValue > 0.99f) {
+                        scaledValue = 1.0f;      // Snap to max
+                        isAtEndpoint = true;
+                    }
+                    
+                    // Sticky endpoints: hold min/max for 3 frames to ensure registration
+                    if (isAtEndpoint) {
+                        a->endpointHoldCounter[i] = 3;
+                    }
+                    
+                    full = (int)(scaledValue * 16383.0f + 0.5f);
+                    if (full > 16383) full = 16383;
+                    if (full < 0) full = 0;
                 }
                 
                 uint8_t msb = (uint8_t)(full >> 7);
@@ -752,6 +778,30 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 // Update last sent value after both phases complete
                 if (a->send14bitPhase) {
                     a->lastMidiValues[i] = currentValue;
+                }
+            } else if (a->endpointHoldCounter[i] > 0) {
+                // Not changed, but still holding endpoint - keep sending
+                a->endpointHoldCounter[i]--;
+                
+                // Re-send the last value
+                float heldValue = a->lastMidiValues[i];
+                int full = (int)(heldValue * 16383.0f + 0.5f);
+                if (full > 16383) full = 16383;
+                if (full < 0) full = 0;
+                
+                uint8_t msb = (uint8_t)(full >> 7);
+                uint8_t lsb = (uint8_t)(full & 0x7F);
+                
+                uint8_t msbCC = i;
+                uint8_t lsbCC = i + 32;
+                
+                if (msb > 127) msb = 127;
+                if (lsb > 127) lsb = 127;
+                
+                if (a->send14bitPhase) {
+                    NT_sendMidi3ByteMessage(midiDest, status, lsbCC, lsb);
+                } else {
+                    NT_sendMidi3ByteMessage(midiDest, status, msbCC, msb);
                 }
             }
         }
@@ -1032,7 +1082,75 @@ bool draw(_NT_algorithm* self) {
             int scaledValue = a->snapToValueRange(v, faderSettings);
             char valBuf[4];
             snprintf(valBuf, sizeof(valBuf), "%d", scaledValue);
+            
+            // Draw main value
             NT_drawText(xCenter + 3, faderTop - 2, valBuf, nameColor, kNT_textCentre, kNT_textNormal);
+            
+            // Add tiny decimal digit (.0-.9) to the right using pixels
+            // Calculate decimal part from full resolution value
+            float fullValue = v * 100.0f;  // 0.0 - 100.0
+            int decimalDigit = ((int)(fullValue * 10.0f)) % 10;  // Extract tenths place
+            
+            // Position for decimal digit - to the right of main value
+            int mainWidth = (scaledValue >= 100) ? 18 : (scaledValue >= 10) ? 12 : 6;
+            int decX = xCenter + 3 + (mainWidth / 2) + 1;  // Right edge + 1px spacing
+            int decY = faderTop - 1;  // Align with top of main value
+            
+            // Draw the decimal digit as a tiny 3x5 pixel pattern
+            // Simple patterns for 0-9
+            switch (decimalDigit) {
+                case 0: // O shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_point, decX, decY+1, decX, decY+1, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+1, decX+2, decY+1, nameColor);
+                    NT_drawShapeI(kNT_point, decX, decY+2, decX, decY+2, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_line, decX, decY+3, decX+2, decY+3, nameColor);
+                    break;
+                case 1: // I shape
+                    NT_drawShapeI(kNT_line, decX+1, decY, decX+1, decY+3, nameColor);
+                    break;
+                case 2: // 2 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+1, decX+2, decY+1, nameColor);
+                    NT_drawShapeI(kNT_line, decX, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_point, decX, decY+3, decX, decY+3, nameColor);
+                    break;
+                case 3: // 3 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_line, decX+1, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+1, decX+2, decY+1, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+3, decX+2, decY+3, nameColor);
+                    break;
+                case 4: // 4 shape
+                    NT_drawShapeI(kNT_point, decX, decY, decX, decY+1, nameColor);
+                    NT_drawShapeI(kNT_line, decX, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_line, decX+2, decY, decX+2, decY+3, nameColor);
+                    break;
+                case 5: // 5 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_point, decX, decY+1, decX, decY+1, nameColor);
+                    NT_drawShapeI(kNT_line, decX, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+3, decX+2, decY+3, nameColor);
+                    break;
+                case 6: // 6 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX, decY+3, nameColor);
+                    NT_drawShapeI(kNT_line, decX, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+3, decX+2, decY+3, nameColor);
+                    break;
+                case 7: // 7 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_line, decX+2, decY, decX+2, decY+3, nameColor);
+                    break;
+                case 8: // 8 shape
+                    NT_drawShapeI(kNT_rectangle, decX, decY, decX+2, decY+3, nameColor);
+                    break;
+                case 9: // 9 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_point, decX, decY+1, decX, decY+1, nameColor);
+                    NT_drawShapeI(kNT_line, decX+2, decY, decX+2, decY+3, nameColor);
+                    break;
+            }
         }
         
         // Pickup mode indicator - small line sticking out right side at locked value position (2px long, 3px tall)
@@ -1469,11 +1587,16 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         if (data.controls & kNT_potL) {
             if (colInPage > 0) {  // Only active if not first fader
                 float potValue = data.pots[0];
+                // Apply min/max deadzones to pot values (3% to match parameter logic)
+                if (potValue < 0.03f) potValue = 0.0f;
+                else if (potValue > 0.97f) potValue = 1.0f;
+                // Quantize pot to 2500 steps to reduce jitter/backtracking
+                potValue = floorf(potValue * 2500.0f + 0.5f) / 2500.0f;
                 // Apply deadband - only update if change is significant
                 if (a->potLast[0] < 0.0f || fabsf(potValue - a->potLast[0]) > a->potDeadband) {
                     int targetCol = colInPage - 1;
                     int faderParam = targetCol;  // FADER 1-8 maps to 0-7
-                    int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
+                    int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);  // Scale to 0-16383
                     NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
                     a->potLast[0] = potValue;
                 }
@@ -1483,10 +1606,15 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         // Center pot always controls the SELECTED fader's column
         if (data.controls & kNT_potC) {
             float potValue = data.pots[1];
+            // Apply min/max deadzones to pot values (3% to match parameter logic)
+            if (potValue < 0.03f) potValue = 0.0f;
+            else if (potValue > 0.97f) potValue = 1.0f;
+            // Quantize pot to 2500 steps to reduce jitter/backtracking
+            potValue = floorf(potValue * 2500.0f + 0.5f) / 2500.0f;
             // Apply deadband - only update if change is significant
             if (a->potLast[1] < 0.0f || fabsf(potValue - a->potLast[1]) > a->potDeadband) {
                 int faderParam = colInPage;  // FADER 1-8 maps to 0-7
-                int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
+                int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);  // Scale to 0-16383
                 NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
                 a->potLast[1] = potValue;
             }
@@ -1496,11 +1624,16 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         if (data.controls & kNT_potR) {
             if (colInPage < 7) {  // Only active if not last fader
                 float potValue = data.pots[2];
+                // Apply min/max deadzones to pot values (3% to match parameter logic)
+                if (potValue < 0.03f) potValue = 0.0f;
+                else if (potValue > 0.97f) potValue = 1.0f;
+                // Quantize pot to 2500 steps to reduce jitter/backtracking
+                potValue = floorf(potValue * 2500.0f + 0.5f) / 2500.0f;
                 // Apply deadband - only update if change is significant
                 if (a->potLast[2] < 0.0f || fabsf(potValue - a->potLast[2]) > a->potDeadband) {
                     int targetCol = colInPage + 1;
                     int faderParam = targetCol;  // FADER 1-8 maps to 0-7
-                    int16_t value = (int16_t)(potValue * 1000.0f + 0.5f);  // Scale to 0-1000
+                    int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);  // Scale to 0-16383
                     NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
                     a->potLast[2] = potValue;
                 }
@@ -1532,17 +1665,49 @@ void parameterChanged(_NT_algorithm* self, int p) {
         int currentPage = (int)self->v[kParamPage];  // 0-3
         int internalIdx = currentPage * 8 + faderIdx;  // 0-31
         
-        // Scale parameter (0-1000) to internal value (0.0-1.0)
-        float v = self->v[p] * 0.001f;
+        // Scale parameter (0-16383) to internal value (0.0-1.0)
+        float v = self->v[p] / 16383.0f;
         if (v < 0.0f) v = 0.0f;
         else if (v > 1.0f) v = 1.0f;
+        
+        // Apply min/max deadzones BEFORE pickup mode logic to prevent false catches at endpoints
+        // Larger deadzones (3%) at min/max to prevent getting stuck
+        if (v < 0.03f) {
+            v = 0.0f;
+        } else if (v > 0.97f) {
+            v = 1.0f;
+        }
         
         // Get pickup mode setting (0=Scaled, 1=Catch)
         int pickupMode = (int)(self->v[kParamPickupMode] + 0.5f);
         
         // Pickup mode logic: relative scaling when physical position ≠ value
         float currentValue = a->internalFaders[internalIdx];
-        float mismatch = fabsf(v - currentValue);
+        
+        // Also apply deadzones to current value for consistent comparison
+        float currentValueWithDeadzone = currentValue;
+        if (currentValueWithDeadzone < 0.03f) {
+            currentValueWithDeadzone = 0.0f;
+        } else if (currentValueWithDeadzone > 0.97f) {
+            currentValueWithDeadzone = 1.0f;
+        }
+        
+        // Use coarse resolution (500 steps) for pickup mode detection to reduce jitter sensitivity
+        // Still maintain full 16k resolution for actual output
+        int coarsePhysical = (int)(v * 500.0f + 0.5f);
+        int coarseCurrent = (int)(currentValueWithDeadzone * 500.0f + 0.5f);
+        int coarseMismatch = abs(coarsePhysical - coarseCurrent);
+        
+        // Track movement direction to detect continuous fast sweeps
+        float movementDelta = v - a->lastPhysicalPos[internalIdx];
+        // Use threshold that accounts for coarse resolution (500 steps = 0.002 per step)
+        bool movingContinuously = fabsf(movementDelta) > 0.001f;  // ~0.5 coarse steps
+        bool sameDirection = (movementDelta > 0 && (v - a->physicalFaderPos[internalIdx]) > 0) ||
+                            (movementDelta < 0 && (v - a->physicalFaderPos[internalIdx]) < 0);
+        
+        // Update tracking
+        a->lastPhysicalPos[internalIdx] = a->physicalFaderPos[internalIdx];
+        a->physicalFaderPos[internalIdx] = v;
         
         // Debug tracking for fader 0
         if (internalIdx == 0) {
@@ -1550,9 +1715,30 @@ void parameterChanged(_NT_algorithm* self, int p) {
         
         // Decide whether to use pickup mode or absolute mode
         if (!a->inPickupMode[internalIdx]) {
+            // Decrement settle counter if active AND not actively moving
+            if (a->pickupSettleFrames[internalIdx] > 0) {
+                if (!movingContinuously) {
+                    a->pickupSettleFrames[internalIdx]--;
+                } else {
+                    // Active movement clears settle period immediately
+                    a->pickupSettleFrames[internalIdx] = 0;
+                }
+            }
+            
             // Currently in absolute mode - check if we should enter pickup
-            if (mismatch > 0.1f) {
-                // Significant mismatch - enter pickup mode
+            // Enter pickup mode if:
+            //   1. Mismatch > 1% (coarse) AND
+            //   2. Either:
+            //      a) Big mismatch (>10%) - always enter pickup, OR
+            //      b) Small mismatch (1-10%) but NOT continuous same-direction movement (allows fast sweeps)
+            //   3. Settle period has expired
+            bool bigMismatch = coarseMismatch > 50;  // >10% - always use pickup
+            bool smallMismatch = coarseMismatch > 5;  // >1% - use pickup unless fast sweep
+            bool shouldEnterPickup = a->pickupSettleFrames[internalIdx] == 0 && 
+                                    (bigMismatch || (smallMismatch && !(movingContinuously && sameDirection)));
+            
+            if (shouldEnterPickup) {
+                // Enter pickup mode
                 a->inPickupMode[internalIdx] = true;
                 a->pickupPivot[internalIdx] = v;
                 a->pickupStartValue[internalIdx] = currentValue;
@@ -1562,24 +1748,89 @@ void parameterChanged(_NT_algorithm* self, int p) {
                 }
                 // Don't change value yet - will calculate on next call
             } else {
-                // Close enough - use absolute value
+                // Small mismatch with fast sweep OR in settle period - update directly
                 a->internalFaders[internalIdx] = v;
             }
         } else {
             // Already in pickup mode
             if (pickupMode == 1) {
-                // CATCH MODE: Don't change value until physical matches internal
-                // Check if physical has caught the internal value
-                if (mismatch < 0.02f) {
-                    // Caught! Exit pickup mode and use absolute control
-                    a->inPickupMode[internalIdx] = false;
-                    a->pickupPivot[internalIdx] = -1.0f;
+                // CATCH MODE: Only exit on continuous movement if already close (within 10%)
+                // This prevents jumps when starting from a big mismatch
+                bool closeEnoughToExit = coarseMismatch < 50;  // Within 10%
+                
+                if (movingContinuously && sameDirection && closeEnoughToExit) {
+                    // Continuous movement AND already close - exit pickup and follow directly
                     a->internalFaders[internalIdx] = v;
-                    
-                    if (internalIdx == 0) {
+                    a->inPickupMode[internalIdx] = false;
+                    a->inSlewMode[internalIdx] = false;
+                    a->pickupPivot[internalIdx] = -1.0f;
+                    a->pickupSettleFrames[internalIdx] = 0;  // No settle when actively moving
+                } else if (coarseMismatch < 25) {
+                    // Within 5% (coarse) - enter slew mode for smooth catch
+                    if (!a->inSlewMode[internalIdx]) {
+                        a->inSlewMode[internalIdx] = true;
+                        a->slewTarget[internalIdx] = v;
                     }
+                    
+                    // Slew toward target over ~0.5 seconds
+                    float slewRate = 0.005333f;
+                    float delta = v - currentValue;
+                    
+                    // Exit when within 2 coarse steps (0.2%)
+                    if (coarseMismatch < 2) {
+                        // Close enough - snap and exit pickup mode
+                        a->internalFaders[internalIdx] = v;
+                        a->inPickupMode[internalIdx] = false;
+                        a->inSlewMode[internalIdx] = false;
+                        a->pickupPivot[internalIdx] = -1.0f;
+                        a->pickupSettleFrames[internalIdx] = 5;
+                    } else {
+                        // Slew toward target
+                        if (delta > 0) {
+                            a->internalFaders[internalIdx] += slewRate;
+                        } else {
+                            a->internalFaders[internalIdx] -= slewRate;
+                        }
+                    }
+                } else {
+                    // Still > 5% (coarse) away - use scaled pickup behavior like Scaled mode
+                    // Calculate scaled value based on pivot
+                    float pivotPos = a->pickupPivot[internalIdx];
+                    float startValue = a->pickupStartValue[internalIdx];
+                    float physicalDelta = v - pivotPos;
+                    
+                    float targetValue;
+                    if (physicalDelta > 0) {
+                        // Moving up from pivot
+                        float physicalRange = 1.0f - pivotPos;
+                        float valueRange = 1.0f - startValue;
+                        if (physicalRange > 0.001f) {
+                            float ratio = physicalDelta / physicalRange;
+                            if (ratio > 1.0f) ratio = 1.0f;
+                            targetValue = startValue + ratio * valueRange;
+                        } else {
+                            targetValue = 1.0f;
+                        }
+                    } else if (physicalDelta < 0) {
+                        // Moving down from pivot
+                        float physicalRange = pivotPos;
+                        float valueRange = startValue;
+                        if (physicalRange > 0.001f) {
+                            float ratio = -physicalDelta / physicalRange;
+                            if (ratio > 1.0f) ratio = 1.0f;
+                            targetValue = startValue - ratio * valueRange;
+                        } else {
+                            targetValue = 0.0f;
+                        }
+                    } else {
+                        targetValue = startValue;
+                    }
+                    
+                    if (targetValue < 0.0f) targetValue = 0.0f;
+                    if (targetValue > 1.0f) targetValue = 1.0f;
+                    
+                    a->internalFaders[internalIdx] = targetValue;
                 }
-                // Otherwise, don't update the value - just wait for catch
             } else {
                 // SCALED MODE: Calculate scaled value based on pivot
                 float pivotPos = a->pickupPivot[internalIdx];
