@@ -1,10 +1,134 @@
-# VFader
+# VSeq - 4-Channel CV Sequencer for Disting NT
 
-**Build 48** - 32 Virtual Faders with MIDI CC for Disting NT
+**Build 1** - 4-Channel 32-Step Sequencer with Section Looping
 
 ## Overview
 
-VFader is a Disting NT algorithm that provides 32 virtual faders organized into 4 pages of 8 faders each. Each fader can be controlled via the three pots (L, C, R) and outputs MIDI CC messages (7-bit or 14-bit).
+VSeq is a powerful 4-channel voltage sequencer for Disting NT. Each sequencer has 32 steps with 3 independent CV outputs, flexible playback modes, clock division/multiplication, and advanced section looping capabilities.
+
+## Features
+
+- **4 Independent Sequencers**: Each with 32 steps and 3 CV outputs
+- **Flexible Playback**: Forward, Backward, and Pingpong modes
+- **Clock Division/Multiplication**: /16, /8, /4, /2, x1, x2, x4, x8, x16
+- **Variable Step Count**: 1-32 steps per sequencer
+- **Section Looping**: Split sequences into two sections with independent repeat counts
+- **Visual Step Editor**: Two rows of 16 steps with 3 vertical bars per step
+- **Real-time Indicators**: Current step dots and selection underlines
+- **Page Indicators**: Visual bars show active sequencer (1-4)
+
+## Specifications
+
+- **Inputs**: Clock, Reset
+- **Outputs**: 12 CV outputs (4 sequencers × 3 outputs each)
+- **Voltage Range**: 0-10V (configurable per step)
+- **Resolution**: 32 steps per sequencer
+- **Step Modes**: Normal (ratchet/repeat framework in place for future)
+
+## Controls
+
+### Hardware Controls
+- **Left Encoder**: Select sequencer page (1-4)
+- **Right Encoder**: Select step (0-31)
+- **Left Pot**: Adjust Output 1 value for selected step
+- **Center Pot**: Adjust Output 2 value for selected step
+- **Right Pot**: Adjust Output 3 value for selected step
+- **Button 4**: Reserved for step mode cycling (future feature)
+
+### Parameters (Per Sequencer)
+- **Clock Division**: /16 to x16 range
+- **Direction**: Forward, Backward, Pingpong
+- **Step Count**: Number of active steps (1-32)
+- **Split Point**: Where section 1 ends and section 2 begins (1-31)
+- **Section 1 Repeats**: How many times to repeat section 1 (1-99)
+- **Section 2 Repeats**: How many times to repeat section 2 (1-99)
+
+## Section Looping Behavior
+
+Each sequencer can be split into two sections:
+- **Section 1**: Steps 0 to Split Point
+- **Section 2**: Steps Split Point to Step Count
+
+The sequencer will play Section 1 for the specified number of repeats, then play Section 2 for its repeats, then loop back to Section 1. This allows for complex rhythmic patterns and variations.
+
+**Note:** Section looping only applies to Forward and Backward modes. Pingpong mode plays through the entire sequence.
+
+When you change the Step Count parameter, the split parameters automatically reset:
+- Split Point = Step Count / 2
+- Section Repeats = 1
+
+## UI Elements
+
+- **Step Bars**: Three vertical bars per step showing CV output values (0V = bottom, 10V = top)
+- **Current Step Indicator**: Dot above the middle bar of the currently playing step
+- **Selection Underline**: Line under the selected step being edited
+- **Separator Lines**: Dark vertical lines between groups of 4 steps
+- **Page Indicators**: Four horizontal bars at the top, bright bar shows active sequencer
+
+## Installation
+
+1. Copy `1VSeq.o` to your Disting NT's SD card in the `/plugins/` directory
+2. Restart your Disting NT or reload plugins
+3. Select "VSeq" from the algorithm menu
+
+## Preset
+
+An example preset "Assured research.json" is included showing:
+- Clock module in slot 1 providing sync
+- VSeq in slot 2 with all 4 sequencers configured
+- Different voltage patterns per sequencer (2V/4V/6V patterns)
+- All sequencers set to 32 steps with split at step 16
+
+## Use Cases
+
+### Generative Patterns
+- Set different section repeat counts to create evolving patterns
+- Use split points to create verse/chorus structures
+- Combine with clock division for polyrhythmic textures
+
+### Melodic Sequencing
+- Use the 3 outputs for pitch, gate, and velocity/modulation
+- Set custom voltage values per step for specific melodic patterns
+- Use Pingpong mode for palindromic melodies
+
+### Modulation Sources
+- Generate complex modulation patterns with section looping
+- Use different sequencers for different modulation destinations
+- Clock multiplication for fast, evolving modulation
+
+### Rhythmic Control
+- Use gate patterns with section repeats for variations
+- Combine Forward/Backward modes with splits for interesting rhythms
+- Clock division for slower evolving patterns
+
+## Version History
+
+### Build 1 (October 26, 2025)
+- Initial release
+- 4-channel 32-step sequencer with 3 CV outputs each
+- Clock division/multiplication and direction control
+- Section looping with independent repeat counts
+- Visual step editor with page indicators
+- Left encoder page switching between sequencers
+- Automatic parameter reset when step count changes
+
+## Technical Details
+
+- **Algorithm GUID**: VSEQ
+- **Total Parameters**: 39 (2 inputs + 12 outputs + 25 configuration)
+- **Memory Usage**: Optimized for Disting NT SRAM
+- **Preset Format**: JSON with full state serialization
+- **Step Value Range**: int16_t (-32768 to 32767) mapped to 0-10V
+
+## Credits
+
+Developed by Cory Graddy for Disting NT  
+Built using the Expert Sleepers Disting NT API  
+Made with the help of GitHub Copilot: Claude Sonnet 4.5
+
+## License
+
+See LICENSE file for details.
 
 ## Key Features
 

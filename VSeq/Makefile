@@ -1,12 +1,7 @@
 # VSeq - 4-channel step sequencer for Disting NT
 # Build configuration
 
-TARGET = VSeq
-BUILD_DIR = build
-SRC_DIR = src
-## VFader - I2C→Virtual faders→14-bit MIDI CC pairs
-
-PLUGIN_NAME := VFader.o
+PLUGIN_NAME := VSeq.o
 SRC_DIR := src
 BUILD_DIR := build
 
@@ -50,4 +45,3 @@ clean:
 
 -include $(DEPS)
 
--include $(DEPS)
