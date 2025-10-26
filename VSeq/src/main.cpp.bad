@@ -1,0 +1,434 @@
+#include <distingnt/api.h>
+#include <distingnt/serialisation.h>
+#include <cstdint>
+#include <new>
+#include <cstdio>
+#include <cmath>
+#include <cstring>
+
+#define VSEQ_BUILD 1
+
+// VSeq: 4-channel step sequencer for Disting NT
+// - 4 sequencers, each with 16 steps
+// - Each step has 3 CV output values
+// - Clock input for step advancement
+// - Reset input to return to step 1
+// - 12 CV outputs total (4 sequencers × 3 outputs)
+// - Per-sequencer parameters: clock division/multiplication, direction, step count
+// - UI: 4 pages for step view + 4 pages for parameter editing
+
+struct VSeq : public _NT_algorithm {
+    // Sequencer data: [sequencer 0-3][step 0-15][output 0-2]
+    int16_t stepValues[4][16][3];
+    
+    // Sequencer state
+    int currentStep[4] = {0, 0, 0, 0};        // Current step for each sequencer (0-15)
+    int stepCount[4] = {16, 16, 16, 16};      // Active step count (1-16)
+    int clockDiv[4] = {0, 0, 0, 0};           // Clock division (0=1, 1=2, 2=4, 3=8, 4=16)
+    int direction[4] = {0, 0, 0, 0};          // 0=Forward, 1=Backward, 2=Pingpong
+    bool pingpongForward[4] = {true, true, true, true};  // Direction for pingpong mode
+    
+    // Clock/reset detection
+    bool lastClockState = false;
+    bool lastResetState = false;
+    int clockCounter[4] = {0, 0, 0, 0};      // Count clocks for division
+    
+    // UI state
+    int currentPage = 0;                     // 0-7: 0-3=step view, 4-7=edit mode
+    int selectedStep = 0;                    // Currently selected step (0-15)
+    bool uiActive = false;
+    uint8_t uiActiveTicks = 0;
+    
+    // Pot tracking for value editing
+    float potLast[3] = {-1.0f, -1.0f, -1.0f};
+    float potDeadband = 0.02f;
+    
+    // Button tracking
+    uint16_t lastButtonState = 0;
+    
+    // Debug: output bus tracking
+    int debugOutputBus[12] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+    
+    // Initialize sequencer with default values
+    void initialize() {
+        // Set all step values to mid-range
+        for (int seq = 0; seq < 4; seq++) {
+            for (int step = 0; step < 16; step++) {
+                for (int out = 0; out < 3; out++) {
+                    stepValues[seq][step][out] = 8192;  // Mid-range CV value
+                }
+            }
+        }
+    }
+    
+    // Advance sequencer by one step
+    void advanceSequencer(int seq) {
+        if (direction[seq] == 0) {  // Forward
+            currentStep[seq] = (currentStep[seq] + 1) % stepCount[seq];
+        } else if (direction[seq] == 1) {  // Backward
+            currentStep[seq]--;
+            if (currentStep[seq] < 0) {
+                currentStep[seq] = stepCount[seq] - 1;
+            }
+        } else {  // Pingpong
+            if (pingpongForward[seq]) {
+                currentStep[seq]++;
+                if (currentStep[seq] >= stepCount[seq]) {
+                    currentStep[seq] = stepCount[seq] - 2;
+                    if (currentStep[seq] < 0) currentStep[seq] = 0;
+                    pingpongForward[seq] = false;
+                }
+            } else {
+                currentStep[seq]--;
+                if (currentStep[seq] < 0) {
+                    currentStep[seq] = 1;
+                    if (currentStep[seq] >= stepCount[seq]) currentStep[seq] = stepCount[seq] - 1;
+                    pingpongForward[seq] = true;
+                }
+            }
+        }
+    }
+    
+    // Reset sequencer to first step
+    void resetSequencer(int seq) {
+        if (direction[seq] == 1) {  // Backward
+            currentStep[seq] = stepCount[seq] - 1;
+        } else {
+            currentStep[seq] = 0;
+        }
+        pingpongForward[seq] = true;
+    }
+};
+
+// Parameter indices
+enum {
+    kParamClockIn = 0,
+    kParamResetIn,
+    // Sequencer 1 outputs
+    kParamSeq1Out1,
+    kParamSeq1Out2,
+    kParamSeq1Out3,
+    // Sequencer 2 outputs
+    kParamSeq2Out1,
+    kParamSeq2Out2,
+    kParamSeq2Out3,
+    // Sequencer 3 outputs
+    kParamSeq3Out1,
+    kParamSeq3Out2,
+    kParamSeq3Out3,
+    // Sequencer 4 outputs
+    kParamSeq4Out1,
+    kParamSeq4Out2,
+    kParamSeq4Out3,
+    // Per-sequencer parameters (4 sequencers × 3 params)
+    kParamSeq1ClockDiv,
+    kParamSeq1Direction,
+    kParamSeq1StepCount,
+    kParamSeq2ClockDiv,
+    kParamSeq2Direction,
+    kParamSeq2StepCount,
+    kParamSeq3ClockDiv,
+    kParamSeq3Direction,
+    kParamSeq3StepCount,
+    kParamSeq4ClockDiv,
+    kParamSeq4Direction,
+    kParamSeq4StepCount,
+    kParamCount
+};
+
+static const _NT_parameter parameters[] = {
+    NT_PARAMETER_CV_INPUT("Clock in", 0, 1),
+    NT_PARAMETER_CV_INPUT("Reset in", 0, 1),
+    // Sequencer 1 outputs
+    NT_PARAMETER_CV_OUTPUT("Seq 1 Out 1", 0, 1),
+    NT_PARAMETER_CV_OUTPUT("Seq 1 Out 2", 0, 1),
+    NT_PARAMETER_CV_OUTPUT("Seq 1 Out 3", 0, 1),
+    // Sequencer 2 outputs
+    NT_PARAMETER_CV_OUTPUT("Seq 2 Out 1", 0, 1),
+    NT_PARAMETER_CV_OUTPUT("Seq 2 Out 2", 0, 1),
+    NT_PARAMETER_CV_OUTPUT("Seq 2 Out 3", 0, 1),
+    // Sequencer 3 outputs
+    NT_PARAMETER_CV_OUTPUT("Seq 3 Out 1", 0, 1),
+    NT_PARAMETER_CV_OUTPUT("Seq 3 Out 2", 0, 1),
+    NT_PARAMETER_CV_OUTPUT("Seq 3 Out 3", 0, 1),
+    // Sequencer 4 outputs
+    NT_PARAMETER_CV_OUTPUT("Seq 4 Out 1", 0, 1),
+    NT_PARAMETER_CV_OUTPUT("Seq 4 Out 2", 0, 1),
+    NT_PARAMETER_CV_OUTPUT("Seq 4 Out 3", 0, 1),
+    // Clock division: 1, 2, 4, 8, 16
+    { .name = "Seq 1 Clock Div", .min = 0, .max = 4, .def = 0, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 1 Direction", .min = 0, .max = 2, .def = 0, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 1 Steps", .min = 1, .max = 16, .def = 16, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 2 Clock Div", .min = 0, .max = 4, .def = 0, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 2 Direction", .min = 0, .max = 2, .def = 0, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 2 Steps", .min = 1, .max = 16, .def = 16, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 3 Clock Div", .min = 0, .max = 4, .def = 0, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 3 Direction", .min = 0, .max = 2, .def = 0, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 3 Steps", .min = 1, .max = 16, .def = 16, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 4 Clock Div", .min = 0, .max = 4, .def = 0, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 4 Direction", .min = 0, .max = 2, .def = 0, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    { .name = "Seq 4 Steps", .min = 1, .max = 16, .def = 16, .unit = kNT_unitNone, .scaling = kNT_scalingNone },
+    NT_PARAMETER_END
+};
+
+// Parameter pages
+static const uint8_t paramPage0[] = { kParamClockIn, kParamResetIn, 0 };
+static const uint8_t paramPage1[] = { kParamSeq1Out1, kParamSeq1Out2, kParamSeq1Out3, 0 };
+static const uint8_t paramPage2[] = { kParamSeq2Out1, kParamSeq2Out2, kParamSeq2Out3, 0 };
+static const uint8_t paramPage3[] = { kParamSeq3Out1, kParamSeq3Out2, kParamSeq3Out3, 0 };
+static const uint8_t paramPage4[] = { kParamSeq4Out1, kParamSeq4Out2, kParamSeq4Out3, 0 };
+static const uint8_t paramPage5[] = { kParamSeq1ClockDiv, kParamSeq1Direction, kParamSeq1StepCount, 0 };
+static const uint8_t paramPage6[] = { kParamSeq2ClockDiv, kParamSeq2Direction, kParamSeq2StepCount, 0 };
+static const uint8_t paramPage7[] = { kParamSeq3ClockDiv, kParamSeq3Direction, kParamSeq3StepCount, 0 };
+static const uint8_t paramPage8[] = { kParamSeq4ClockDiv, kParamSeq4Direction, kParamSeq4StepCount, 0 };
+
+static const _NT_parameterPages parameterPages = {
+    .count = 9,
+    .pages = {
+        { .name = "Inputs", .parameters = paramPage0 },
+        { .name = "Seq 1 Outs", .parameters = paramPage1 },
+        { .name = "Seq 2 Outs", .parameters = paramPage2 },
+        { .name = "Seq 3 Outs", .parameters = paramPage3 },
+        { .name = "Seq 4 Outs", .parameters = paramPage4 },
+        { .name = "Seq 1 Params", .parameters = paramPage5 },
+        { .name = "Seq 2 Params", .parameters = paramPage6 },
+        { .name = "Seq 3 Params", .parameters = paramPage7 },
+        { .name = "Seq 4 Params", .parameters = paramPage8 },
+    }
+};
+
+// Construct
+void construct(_NT_algorithm* self, uint32_t algIndex) {
+    new (self) VSeq();
+    VSeq* a = (VSeq*)self;
+    
+    a->parameters = parameters;
+    a->parameterPages = &parameterPages;
+    a->initialize();
+}
+
+// Destruct
+void destruct(_NT_algorithm* self) {
+    VSeq* a = (VSeq*)self;
+    a->~VSeq();
+}
+
+// Process audio/CV
+void process(_NT_algorithm* self, const _NT_audioData& data) {
+    VSeq* a = (VSeq*)self;
+    
+    // Read clock and reset inputs
+    bool clockHigh = (self->v[kParamClockIn] > 8192);  // Above mid-point
+    bool resetHigh = (self->v[kParamResetIn] > 8192);
+    
+    // Detect clock rising edge
+    if (clockHigh && !a->lastClockState) {
+        // Clock pulse received - advance sequencers based on clock division
+        for (int seq = 0; seq < 4; seq++) {
+            a->clockCounter[seq]++;
+            int divAmount = 1 << a->clockDiv[seq];  // 1, 2, 4, 8, 16
+            if (a->clockCounter[seq] >= divAmount) {
+                a->clockCounter[seq] = 0;
+                a->advanceSequencer(seq);
+            }
+        }
+    }
+    a->lastClockState = clockHigh;
+    
+    // Detect reset rising edge
+    if (resetHigh && !a->lastResetState) {
+        for (int seq = 0; seq < 4; seq++) {
+            a->resetSequencer(seq);
+            a->clockCounter[seq] = 0;
+        }
+    }
+    a->lastResetState = resetHigh;
+    
+    // Update output values from current step
+    for (int seq = 0; seq < 4; seq++) {
+        int step = a->currentStep[seq];
+        for (int out = 0; out < 3; out++) {
+            int paramIdx = kParamSeq1Out1 + (seq * 3) + out;
+            // Write step value to output parameter
+            // Note: This writes to internal parameter which then gets routed to actual output
+            ((int16_t*)self->v)[paramIdx] = a->stepValues[seq][step][out];
+            
+            // Debug: Track which bus this is actually going to
+            // (We'll need to inspect the actual routing in the preset JSON)
+            a->debugOutputBus[seq * 3 + out] = paramIdx;
+        }
+    }
+}
+
+// Update UI
+bool draw(_NT_algorithm* self) {
+    VSeq* a = (VSeq*)self;
+    
+    // Draw based on current page
+    if (a->currentPage < 4) {
+        // Step view pages (0-3 = sequencers 1-4)
+        // TODO: Implement step view UI
+        NT_drawText("VSeq", 0, 0, 255);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Seq %d", a->currentPage + 1);
+        NT_drawText(buf, 0, 10, 255);
+    } else {
+        // Edit pages (4-7 = sequencer 1-4 parameter edit)
+        // TODO: Implement edit page UI
+        NT_drawText("Edit Mode", 0, 0, 255);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Seq %d", a->currentPage - 3);
+        NT_drawText(buf, 0, 10, 255);
+    }
+    
+    return false;
+}
+
+// Custom UI handler
+void customUi(_NT_algorithm* self, const _NT_uiData& data) {
+    VSeq* a = (VSeq*)self;
+    
+    // Handle encoder for step selection
+    if (data.encoderDelta & kNT_encoderR) {
+        int delta = (data.encoderDelta & kNT_encoderDeltaMaskR) >> kNT_encoderDeltaShiftR;
+        if (delta & 0x80) delta |= 0xFFFFFF00;  // Sign extend
+        
+        a->selectedStep += delta;
+        if (a->selectedStep < 0) a->selectedStep = 0;
+        if (a->selectedStep > 15) a->selectedStep = 15;
+    }
+    
+    // Handle encoder button press to toggle between step view and edit mode
+    bool rightButtonPressed = (data.controls & kNT_encoderButtonR) && !(a->lastButtonState & kNT_encoderButtonR);
+    if (rightButtonPressed) {
+        if (a->currentPage < 4) {
+            // In step view - enter edit mode for this sequencer
+            a->currentPage += 4;
+        } else {
+            // In edit mode - return to step view
+            a->currentPage -= 4;
+        }
+    }
+    
+    // Handle pots to adjust step values (only in step view)
+    if (a->currentPage < 4) {
+        int seq = a->currentPage;
+        int step = a->selectedStep;
+        
+        for (int i = 0; i < 3; i++) {
+            if (data.controls & (kNT_potL << i)) {
+                float potValue = data.pots[i];
+                if (a->potLast[i] < 0.0f || fabsf(potValue - a->potLast[i]) > a->potDeadband) {
+                    // Convert pot value (0.0-1.0) to CV parameter range
+                    // Using full 16-bit range for maximum resolution
+                    a->stepValues[seq][step][i] = (int16_t)(potValue * 65535.0f);
+                    a->potLast[i] = potValue;
+                }
+            }
+        }
+    }
+    
+    a->lastButtonState = data.controls;
+}
+
+// Setup UI (pot initialization)
+void setupUi(_NT_algorithm* self, _NT_float3& pots) {
+    VSeq* a = (VSeq*)self;
+    
+    // Initialize pots to current step values if in step view
+    if (a->currentPage < 4) {
+        int seq = a->currentPage;
+        int step = a->selectedStep;
+        for (int i = 0; i < 3; i++) {
+            pots[i] = a->stepValues[seq][step][i] / 65535.0f;
+        }
+    }
+}
+
+// Parameter changed
+void parameterChanged(_NT_algorithm* self, int p) {
+    VSeq* a = (VSeq*)self;
+    
+    // Handle sequencer parameter changes
+    if (p >= kParamSeq1ClockDiv && p <= kParamSeq4StepCount) {
+        int paramOffset = p - kParamSeq1ClockDiv;
+        int seq = paramOffset / 3;
+        int paramType = paramOffset % 3;
+        
+        if (paramType == 0) {  // Clock division
+            a->clockDiv[seq] = self->v[p];
+        } else if (paramType == 1) {  // Direction
+            a->direction[seq] = self->v[p];
+        } else if (paramType == 2) {  // Step count
+            a->stepCount[seq] = self->v[p];
+            // Clamp current step if needed
+            if (a->currentStep[seq] >= a->stepCount[seq]) {
+                a->currentStep[seq] = a->stepCount[seq] - 1;
+            }
+        }
+    }
+}
+
+// Serialization
+void serialise(_NT_algorithm* self, char* buffer, uint32_t size) {
+    VSeq* a = (VSeq*)self;
+    
+    NT_serialise_startObject(buffer, size);
+    
+    // Save all step values
+    NT_serialise_startArray(buffer, size, "stepValues");
+    for (int seq = 0; seq < 4; seq++) {
+        NT_serialise_startArray(buffer, size, nullptr);
+        for (int step = 0; step < 16; step++) {
+            NT_serialise_startArray(buffer, size, nullptr);
+            for (int out = 0; out < 3; out++) {
+                NT_serialise_int(buffer, size, nullptr, a->stepValues[seq][step][out]);
+            }
+            NT_serialise_endArray(buffer, size);
+        }
+        NT_serialise_endArray(buffer, size);
+    }
+    NT_serialise_endArray(buffer, size);
+    
+    // Debug: Save output bus mappings
+    NT_serialise_startArray(buffer, size, "debugOutputBus");
+    for (int i = 0; i < 12; i++) {
+        NT_serialise_int(buffer, size, nullptr, a->debugOutputBus[i]);
+    }
+    NT_serialise_endArray(buffer, size);
+    
+    NT_serialise_endObject(buffer, size);
+}
+
+// Deserialization
+bool deserialise(_NT_algorithm* self, const char* buffer) {
+    VSeq* a = (VSeq*)self;
+    
+    // Load step values
+    // TODO: Implement proper JSON parsing
+    // For now, values will persist in memory between runs
+    
+    return true;
+}
+
+// Algorithm specification
+static const _NT_specification specification = {
+    .name = "VSeq",
+    .constructFunction = construct,
+    .destructFunction = destruct,
+    .processFunction = process,
+    .drawFunction = draw,
+    .parameterChangedFunction = parameterChanged,
+    .serialiseFunction = serialise,
+    .deserialiseFunction = deserialise,
+    .setupUiFunction = setupUi,
+    .customUiFunction = customUi,
+    .type = kNT_algorithmTypeOther,
+    .version = VSEQ_BUILD,
+};
+
+extern "C" {
+    const _NT_specification* NT_getSpecification() {
+        return &specification;
+    }
+}
