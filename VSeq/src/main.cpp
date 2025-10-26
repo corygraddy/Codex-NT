@@ -31,6 +31,8 @@ struct VSeq : public _NT_algorithm {
     int selectedStep;           // 0-15
     int selectedSeq;            // 0-3 (which sequencer to view/edit)
     bool editMode;              // true = edit mode (pots control values)
+    int lastSelectedStep;       // Track when step changes to update pots
+    uint16_t lastButtonState;   // For debouncing encoder button
     
     // Debug: track actual output bus assignments
     int debugOutputBus[12];
@@ -66,6 +68,8 @@ struct VSeq : public _NT_algorithm {
         selectedStep = 0;
         selectedSeq = 0;
         editMode = false;
+        lastSelectedStep = 0;
+        lastButtonState = 0;
         
         for (int i = 0; i < 12; i++) {
             debugOutputBus[i] = 0;
@@ -381,20 +385,79 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
 bool draw(_NT_algorithm* self) {
     VSeq* a = (VSeq*)self;
     
-    // Placeholder UI - just show mode and selected step
-    if (a->editMode) {
-        NT_drawText(0, 0, "Edit Mode", 255);
-        char buf[32];
-        snprintf(buf, sizeof(buf), "Seq %d Step %d", a->selectedSeq + 1, a->selectedStep + 1);
-        NT_drawText(0, 10, buf, 255);
-    } else {
-        NT_drawText(0, 0, "VSeq", 255);
-        char buf[32];
-        snprintf(buf, sizeof(buf), "Seq %d", a->selectedSeq + 1);
-        NT_drawText(0, 10, buf, 255);
+    // Draw based on current page (0-8: Inputs, 4 seq outputs, 4 seq params)
+    // For now, focus on step view UI for sequencer pages
+    
+    // Clear screen
+    NT_drawShapeI(kNT_rectangle, 0, 0, 256, 64, 0);  // Black background
+    
+    // Display step view for selected sequencer
+    int seq = a->selectedSeq;  // 0-3
+    
+    // Draw title
+    char title[16];
+    snprintf(title, sizeof(title), "SEQ %d", seq + 1);
+    NT_drawText(0, 0, title, 255);
+    
+    // Draw 16 steps in 2 rows of 8
+    // Each step gets 3 skinny bars for 3 outputs
+    // Screen is 256 wide, divided into 2 rows of 8 steps
+    
+    int barWidth = 3;   // Width of each bar
+    int barSpacing = 1; // Space between bars
+    int stepWidth = 16; // Total width per step (3 bars + spacing)
+    int startY = 10;    // Start below title
+    int rowHeight = 26; // Height of each row
+    int maxBarHeight = 22; // Maximum bar height
+    
+    for (int step = 0; step < 16; step++) {
+        int row = step / 8;      // 0 or 1
+        int col = step % 8;      // 0-7
+        
+        int x = col * stepWidth;
+        int y = startY + (row * rowHeight);
+        
+        // Draw 3 vertical bars for this step
+        for (int out = 0; out < 3; out++) {
+            int16_t value = a->stepValues[seq][step][out];
+            // Convert int16_t (-32768 to 32767) to 0.0-1.0
+            float normalized = (value + 32768.0f) / 65535.0f;
+            // Convert to bar height (1 to maxBarHeight pixels)
+            int barHeight = (int)(normalized * maxBarHeight);
+            if (barHeight < 1) barHeight = 1;
+            
+            int barX = x + (out * (barWidth + barSpacing));
+            int barBottomY = y + maxBarHeight;
+            int barTopY = barBottomY - barHeight;
+            
+            // Draw bar (filled rectangle from top to bottom)
+            NT_drawShapeI(kNT_rectangle, barX, barTopY, barX + barWidth - 1, barBottomY - 1, 255);
+        }
+        
+        // Draw step indicator dot if this is the current step
+        if (step == a->currentStep[seq]) {
+            // Draw dot above the middle bar (bar 1)
+            int dotX = x + (barWidth + barSpacing);  // Above middle bar
+            NT_drawShapeI(kNT_rectangle, dotX, y - 2, dotX + barWidth - 1, y - 1, 255);
+        }
+        
+        // Draw selection bar if this is the selected step (for editing)
+        if (a->editMode && step == a->selectedStep) {
+            NT_drawShapeI(kNT_line, x, y + maxBarHeight + 1, x + 13, y + maxBarHeight + 1, 255);
+        }
     }
     
-    return true;
+    // Draw page number on right side
+    char pageNum[8];
+    snprintf(pageNum, sizeof(pageNum), "%d", seq + 1);
+    NT_drawText(240, 0, pageNum, 255);
+    
+    // Draw mode indicator
+    if (a->editMode) {
+        NT_drawText(200, 56, "EDIT", 128);
+    }
+    
+    return true;  // Suppress default parameter line
 }
 
 uint32_t hasCustomUi(_NT_algorithm* self) {
@@ -410,25 +473,29 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         a->selectedStep += delta;
         if (a->selectedStep < 0) a->selectedStep = 15;
         if (a->selectedStep > 15) a->selectedStep = 0;
-        
-        // When step changes, update pots to reflect current step values
-        if (a->editMode) {
-            // Update will happen in setupUi
-        }
     }
     
-    // Right encoder button: toggle edit mode
-    if (data.controls & kNT_encoderButtonR) {
+    // Right encoder button: toggle edit mode (with debouncing)
+    uint16_t currentButton = data.controls & kNT_encoderButtonR;
+    uint16_t lastButton = a->lastButtonState & kNT_encoderButtonR;
+    if (currentButton && !lastButton) {  // Rising edge only
         a->editMode = !a->editMode;
     }
+    a->lastButtonState = data.controls;
     
-    // Pots control the 3 values for the selected step (in edit mode)
-    if (a->editMode) {
-        for (int i = 0; i < 3; i++) {
-            float potValue = data.pots[i];  // 0.0-1.0
-            // Convert to int16_t range
-            int16_t value = (int16_t)((potValue * 65535.0f) - 32768);
-            a->stepValues[a->selectedSeq][a->selectedStep][i] = value;
+    // Pots control the 3 values for the selected step (only if pot changed in edit mode)
+    if (a->editMode && (data.controls & (kNT_potL | kNT_potC | kNT_potR))) {
+        if (data.controls & kNT_potL) {
+            float potValue = data.pots[0];
+            a->stepValues[a->selectedSeq][a->selectedStep][0] = (int16_t)((potValue * 65535.0f) - 32768);
+        }
+        if (data.controls & kNT_potC) {
+            float potValue = data.pots[1];
+            a->stepValues[a->selectedSeq][a->selectedStep][1] = (int16_t)((potValue * 65535.0f) - 32768);
+        }
+        if (data.controls & kNT_potR) {
+            float potValue = data.pots[2];
+            a->stepValues[a->selectedSeq][a->selectedStep][2] = (int16_t)((potValue * 65535.0f) - 32768);
         }
     }
 }
@@ -436,8 +503,9 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
 void setupUi(_NT_algorithm* self, _NT_float3& pots) {
     VSeq* a = (VSeq*)self;
     
-    // Set pot values to current step values when entering edit mode
-    if (a->editMode) {
+    // Only update pot positions when step changes or entering edit mode
+    if (a->editMode && a->selectedStep != a->lastSelectedStep) {
+        a->lastSelectedStep = a->selectedStep;
         for (int i = 0; i < 3; i++) {
             int16_t value = a->stepValues[a->selectedSeq][a->selectedStep][i];
             // Convert from int16_t to 0.0-1.0
