@@ -21,6 +21,9 @@ struct VSeq : public _NT_algorithm {
     // Step modes: 0=normal, 1=2-ratchet, 2=3-ratchet, 3=4-ratchet, 4=2-repeat, 5=3-repeat, 6=4-repeat
     uint8_t stepMode[4][32];
     
+    // Gate sequencer data (replaces seq 3): 6 tracks × 32 steps
+    bool gateSteps[6][32];
+    
     // Sequencer state
     int currentStep[4];         // Current step for each sequencer (0-31)
     bool pingpongForward[4];    // Direction state for pingpong mode
@@ -31,6 +34,16 @@ struct VSeq : public _NT_algorithm {
     int section2Counter[4];     // Track section 2 repeat count
     bool inSection2[4];         // Which section is currently playing
     
+    // Gate sequencer state (6 tracks)
+    int gateCurrentStep[6];     // Current step for each gate track (0-31)
+    bool gatePingpongForward[6]; // Direction state for pingpong mode
+    int gateClockDivCounter[6]; // Counter for clock division
+    int gateSwingCounter[6];    // Counter for swing timing
+    int gateSection1Counter[6]; // Track section 1 repeat count
+    int gateSection2Counter[6]; // Track section 2 repeat count
+    bool gateInSection2[6];     // Which section is currently playing
+    bool gateInFill[6];         // Whether we're in the fill section
+    
     // Edge detection
     float lastClockIn;
     float lastResetIn;
@@ -38,8 +51,12 @@ struct VSeq : public _NT_algorithm {
     // UI state
     int selectedStep;           // 0-31
     int selectedSeq;            // 0-3 (which sequencer to view/edit)
+    int selectedTrack;          // 0-5 (for gate sequencer)
     int lastSelectedStep;       // Track when step changes to update pots
     uint16_t lastButton4State;  // For debouncing button 4
+    uint16_t lastEncoderRButton; // For debouncing right encoder button
+    float lastPotLValue;        // Track left pot position for relative movement
+    bool potCaught[3];          // Track if each pot has caught the step value
     
     // Debug: track actual output bus assignments
     int debugOutputBus[12];
@@ -80,8 +97,29 @@ struct VSeq : public _NT_algorithm {
         lastResetIn = 0.0f;
         selectedStep = 0;
         selectedSeq = 0;
+        selectedTrack = 0;
         lastSelectedStep = 0;
         lastButton4State = 0;
+        lastEncoderRButton = 0;
+        lastPotLValue = 0.5f;
+        potCaught[0] = false;
+        potCaught[1] = false;
+        potCaught[2] = false;
+        
+        // Initialize gate sequencer
+        for (int track = 0; track < 6; track++) {
+            for (int step = 0; step < 32; step++) {
+                gateSteps[track][step] = false;
+            }
+            gateCurrentStep[track] = 0;
+            gatePingpongForward[track] = true;
+            gateClockDivCounter[track] = 0;
+            gateSwingCounter[track] = 0;
+            gateSection1Counter[track] = 0;
+            gateSection2Counter[track] = 0;
+            gateInSection2[track] = false;
+            gateInFill[track] = false;
+        }
         
         for (int i = 0; i < 12; i++) {
             debugOutputBus[i] = 0;
@@ -193,6 +231,18 @@ struct VSeq : public _NT_algorithm {
     }
 };
 
+// Helper function to set a pixel in NT_screen
+// Screen is 256x64, stored as 128x64 bytes (2 pixels per byte, 4-bit grayscale)
+inline void setPixel(int x, int y, int brightness) {
+    if (x < 0 || x >= 256 || y < 0 || y >= 64) return;
+    
+    int byteIndex = (y * 128) + (x / 2);
+    int pixelShift = (x & 1) ? 0 : 4;  // Even pixels in high nibble, odd in low
+    
+    // Clear the nibble and set new value
+    NT_screen[byteIndex] = (NT_screen[byteIndex] & (0x0F << (4 - pixelShift))) | ((brightness & 0x0F) << pixelShift);
+}
+
 // Parameter indices
 enum {
     kParamClockIn = 0,
@@ -209,7 +259,7 @@ enum {
     kParamSeq3Out1,
     kParamSeq3Out2,
     kParamSeq3Out3,
-    // Sequencer 4 outputs
+    // Sequencer 4 outputs (now gate sequencer - reuse for gate outputs)
     kParamSeq4Out1,
     kParamSeq4Out2,
     kParamSeq4Out3,
@@ -232,12 +282,72 @@ enum {
     kParamSeq3SplitPoint,
     kParamSeq3Section1Reps,
     kParamSeq3Section2Reps,
-    kParamSeq4ClockDiv,
-    kParamSeq4Direction,
-    kParamSeq4StepCount,
-    kParamSeq4SplitPoint,
-    kParamSeq4Section1Reps,
-    kParamSeq4Section2Reps,
+    // Gate Track 1 parameters
+    kParamGate1Out,
+    kParamGate1Run,
+    kParamGate1Length,
+    kParamGate1Direction,
+    kParamGate1ClockDiv,
+    kParamGate1Swing,
+    kParamGate1SplitPoint,
+    kParamGate1Section1Reps,
+    kParamGate1Section2Reps,
+    kParamGate1FillStart,
+    // Gate Track 2 parameters
+    kParamGate2Out,
+    kParamGate2Run,
+    kParamGate2Length,
+    kParamGate2Direction,
+    kParamGate2ClockDiv,
+    kParamGate2Swing,
+    kParamGate2SplitPoint,
+    kParamGate2Section1Reps,
+    kParamGate2Section2Reps,
+    kParamGate2FillStart,
+    // Gate Track 3 parameters
+    kParamGate3Out,
+    kParamGate3Run,
+    kParamGate3Length,
+    kParamGate3Direction,
+    kParamGate3ClockDiv,
+    kParamGate3Swing,
+    kParamGate3SplitPoint,
+    kParamGate3Section1Reps,
+    kParamGate3Section2Reps,
+    kParamGate3FillStart,
+    // Gate Track 4 parameters
+    kParamGate4Out,
+    kParamGate4Run,
+    kParamGate4Length,
+    kParamGate4Direction,
+    kParamGate4ClockDiv,
+    kParamGate4Swing,
+    kParamGate4SplitPoint,
+    kParamGate4Section1Reps,
+    kParamGate4Section2Reps,
+    kParamGate4FillStart,
+    // Gate Track 5 parameters
+    kParamGate5Out,
+    kParamGate5Run,
+    kParamGate5Length,
+    kParamGate5Direction,
+    kParamGate5ClockDiv,
+    kParamGate5Swing,
+    kParamGate5SplitPoint,
+    kParamGate5Section1Reps,
+    kParamGate5Section2Reps,
+    kParamGate5FillStart,
+    // Gate Track 6 parameters
+    kParamGate6Out,
+    kParamGate6Run,
+    kParamGate6Length,
+    kParamGate6Direction,
+    kParamGate6ClockDiv,
+    kParamGate6Swing,
+    kParamGate6SplitPoint,
+    kParamGate6Section1Reps,
+    kParamGate6Section2Reps,
+    kParamGate6FillStart,
     kNumParameters
 };
 
@@ -276,6 +386,73 @@ static char seq4SplitName[] = "Seq 4 Split Point";
 static char seq4Sec1Name[] = "Seq 4 Sec1 Reps";
 static char seq4Sec2Name[] = "Seq 4 Sec2 Reps";
 
+// Gate track parameter names
+static char gate1OutName[] = "Gate 1 Out";
+static char gate1RunName[] = "Gate 1 Run";
+static char gate1LenName[] = "Gate 1 Length";
+static char gate1DirName[] = "Gate 1 Direction";
+static char gate1DivName[] = "Gate 1 ClockDiv";
+static char gate1SwingName[] = "Gate 1 Swing";
+static char gate1SplitName[] = "Gate 1 Split";
+static char gate1Sec1Name[] = "Gate 1 Sec1 Reps";
+static char gate1Sec2Name[] = "Gate 1 Sec2 Reps";
+static char gate1FillName[] = "Gate 1 Fill Start";
+
+static char gate2OutName[] = "Gate 2 Out";
+static char gate2RunName[] = "Gate 2 Run";
+static char gate2LenName[] = "Gate 2 Length";
+static char gate2DirName[] = "Gate 2 Direction";
+static char gate2DivName[] = "Gate 2 ClockDiv";
+static char gate2SwingName[] = "Gate 2 Swing";
+static char gate2SplitName[] = "Gate 2 Split";
+static char gate2Sec1Name[] = "Gate 2 Sec1 Reps";
+static char gate2Sec2Name[] = "Gate 2 Sec2 Reps";
+static char gate2FillName[] = "Gate 2 Fill Start";
+
+static char gate3OutName[] = "Gate 3 Out";
+static char gate3RunName[] = "Gate 3 Run";
+static char gate3LenName[] = "Gate 3 Length";
+static char gate3DirName[] = "Gate 3 Direction";
+static char gate3DivName[] = "Gate 3 ClockDiv";
+static char gate3SwingName[] = "Gate 3 Swing";
+static char gate3SplitName[] = "Gate 3 Split";
+static char gate3Sec1Name[] = "Gate 3 Sec1 Reps";
+static char gate3Sec2Name[] = "Gate 3 Sec2 Reps";
+static char gate3FillName[] = "Gate 3 Fill Start";
+
+static char gate4OutName[] = "Gate 4 Out";
+static char gate4RunName[] = "Gate 4 Run";
+static char gate4LenName[] = "Gate 4 Length";
+static char gate4DirName[] = "Gate 4 Direction";
+static char gate4DivName[] = "Gate 4 ClockDiv";
+static char gate4SwingName[] = "Gate 4 Swing";
+static char gate4SplitName[] = "Gate 4 Split";
+static char gate4Sec1Name[] = "Gate 4 Sec1 Reps";
+static char gate4Sec2Name[] = "Gate 4 Sec2 Reps";
+static char gate4FillName[] = "Gate 4 Fill Start";
+
+static char gate5OutName[] = "Gate 5 Out";
+static char gate5RunName[] = "Gate 5 Run";
+static char gate5LenName[] = "Gate 5 Length";
+static char gate5DirName[] = "Gate 5 Direction";
+static char gate5DivName[] = "Gate 5 ClockDiv";
+static char gate5SwingName[] = "Gate 5 Swing";
+static char gate5SplitName[] = "Gate 5 Split";
+static char gate5Sec1Name[] = "Gate 5 Sec1 Reps";
+static char gate5Sec2Name[] = "Gate 5 Sec2 Reps";
+static char gate5FillName[] = "Gate 5 Fill Start";
+
+static char gate6OutName[] = "Gate 6 Out";
+static char gate6RunName[] = "Gate 6 Run";
+static char gate6LenName[] = "Gate 6 Length";
+static char gate6DirName[] = "Gate 6 Direction";
+static char gate6DivName[] = "Gate 6 ClockDiv";
+static char gate6SwingName[] = "Gate 6 Swing";
+static char gate6SplitName[] = "Gate 6 Split";
+static char gate6Sec1Name[] = "Gate 6 Sec1 Reps";
+static char gate6Sec2Name[] = "Gate 6 Sec2 Reps";
+static char gate6FillName[] = "Gate 6 Fill Start";
+
 // Global parameter array
 static _NT_parameter parameters[kNumParameters];
 
@@ -307,22 +484,22 @@ static void initParameters() {
     for (int i = 0; i < 12; i++) {
         int paramIdx = kParamSeq1Out1 + i;
         parameters[paramIdx].name = outNames[i];
-        parameters[paramIdx].min = 1;
+        parameters[paramIdx].min = 0;
         parameters[paramIdx].max = 28;
-        parameters[paramIdx].def = i + 1;
+        parameters[paramIdx].def = 0;
         parameters[paramIdx].unit = kNT_unitCvOutput;
         parameters[paramIdx].scaling = kNT_scalingNone;
     }
     
-    // Sequencer configuration parameters
-    const char* divNames[] = {seq1DivName, seq2DivName, seq3DivName, seq4DivName};
-    const char* dirNames[] = {seq1DirName, seq2DirName, seq3DirName, seq4DirName};
-    const char* stepNames[] = {seq1StepName, seq2StepName, seq3StepName, seq4StepName};
-    const char* splitNames[] = {seq1SplitName, seq2SplitName, seq3SplitName, seq4SplitName};
-    const char* sec1Names[] = {seq1Sec1Name, seq2Sec1Name, seq3Sec1Name, seq4Sec1Name};
-    const char* sec2Names[] = {seq1Sec2Name, seq2Sec2Name, seq3Sec2Name, seq4Sec2Name};
+    // Sequencer configuration parameters (seq 1-3 only now)
+    const char* divNames[] = {seq1DivName, seq2DivName, seq3DivName};
+    const char* dirNames[] = {seq1DirName, seq2DirName, seq3DirName};
+    const char* stepNames[] = {seq1StepName, seq2StepName, seq3StepName};
+    const char* splitNames[] = {seq1SplitName, seq2SplitName, seq3SplitName};
+    const char* sec1Names[] = {seq1Sec1Name, seq2Sec1Name, seq3Sec1Name};
+    const char* sec2Names[] = {seq1Sec2Name, seq2Sec2Name, seq3Sec2Name};
     
-    for (int seq = 0; seq < 4; seq++) {
+    for (int seq = 0; seq < 3; seq++) {
         int divParam = kParamSeq1ClockDiv + (seq * 6);
         int dirParam = kParamSeq1Direction + (seq * 6);
         int stepParam = kParamSeq1StepCount + (seq * 6);
@@ -380,6 +557,103 @@ static void initParameters() {
         parameters[sec2Param].unit = kNT_unitNone;
         parameters[sec2Param].scaling = kNT_scalingNone;
     }
+    
+    // Gate Track parameters (6 tracks, 10 parameters each)
+    const char* gateOutNames[] = {gate1OutName, gate2OutName, gate3OutName, gate4OutName, gate5OutName, gate6OutName};
+    const char* gateRunNames[] = {gate1RunName, gate2RunName, gate3RunName, gate4RunName, gate5RunName, gate6RunName};
+    const char* gateLenNames[] = {gate1LenName, gate2LenName, gate3LenName, gate4LenName, gate5LenName, gate6LenName};
+    const char* gateDirNames[] = {gate1DirName, gate2DirName, gate3DirName, gate4DirName, gate5DirName, gate6DirName};
+    const char* gateDivNames[] = {gate1DivName, gate2DivName, gate3DivName, gate4DivName, gate5DivName, gate6DivName};
+    const char* gateSwingNames[] = {gate1SwingName, gate2SwingName, gate3SwingName, gate4SwingName, gate5SwingName, gate6SwingName};
+    const char* gateSplitNames[] = {gate1SplitName, gate2SplitName, gate3SplitName, gate4SplitName, gate5SplitName, gate6SplitName};
+    const char* gateSec1Names[] = {gate1Sec1Name, gate2Sec1Name, gate3Sec1Name, gate4Sec1Name, gate5Sec1Name, gate6Sec1Name};
+    const char* gateSec2Names[] = {gate1Sec2Name, gate2Sec2Name, gate3Sec2Name, gate4Sec2Name, gate5Sec2Name, gate6Sec2Name};
+    const char* gateFillNames[] = {gate1FillName, gate2FillName, gate3FillName, gate4FillName, gate5FillName, gate6FillName};
+    
+    for (int track = 0; track < 6; track++) {
+        int outParam = kParamGate1Out + (track * 10);
+        int runParam = kParamGate1Run + (track * 10);
+        int lenParam = kParamGate1Length + (track * 10);
+        int dirParam = kParamGate1Direction + (track * 10);
+        int divParam = kParamGate1ClockDiv + (track * 10);
+        int swingParam = kParamGate1Swing + (track * 10);
+        int splitParam = kParamGate1SplitPoint + (track * 10);
+        int sec1Param = kParamGate1Section1Reps + (track * 10);
+        int sec2Param = kParamGate1Section2Reps + (track * 10);
+        int fillParam = kParamGate1FillStart + (track * 10);
+        
+        parameters[outParam].name = gateOutNames[track];
+        parameters[outParam].min = 0;
+        parameters[outParam].max = 28;
+        parameters[outParam].def = 0;
+        parameters[outParam].unit = kNT_unitCvOutput;
+        parameters[outParam].scaling = kNT_scalingNone;
+        
+        parameters[runParam].name = gateRunNames[track];
+        parameters[runParam].min = 0;
+        parameters[runParam].max = 1;
+        parameters[runParam].def = 1;
+        parameters[runParam].unit = kNT_unitNone;
+        parameters[runParam].scaling = kNT_scalingNone;
+        
+        parameters[lenParam].name = gateLenNames[track];
+        parameters[lenParam].min = 1;
+        parameters[lenParam].max = 32;
+        parameters[lenParam].def = 32;
+        parameters[lenParam].unit = kNT_unitNone;
+        parameters[lenParam].scaling = kNT_scalingNone;
+        
+        parameters[dirParam].name = gateDirNames[track];
+        parameters[dirParam].min = 0;
+        parameters[dirParam].max = 2;
+        parameters[dirParam].def = 0;
+        parameters[dirParam].unit = kNT_unitEnum;
+        parameters[dirParam].scaling = kNT_scalingNone;
+        parameters[dirParam].enumStrings = directionStrings;
+        
+        parameters[divParam].name = gateDivNames[track];
+        parameters[divParam].min = 0;
+        parameters[divParam].max = 8;
+        parameters[divParam].def = 4;
+        parameters[divParam].unit = kNT_unitEnum;
+        parameters[divParam].scaling = kNT_scalingNone;
+        parameters[divParam].enumStrings = divisionStrings;
+        
+        parameters[swingParam].name = gateSwingNames[track];
+        parameters[swingParam].min = 0;
+        parameters[swingParam].max = 100;
+        parameters[swingParam].def = 0;
+        parameters[swingParam].unit = kNT_unitNone;
+        parameters[swingParam].scaling = kNT_scalingNone;
+        
+        parameters[splitParam].name = gateSplitNames[track];
+        parameters[splitParam].min = 0;
+        parameters[splitParam].max = 31;
+        parameters[splitParam].def = 0;
+        parameters[splitParam].unit = kNT_unitNone;
+        parameters[splitParam].scaling = kNT_scalingNone;
+        
+        parameters[sec1Param].name = gateSec1Names[track];
+        parameters[sec1Param].min = 1;
+        parameters[sec1Param].max = 99;
+        parameters[sec1Param].def = 1;
+        parameters[sec1Param].unit = kNT_unitNone;
+        parameters[sec1Param].scaling = kNT_scalingNone;
+        
+        parameters[sec2Param].name = gateSec2Names[track];
+        parameters[sec2Param].min = 1;
+        parameters[sec2Param].max = 99;
+        parameters[sec2Param].def = 1;
+        parameters[sec2Param].unit = kNT_unitNone;
+        parameters[sec2Param].scaling = kNT_scalingNone;
+        
+        parameters[fillParam].name = gateFillNames[track];
+        parameters[fillParam].min = 1;
+        parameters[fillParam].max = 32;
+        parameters[fillParam].def = 32;  // Default: no fill (starts at last step)
+        parameters[fillParam].unit = kNT_unitNone;
+        parameters[fillParam].scaling = kNT_scalingNone;
+    }
 }
 
 // Parameter pages
@@ -387,26 +661,34 @@ static uint8_t paramPageInputs[] = { kParamClockIn, kParamResetIn, 0 };
 static uint8_t paramPageSeq1Out[] = { kParamSeq1Out1, kParamSeq1Out2, kParamSeq1Out3, 0 };
 static uint8_t paramPageSeq2Out[] = { kParamSeq2Out1, kParamSeq2Out2, kParamSeq2Out3, 0 };
 static uint8_t paramPageSeq3Out[] = { kParamSeq3Out1, kParamSeq3Out2, kParamSeq3Out3, 0 };
-static uint8_t paramPageSeq4Out[] = { kParamSeq4Out1, kParamSeq4Out2, kParamSeq4Out3, 0 };
 static uint8_t paramPageSeq1Params[] = { kParamSeq1ClockDiv, kParamSeq1Direction, kParamSeq1StepCount, kParamSeq1SplitPoint, kParamSeq1Section1Reps, kParamSeq1Section2Reps, 0 };
 static uint8_t paramPageSeq2Params[] = { kParamSeq2ClockDiv, kParamSeq2Direction, kParamSeq2StepCount, kParamSeq2SplitPoint, kParamSeq2Section1Reps, kParamSeq2Section2Reps, 0 };
 static uint8_t paramPageSeq3Params[] = { kParamSeq3ClockDiv, kParamSeq3Direction, kParamSeq3StepCount, kParamSeq3SplitPoint, kParamSeq3Section1Reps, kParamSeq3Section2Reps, 0 };
-static uint8_t paramPageSeq4Params[] = { kParamSeq4ClockDiv, kParamSeq4Direction, kParamSeq4StepCount, kParamSeq4SplitPoint, kParamSeq4Section1Reps, kParamSeq4Section2Reps, 0 };
+static uint8_t paramPageGate1[] = { kParamGate1Out, kParamGate1Run, kParamGate1Length, kParamGate1Direction, kParamGate1ClockDiv, kParamGate1Swing, kParamGate1SplitPoint, kParamGate1Section1Reps, kParamGate1Section2Reps, kParamGate1FillStart, 0 };
+static uint8_t paramPageGate2[] = { kParamGate2Out, kParamGate2Run, kParamGate2Length, kParamGate2Direction, kParamGate2ClockDiv, kParamGate2Swing, kParamGate2SplitPoint, kParamGate2Section1Reps, kParamGate2Section2Reps, kParamGate2FillStart, 0 };
+static uint8_t paramPageGate3[] = { kParamGate3Out, kParamGate3Run, kParamGate3Length, kParamGate3Direction, kParamGate3ClockDiv, kParamGate3Swing, kParamGate3SplitPoint, kParamGate3Section1Reps, kParamGate3Section2Reps, kParamGate3FillStart, 0 };
+static uint8_t paramPageGate4[] = { kParamGate4Out, kParamGate4Run, kParamGate4Length, kParamGate4Direction, kParamGate4ClockDiv, kParamGate4Swing, kParamGate4SplitPoint, kParamGate4Section1Reps, kParamGate4Section2Reps, kParamGate4FillStart, 0 };
+static uint8_t paramPageGate5[] = { kParamGate5Out, kParamGate5Run, kParamGate5Length, kParamGate5Direction, kParamGate5ClockDiv, kParamGate5Swing, kParamGate5SplitPoint, kParamGate5Section1Reps, kParamGate5Section2Reps, kParamGate5FillStart, 0 };
+static uint8_t paramPageGate6[] = { kParamGate6Out, kParamGate6Run, kParamGate6Length, kParamGate6Direction, kParamGate6ClockDiv, kParamGate6Swing, kParamGate6SplitPoint, kParamGate6Section1Reps, kParamGate6Section2Reps, kParamGate6FillStart, 0 };
 
 static _NT_parameterPage pageArray[] = {
     { .name = "Inputs", .numParams = 2, .params = paramPageInputs },
     { .name = "Seq 1 Outs", .numParams = 3, .params = paramPageSeq1Out },
     { .name = "Seq 2 Outs", .numParams = 3, .params = paramPageSeq2Out },
     { .name = "Seq 3 Outs", .numParams = 3, .params = paramPageSeq3Out },
-    { .name = "Seq 4 Outs", .numParams = 3, .params = paramPageSeq4Out },
     { .name = "Seq 1 Params", .numParams = 6, .params = paramPageSeq1Params },
     { .name = "Seq 2 Params", .numParams = 6, .params = paramPageSeq2Params },
     { .name = "Seq 3 Params", .numParams = 6, .params = paramPageSeq3Params },
-    { .name = "Seq 4 Params", .numParams = 6, .params = paramPageSeq4Params }
+    { .name = "Trig Track 1", .numParams = 10, .params = paramPageGate1 },
+    { .name = "Trig Track 2", .numParams = 10, .params = paramPageGate2 },
+    { .name = "Trig Track 3", .numParams = 10, .params = paramPageGate3 },
+    { .name = "Trig Track 4", .numParams = 10, .params = paramPageGate4 },
+    { .name = "Trig Track 5", .numParams = 10, .params = paramPageGate5 },
+    { .name = "Trig Track 6", .numParams = 10, .params = paramPageGate6 }
 };
 
 static _NT_parameterPages pages = {
-    .numPages = 9,
+    .numPages = 13,
     .pages = pageArray
 };
 
@@ -509,21 +791,194 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int step = a->currentStep[seq];
         for (int out = 0; out < 3; out++) {
             int paramIdx = kParamSeq1Out1 + (seq * 3) + out;
-            int outputBus = self->v[paramIdx] - 1;  // 0-27 (parameter is 1-28)
+            int outputBus = self->v[paramIdx];  // 0 = none, 1-28 = bus 0-27
             
             // Store actual bus assignment for debug
             int debugIdx = seq * 3 + out;
-            a->debugOutputBus[debugIdx] = outputBus + 1;  // Store as 1-28 for readability
+            a->debugOutputBus[debugIdx] = outputBus;  // Store as 0-28
             
-            if (outputBus >= 0 && outputBus < 28) {
+            if (outputBus > 0 && outputBus <= 28) {
                 int16_t value = a->stepValues[seq][step][out];
                 // Convert from int16_t range to 0.0-1.0
                 float outputValue = (value + 32768) / 65535.0f;
                 
                 // Write to all frames in the output bus
-                float* outBus = busFrames + (outputBus * numFrames);
+                float* outBus = busFrames + ((outputBus - 1) * numFrames);
                 for (int frame = 0; frame < numFrames; frame++) {
                     outBus[frame] = outputValue;
+                }
+            }
+        }
+    }
+    
+    // Process gate sequencer (6 tracks)
+    for (int track = 0; track < 6; track++) {
+        int outParam = kParamGate1Out + (track * 10);
+        int runParam = kParamGate1Run + (track * 10);
+        int lenParam = kParamGate1Length + (track * 10);
+        int dirParam = kParamGate1Direction + (track * 10);
+        int divParam = kParamGate1ClockDiv + (track * 10);
+        int splitParam = kParamGate1SplitPoint + (track * 10);
+        int sec1Param = kParamGate1Section1Reps + (track * 10);
+        int sec2Param = kParamGate1Section2Reps + (track * 10);
+        int fillParam = kParamGate1FillStart + (track * 10);
+        
+        int outputBus = self->v[outParam];     // 0 = none, 1-28 = bus 0-27
+        int isRunning = self->v[runParam];     // 0 = stopped, 1 = running
+        int trackLength = self->v[lenParam];   // 1-32
+        int direction = self->v[dirParam];     // 0=Forward, 1=Backward, 2=Pingpong
+        int clockDiv = self->v[divParam];      // 0-8 (/16 to x16)
+        int splitPoint = self->v[splitParam];  // 0-31 (0 = no split)
+        int sec1Reps = self->v[sec1Param];     // 1-99
+        int sec2Reps = self->v[sec2Param];     // 1-99
+        int fillStart = self->v[fillParam];    // 1-32 (step where fill replaces section 1 on last rep)
+        
+        // Skip if not running
+        if (isRunning == 0) continue;
+        
+        // Reset handling
+        if (resetTrig) {
+            a->gateCurrentStep[track] = 0;
+            a->gatePingpongForward[track] = true;
+            a->gateClockDivCounter[track] = 0;
+            a->gateSwingCounter[track] = 0;
+            a->gateSection1Counter[track] = 0;
+            a->gateSection2Counter[track] = 0;
+            a->gateInSection2[track] = false;
+            a->gateInFill[track] = false;
+        }
+        
+        // Clock handling with division/multiplication
+        if (clockTrig) {
+            int divFactor = 1;
+            if (clockDiv == 0) divFactor = 16;      // /16
+            else if (clockDiv == 1) divFactor = 8;  // /8
+            else if (clockDiv == 2) divFactor = 4;  // /4
+            else if (clockDiv == 3) divFactor = 2;  // /2
+            else if (clockDiv == 4) divFactor = 1;  // x1
+            else if (clockDiv == 5) divFactor = -2; // x2
+            else if (clockDiv == 6) divFactor = -4; // x4
+            else if (clockDiv == 7) divFactor = -8; // x8
+            else if (clockDiv == 8) divFactor = -16;// x16
+            
+            bool shouldAdvance = false;
+            
+            if (divFactor > 0) {
+                // Division: increment counter, advance when reaching divFactor
+                a->gateClockDivCounter[track]++;
+                if (a->gateClockDivCounter[track] >= divFactor) {
+                    a->gateClockDivCounter[track] = 0;
+                    shouldAdvance = true;
+                }
+            } else {
+                // Multiplication: advance multiple times per clock
+                shouldAdvance = true;
+            }
+            
+            if (shouldAdvance) {
+                int numAdvances = (divFactor > 0) ? 1 : -divFactor;
+                for (int adv = 0; adv < numAdvances; adv++) {
+                    // Determine section boundaries
+                    int section1End = (splitPoint > 0 && splitPoint < trackLength) ? splitPoint : trackLength;
+                    
+                    // Advance step based on direction
+                    if (direction == 0) {  // Forward
+                        a->gateCurrentStep[track]++;
+                        
+                        // Check for fill trigger on last repetition of section 1
+                        if (!a->gateInSection2[track] && 
+                            splitPoint > 0 && 
+                            fillStart < splitPoint &&
+                            a->gateSection1Counter[track] == sec1Reps - 1 &&
+                            a->gateCurrentStep[track] >= fillStart) {
+                            // Fill triggered! Jump to section 2
+                            a->gateSection1Counter[track] = 0;
+                            a->gateInSection2[track] = true;
+                            a->gateCurrentStep[track] = splitPoint;
+                        }
+                        // Check if we've crossed a section boundary
+                        else if (!a->gateInSection2[track] && a->gateCurrentStep[track] >= section1End) {
+                            // Completed section 1
+                            a->gateSection1Counter[track]++;
+                            if (a->gateSection1Counter[track] >= sec1Reps) {
+                                // Move to section 2
+                                a->gateSection1Counter[track] = 0;
+                                a->gateInSection2[track] = true;
+                                if (splitPoint > 0) {
+                                    a->gateCurrentStep[track] = splitPoint;
+                                } else {
+                                    a->gateCurrentStep[track] = 0;
+                                }
+                            } else {
+                                // Repeat section 1
+                                a->gateCurrentStep[track] = 0;
+                            }
+                        } else if (a->gateInSection2[track] && a->gateCurrentStep[track] >= trackLength) {
+                            // Completed section 2
+                            a->gateSection2Counter[track]++;
+                            if (a->gateSection2Counter[track] >= sec2Reps) {
+                                // Back to section 1
+                                a->gateSection2Counter[track] = 0;
+                                a->gateInSection2[track] = false;
+                            }
+                            a->gateCurrentStep[track] = (splitPoint > 0) ? splitPoint : 0;
+                            if (!a->gateInSection2[track]) {
+                                a->gateCurrentStep[track] = 0;
+                            }
+                        }
+                    } else if (direction == 1) {  // Backward
+                        a->gateCurrentStep[track]--;
+                        
+                        if (a->gateInSection2[track] && a->gateCurrentStep[track] < splitPoint) {
+                            a->gateSection2Counter[track]++;
+                            if (a->gateSection2Counter[track] >= sec2Reps) {
+                                a->gateSection2Counter[track] = 0;
+                                a->gateInSection2[track] = false;
+                                a->gateCurrentStep[track] = section1End - 1;
+                            } else {
+                                a->gateCurrentStep[track] = trackLength - 1;
+                            }
+                        } else if (!a->gateInSection2[track] && a->gateCurrentStep[track] < 0) {
+                            a->gateSection1Counter[track]++;
+                            if (a->gateSection1Counter[track] >= sec1Reps) {
+                                a->gateSection1Counter[track] = 0;
+                                a->gateInSection2[track] = true;
+                                a->gateCurrentStep[track] = trackLength - 1;
+                            } else {
+                                a->gateCurrentStep[track] = section1End - 1;
+                            }
+                        }
+                    } else if (direction == 2) {  // Pingpong
+                        if (a->gatePingpongForward[track]) {
+                            a->gateCurrentStep[track]++;
+                            if (a->gateCurrentStep[track] >= trackLength) {
+                                a->gateCurrentStep[track] = trackLength - 2;
+                                if (a->gateCurrentStep[track] < 0) a->gateCurrentStep[track] = 0;
+                                a->gatePingpongForward[track] = false;
+                            }
+                        } else {
+                            a->gateCurrentStep[track]--;
+                            if (a->gateCurrentStep[track] < 0) {
+                                a->gateCurrentStep[track] = 1;
+                                if (a->gateCurrentStep[track] >= trackLength) a->gateCurrentStep[track] = trackLength - 1;
+                                a->gatePingpongForward[track] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Output gate for current step
+        if (outputBus > 0 && outputBus <= 28) {
+            int currentStep = a->gateCurrentStep[track];
+            if (currentStep >= 0 && currentStep < 32) {
+                bool gateActive = a->gateSteps[track][currentStep];
+                
+                // Write to all frames in the output bus
+                float* outBus = busFrames + ((outputBus - 1) * numFrames);
+                for (int frame = 0; frame < numFrames; frame++) {
+                    outBus[frame] = gateActive ? 1.0f : 0.0f;
                 }
             }
         }
@@ -538,6 +993,120 @@ bool draw(_NT_algorithm* self) {
     
     int seq = a->selectedSeq;  // 0-3
     
+    // If seq 3 (4th sequencer), draw gate sequencer instead
+    if (seq == 3) {
+        // Show track and step info
+        char info[32];
+        snprintf(info, sizeof(info), "T%d S%d", a->selectedTrack + 1, a->selectedStep + 1);
+        NT_drawText(0, 0, info, 255);
+        
+        // Show gate state for current selection
+        bool currentGateState = a->gateSteps[a->selectedTrack][a->selectedStep];
+        NT_drawText(60, 0, currentGateState ? "ON" : "off", currentGateState ? 255 : 100);
+        
+        // 6 tracks × 32 steps
+        // Screen: 256px wide, 64px tall
+        // Step size: 256/32 = 8px per step
+        // Track height: (64-8)/6 = ~9px per track (leave 8px for title)
+        
+        int stepWidth = 8;
+        int trackHeight = 9;
+        int startY = 8;
+        
+        // Determine which page we're on based on selectedTrack (0-5 maps to pages 0-3)
+        int currentPage = a->selectedTrack / 2;  // 0-1=page0, 2-3=page1, 4-5=page2
+        // Actually, let's use step position: steps 0-7=page0, 8-15=page1, 16-23=page2, 24-31=page3
+        currentPage = a->selectedStep / 8;
+        
+        // Draw page indicators - 4 groups of 8 steps each
+        for (int group = 0; group < 4; group++) {
+            int groupWidth = 8 * stepWidth;  // 8 steps per group = 64px
+            int barStartX = (group * groupWidth) + (stepWidth / 2);
+            int barWidth = groupWidth - stepWidth;
+            
+            if (group == currentPage) {
+                // Current page: solid line
+                NT_drawShapeI(kNT_line, barStartX, 4, barStartX + barWidth - 1, 4, 255);
+            } else {
+                // Other pages: dotted line
+                for (int x = barStartX; x < barStartX + barWidth; x += 2) {
+                    NT_drawShapeI(kNT_rectangle, x, 4, x, 4, 255);
+                }
+            }
+        }
+        
+        for (int track = 0; track < 6; track++) {
+            int y = startY + (track * trackHeight);
+            
+            // Get track parameters
+            int lenParam = kParamGate1Length + (track * 10);
+            int splitParam = kParamGate1SplitPoint + (track * 10);
+            int trackLength = self->v[lenParam];
+            int splitPoint = self->v[splitParam];
+            int currentStep = a->gateCurrentStep[track];
+            
+            // Highlight selected track with a line on the left
+            if (track == a->selectedTrack) {
+                NT_drawShapeI(kNT_line, 0, y, 0, y + trackHeight - 1, 255);
+                NT_drawShapeI(kNT_line, 1, y, 1, y + trackHeight - 1, 255);
+            }
+            
+            // Draw split point line if active
+            if (splitPoint > 0 && splitPoint < trackLength) {
+                int splitX = splitPoint * stepWidth;
+                NT_drawShapeI(kNT_line, splitX, y, splitX, y + trackHeight - 1, 200);
+            }
+            
+            for (int step = 0; step < 32; step++) {
+                int x = step * stepWidth;
+                
+                // Determine if this step is active (within track length)
+                bool isActive = (step < trackLength);
+                
+                // Only draw steps that are within the track length
+                if (!isActive) continue;  // Skip inactive steps entirely
+                
+                // Get gate state for this track/step
+                bool hasGate = a->gateSteps[track][step];
+                
+                // Calculate center position
+                int centerX = x + (stepWidth / 2);
+                int centerY = y + (trackHeight / 2);
+                
+                // If gate is active, draw filled 5x5 square
+                if (hasGate) {
+                    // Draw filled 5x5 square (very obvious)
+                    NT_drawShapeI(kNT_rectangle, centerX - 2, centerY - 2, centerX + 2, centerY + 2, 255);
+                } else {
+                    // Just draw center pixel for inactive steps
+                    NT_drawShapeI(kNT_rectangle, centerX, centerY, centerX, centerY, 255);
+                }
+                
+                // Draw small box below the current playing step
+                if (step == currentStep) {
+                    NT_drawShapeI(kNT_rectangle, centerX, centerY + 3, centerX + 1, centerY + 3, 255);
+                }
+                
+                // Highlight selected step (for editing)
+                if (step == a->selectedStep && track == a->selectedTrack) {
+                    NT_drawShapeI(kNT_line, centerX - 3, centerY - 3, centerX + 3, centerY - 3, 200);  // Top
+                    NT_drawShapeI(kNT_line, centerX - 3, centerY + 3, centerX + 3, centerY + 3, 200);  // Bottom
+                    NT_drawShapeI(kNT_line, centerX - 3, centerY - 3, centerX - 3, centerY + 3, 200);  // Left
+                    NT_drawShapeI(kNT_line, centerX + 3, centerY - 3, centerX + 3, centerY + 3, 200);  // Right
+                }
+            }
+        }
+        
+        return true;  // Suppress default parameter drawing
+    }
+    
+    // Original CV sequencer view for seq 0-2
+    // Get parameters for current sequencer
+    int stepParam = kParamSeq1StepCount + (seq * 6);
+    int splitParam = kParamSeq1SplitPoint + (seq * 6);
+    int stepCount = self->v[stepParam];
+    int splitPoint = self->v[splitParam];
+    
     // Draw step view
     char title[16];
     snprintf(title, sizeof(title), "SEQ %d", seq + 1);
@@ -550,7 +1119,7 @@ bool draw(_NT_algorithm* self) {
     int barWidth = 3;   // Width of each bar
     int barSpacing = 1; // Space between bars within a step
     int barsWidth = (3 * barWidth) + (2 * barSpacing);  // Width of 3 bars: 3*3 + 2*1 = 11
-    int stepGap = 4;    // Gap after each step
+    int stepGap = 4;    // Gap after each step (reduced to make room for dots)
     int stepWidth = barsWidth + stepGap;  // Total width per step: 11 + 4 = 15
     int startY = 10;    // Start below title
     int rowHeight = 26; // Height of each row
@@ -562,6 +1131,10 @@ bool draw(_NT_algorithm* self) {
         
         int x = col * stepWidth;
         int y = startY + (row * rowHeight);
+        
+        // Determine if this step is active
+        bool isActive = (step < stepCount);
+        int brightness = isActive ? 255 : 40;  // Dim inactive steps
         
         // Draw 3 vertical bars for this step
         for (int out = 0; out < 3; out++) {
@@ -577,7 +1150,7 @@ bool draw(_NT_algorithm* self) {
             int barTopY = barBottomY - barHeight;
             
             // Draw bar (filled rectangle from top to bottom)
-            NT_drawShapeI(kNT_rectangle, barX, barTopY, barX + barWidth - 1, barBottomY - 1, 255);
+            NT_drawShapeI(kNT_rectangle, barX, barTopY, barX + barWidth - 1, barBottomY, brightness);
         }
         
         // Draw step indicator dot if this is the current step
@@ -591,40 +1164,67 @@ bool draw(_NT_algorithm* self) {
         if (step == a->selectedStep) {
             NT_drawShapeI(kNT_line, x, y + maxBarHeight + 1, x + barsWidth - 1, y + maxBarHeight + 1, 255);
         }
+        
+        // Draw percentage dots in the gap between steps
+        if (col < 15) {  // Don't draw after the last step in each row
+            int dotX = x + barsWidth + 2;  // Start of gap area (moved 1px right)
+            // 4 dots at 25%, 50%, 75%, 100% of bar height
+            int dot25Y = y + maxBarHeight - (maxBarHeight / 4);
+            int dot50Y = y + maxBarHeight - (maxBarHeight / 2);
+            int dot75Y = y + maxBarHeight - (3 * maxBarHeight / 4);
+            int dot100Y = y;
+            
+            NT_drawShapeI(kNT_rectangle, dotX, dot25Y, dotX, dot25Y, 128);
+            NT_drawShapeI(kNT_rectangle, dotX, dot50Y, dotX, dot50Y, 128);
+            NT_drawShapeI(kNT_rectangle, dotX, dot75Y, dotX, dot75Y, 128);
+            NT_drawShapeI(kNT_rectangle, dotX, dot100Y, dotX, dot100Y, 128);
+        }
+        
+        // Draw triangle between last step of first section and first step of second section
+        if (step == (splitPoint - 1) && splitPoint > 0 && splitPoint < stepCount) {
+            int boxX = x + barsWidth + 1;  // In the gap after this step
+            int boxY = y + maxBarHeight + 3;  // Below the bars
+            // Draw small 2x2 box
+            NT_drawShapeI(kNT_rectangle, boxX, boxY, boxX + 1, boxY + 1, 255);
+        }
     }
     
-    // Draw separator lines between groups of 4 steps (at top of each row)
-    // Between steps 4-5, 8-9, 12-13 for each row
-    for (int row = 0; row < 2; row++) {
-        int lineY = startY + (row * rowHeight);  // At the top of the bars
-        // After step 4 (before step 5)
-        int x1 = 4 * stepWidth - (stepGap / 2) - 1;
-        NT_drawShapeI(kNT_line, x1, lineY, x1, lineY + maxBarHeight - 1, 100);
-        // After step 8 (before step 9)
-        int x2 = 8 * stepWidth - (stepGap / 2) - 1;
-        NT_drawShapeI(kNT_line, x2, lineY, x2, lineY + maxBarHeight - 1, 100);
-        // After step 12 (before step 13)
-        int x3 = 12 * stepWidth - (stepGap / 2) - 1;
-        NT_drawShapeI(kNT_line, x3, lineY, x3, lineY + maxBarHeight - 1, 100);
-    }
+    // Draw short separator lines at top and bottom of screen between groups of 4 steps
+    // Between steps 4-5, 8-9, 12-13
+    int separatorY1 = 0;  // Very top of screen
+    int separatorY2 = 63; // Very bottom of screen
+    int x1 = 4 * stepWidth - (stepGap / 2);
+    int x2 = 8 * stepWidth - (stepGap / 2);
+    int x3 = 12 * stepWidth - (stepGap / 2);
+    
+    NT_drawShapeI(kNT_line, x1, separatorY1, x1, separatorY1 + 3, 128);
+    NT_drawShapeI(kNT_line, x1, separatorY2 - 3, x1, separatorY2, 128);
+    NT_drawShapeI(kNT_line, x2, separatorY1, x2, separatorY1 + 3, 128);
+    NT_drawShapeI(kNT_line, x2, separatorY2 - 3, x2, separatorY2, 128);
+    NT_drawShapeI(kNT_line, x3, separatorY1, x3, separatorY1 + 3, 128);
+    NT_drawShapeI(kNT_line, x3, separatorY2 - 3, x3, separatorY2, 128);
     
     // Draw page indicators at the very top (above step view)
     // 4 bars representing 4 sequencers, centered above groups of 4 steps
-    int pageBarY = startY - 3;  // 1px above the first row
+    int pageBarY = 4;  // Just below the top separator lines
     int groupWidth = 4 * stepWidth;  // Width of 4 steps including gaps
-    int barLength = groupWidth - stepGap - 2;  // Bar length (slightly shorter than group)
     for (int i = 0; i < 4; i++) {
-        int groupStartX = i * groupWidth;
-        int barStartX = groupStartX + 1;  // Center the bar by offsetting slightly
+        int barStartX = (i * groupWidth) + (stepGap / 2);
+        int barEndX = ((i + 1) * groupWidth) - (stepGap / 2) - stepGap;
         int brightness = (i == seq) ? 255 : 80;  // Bright if active, dim otherwise
-        NT_drawShapeI(kNT_line, barStartX, pageBarY, barStartX + barLength, pageBarY, brightness);
+        NT_drawShapeI(kNT_line, barStartX, pageBarY, barEndX, pageBarY, brightness);
     }
+    
+    // Draw current step number in top right corner
+    char stepNum[4];
+    snprintf(stepNum, sizeof(stepNum), "%d", a->selectedStep + 1);
+    NT_drawText(248, 0, stepNum, 255);
     
     return true;  // Suppress default parameter line
 }
 
 uint32_t hasCustomUi(_NT_algorithm* self) {
-    return kNT_potL | kNT_potC | kNT_potR | kNT_encoderL | kNT_encoderR | kNT_button4;
+    return kNT_potL | kNT_potC | kNT_potR | kNT_encoderL | kNT_encoderR | kNT_encoderButtonR | kNT_button4;
 }
 
 void customUi(_NT_algorithm* self, const _NT_uiData& data) {
@@ -638,12 +1238,65 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         if (a->selectedSeq > 3) a->selectedSeq = 0;
     }
     
+    // Gate sequencer mode (seq 3)
+    if (a->selectedSeq == 3) {
+        // Left pot: select track (0-5) - direct mapping
+        if (data.controls & kNT_potL) {
+            float potValue = data.pots[0];
+            
+            // Map pot value (0.0-1.0) to tracks (0-5)
+            // Divide into 6 equal regions
+            int newTrack = (int)(potValue * 5.999f);  // 0.0->0, 0.999->5
+            if (newTrack < 0) newTrack = 0;
+            if (newTrack > 5) newTrack = 5;
+            
+            a->selectedTrack = newTrack;
+        }
+        
+        // Right encoder: select step (0-31)
+        if (data.encoders[1] != 0) {
+            int delta = data.encoders[1];
+            a->selectedStep += delta;
+            if (a->selectedStep < 0) a->selectedStep = 31;
+            if (a->selectedStep > 31) a->selectedStep = 0;
+        }
+        
+        // Right encoder button: toggle gate
+        uint16_t currentEncoderRButton = data.controls & kNT_encoderButtonR;
+        uint16_t lastEncoderRButton = a->lastEncoderRButton & kNT_encoderButtonR;
+        if (currentEncoderRButton && !lastEncoderRButton) {  // Rising edge
+            // Toggle the gate
+            int track = a->selectedTrack;
+            int step = a->selectedStep;
+            a->gateSteps[track][step] = !a->gateSteps[track][step];
+            
+            // Force update by incrementing a counter to verify button is being pressed
+            a->selectedSeq = 3;  // Force redraw
+        }
+        a->lastEncoderRButton = data.controls;
+        
+        // DEBUG: Show encoder button state visually
+        if (currentEncoderRButton) {
+            // Draw indicator when button is pressed
+            NT_drawText(120, 0, "BTN", 255);
+        }
+        
+        // Ignore all other controls in gate mode
+        return;  // Skip CV sequencer controls
+    }
+    
+    // CV Sequencer mode (seq 0-2)
     // Right encoder: select step (0-31)
     if (data.encoders[1] != 0) {
         int delta = data.encoders[1];
         a->selectedStep += delta;
         if (a->selectedStep < 0) a->selectedStep = 31;
         if (a->selectedStep > 31) a->selectedStep = 0;
+        
+        // Reset pot catch state when step changes
+        a->potCaught[0] = false;
+        a->potCaught[1] = false;
+        a->potCaught[2] = false;
     }
     
     // Button 4: cycle through ratchet/repeat modes for selected step
@@ -657,18 +1310,53 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     }
     a->lastButton4State = data.controls;
     
-    // Pots control the 3 values for the selected step (only if pot changed)
-    if (data.controls & (kNT_potL | kNT_potC | kNT_potR)) {
-        if (data.controls & kNT_potL) {
-            float potValue = data.pots[0];
+    // Pots control the 3 values for the selected step with catch logic
+    if (data.controls & kNT_potL) {
+        float potValue = data.pots[0];
+        int16_t currentValue = a->stepValues[a->selectedSeq][a->selectedStep][0];
+        float currentNormalized = (currentValue + 32768) / 65535.0f;
+        
+        // Check if pot has caught the current value (within 2% tolerance)
+        if (!a->potCaught[0]) {
+            if (fabsf(potValue - currentNormalized) < 0.02f) {
+                a->potCaught[0] = true;
+            }
+        }
+        
+        // Only update if caught
+        if (a->potCaught[0]) {
             a->stepValues[a->selectedSeq][a->selectedStep][0] = (int16_t)((potValue * 65535.0f) - 32768);
         }
-        if (data.controls & kNT_potC) {
-            float potValue = data.pots[1];
+    }
+    
+    if (data.controls & kNT_potC) {
+        float potValue = data.pots[1];
+        int16_t currentValue = a->stepValues[a->selectedSeq][a->selectedStep][1];
+        float currentNormalized = (currentValue + 32768) / 65535.0f;
+        
+        if (!a->potCaught[1]) {
+            if (fabsf(potValue - currentNormalized) < 0.02f) {
+                a->potCaught[1] = true;
+            }
+        }
+        
+        if (a->potCaught[1]) {
             a->stepValues[a->selectedSeq][a->selectedStep][1] = (int16_t)((potValue * 65535.0f) - 32768);
         }
-        if (data.controls & kNT_potR) {
-            float potValue = data.pots[2];
+    }
+    
+    if (data.controls & kNT_potR) {
+        float potValue = data.pots[2];
+        int16_t currentValue = a->stepValues[a->selectedSeq][a->selectedStep][2];
+        float currentNormalized = (currentValue + 32768) / 65535.0f;
+        
+        if (!a->potCaught[2]) {
+            if (fabsf(potValue - currentNormalized) < 0.02f) {
+                a->potCaught[2] = true;
+            }
+        }
+        
+        if (a->potCaught[2]) {
             a->stepValues[a->selectedSeq][a->selectedStep][2] = (int16_t)((potValue * 65535.0f) - 32768);
         }
     }
@@ -700,14 +1388,12 @@ void parameterChanged(_NT_algorithm* self, int parameterIndex) {
     // Reset split/section parameters when step count changes
     if (parameterIndex == kParamSeq1StepCount || 
         parameterIndex == kParamSeq2StepCount ||
-        parameterIndex == kParamSeq3StepCount ||
-        parameterIndex == kParamSeq4StepCount) {
+        parameterIndex == kParamSeq3StepCount) {
         
         int seq = 0;
         if (parameterIndex == kParamSeq1StepCount) seq = 0;
         else if (parameterIndex == kParamSeq2StepCount) seq = 1;
         else if (parameterIndex == kParamSeq3StepCount) seq = 2;
-        else if (parameterIndex == kParamSeq4StepCount) seq = 3;
         
         int stepCount = self->v[parameterIndex];
         int splitParam = kParamSeq1SplitPoint + (seq * 6);
