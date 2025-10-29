@@ -1089,7 +1089,26 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int sec2Reps = self->v[sec2Param];     // 1-99
         int fillStart = self->v[fillParam];    // 1-32 (step where fill replaces section 1 on last rep)
         
-        // Skip if not running
+        // Send MIDI CC for gate state if value changed (regardless of run state)
+        int ccParamIdx = kParamGate1CC + track;
+        int ccNumber = self->v[ccParamIdx];  // 0 = None, 1-128 = CC 0-127
+        
+        if (ccNumber > 0) {
+            int currentStep = a->gateCurrentStep[track];
+            bool gateActive = (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]);
+            uint8_t midiValue = gateActive ? 127 : 0;
+            
+            // Only send if value changed
+            if (midiValue != a->lastMidiGateValue[track]) {
+                a->lastMidiGateValue[track] = midiValue;
+                // Get MIDI channel (1-16) and convert to status byte (0xB0-0xBF)
+                int midiChannel = self->v[kParamMidiChannel];  // 1-16
+                uint8_t statusByte = 0xB0 | ((midiChannel - 1) & 0x0F);
+                NT_sendMidi3ByteMessage(~0, statusByte, ccNumber - 1, midiValue);
+            }
+        }
+        
+        // Skip sequencer advancement if not running
         if (isRunning == 0) continue;
         
         // Reset handling
@@ -1112,25 +1131,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             if (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]) {
                 // Gate is active on this step - trigger!
                 a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
-            }
-        }
-        
-        // Send MIDI CC for gate state if value changed
-        int ccParamIdx = kParamGate1CC + track;
-        int ccNumber = self->v[ccParamIdx];  // 0 = None, 1-128 = CC 0-127
-        
-        if (ccNumber > 0) {
-            int currentStep = a->gateCurrentStep[track];
-            bool gateActive = (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]);
-            uint8_t midiValue = gateActive ? 127 : 0;
-            
-            // Only send if value changed
-            if (midiValue != a->lastMidiGateValue[track]) {
-                a->lastMidiGateValue[track] = midiValue;
-                // Get MIDI channel (1-16) and convert to status byte (0xB0-0xBF)
-                int midiChannel = self->v[kParamMidiChannel];  // 1-16
-                uint8_t statusByte = 0xB0 | ((midiChannel - 1) & 0x0F);
-                NT_sendMidi3ByteMessage(~0, statusByte, ccNumber - 1, midiValue);
             }
         }
         
