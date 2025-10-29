@@ -1,7 +1,7 @@
 # VSeq - 4-channel step sequencer for Disting NT
 # Build configuration
 
-PLUGIN_NAME := VSeq.o
+PLUGIN_NAME := 1VSeq.o
 SRC_DIR := src
 BUILD_DIR := build
 

@@ -53,6 +53,7 @@ struct VSeq : public _NT_algorithm {
     uint16_t lastEncoderRButton; // For debouncing right encoder button
     float lastPotLValue;        // Track left pot position for relative movement
     bool potCaught[3];          // Track if each pot has caught the step value
+    bool trackPotCaught;        // Track if left pot has caught track position (for gate seq)
     
     // Debug: track actual output bus assignments
     int debugOutputBus[12];
@@ -95,6 +96,7 @@ struct VSeq : public _NT_algorithm {
         potCaught[0] = false;
         potCaught[1] = false;
         potCaught[2] = false;
+        trackPotCaught = false;
         
         // Initialize gate sequencer
         for (int track = 0; track < 6; track++) {
@@ -1266,6 +1268,8 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                 // Gate sequencer - get current track's length
                 int lenParam = kParamGate1Length + (a->selectedTrack * 10);
                 newLength = self->v[lenParam];
+                // Reset track pot catch when entering gate sequencer
+                a->trackPotCaught = false;
             } else {
                 // CV sequencer - get step count
                 int lengthParam;
@@ -1284,27 +1288,44 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     
     // Gate sequencer mode (seq 3)
     if (a->selectedSeq == 3) {
-        // Left pot: select track (0-5) - direct mapping
+        // Left pot: select track (0-5) with catch behavior
+        // Each track has a virtual position: track 0 = 0%, track 1 = 20%, ..., track 5 = 100%
+        // Pot must "catch" current track position before it can change tracks
         if (data.controls & kNT_potL) {
             float potValue = data.pots[0];
             
-            // Map pot value (0.0-1.0) to tracks (0-5)
-            // Divide into 6 equal regions
-            int newTrack = (int)(potValue * 5.999f);  // 0.0->0, 0.999->5
-            if (newTrack < 0) newTrack = 0;
-            if (newTrack > 5) newTrack = 5;
+            // Calculate virtual position for current track (0-5 maps to 0.0-1.0)
+            float trackPosition = a->selectedTrack / 5.0f;
             
-            // If track changed, clamp selectedStep to new track's length
-            if (newTrack != a->selectedTrack) {
-                a->selectedTrack = newTrack;
+            // Check if pot has caught the track position (within 5% tolerance)
+            if (!a->trackPotCaught) {
+                if (fabsf(potValue - trackPosition) < 0.05f) {
+                    a->trackPotCaught = true;
+                }
+            }
+            
+            // Only allow track changes when caught
+            if (a->trackPotCaught) {
+                // Map pot to track with hysteresis to prevent flickering
+                // 0.00-0.10 = track 0, 0.10-0.30 = track 1, etc.
+                int newTrack;
+                if (potValue < 0.10f) newTrack = 0;
+                else if (potValue < 0.30f) newTrack = 1;
+                else if (potValue < 0.50f) newTrack = 2;
+                else if (potValue < 0.70f) newTrack = 3;
+                else if (potValue < 0.90f) newTrack = 4;
+                else newTrack = 5;
                 
-                // Get new track's length
-                int lenParam = kParamGate1Length + (newTrack * 10);
-                int trackLength = self->v[lenParam];  // 1-32
-                
-                // Clamp selectedStep to track length
-                if (a->selectedStep >= trackLength) {
-                    a->selectedStep = trackLength - 1;
+                // If track changed, update selection and reset catch
+                if (newTrack != a->selectedTrack) {
+                    a->selectedTrack = newTrack;
+                    a->trackPotCaught = false;  // Must re-catch at new position
+                    
+                    // Clamp selected step to new track's length
+                    int lenParam = kParamGate1Length + (a->selectedTrack * 10);
+                    if (a->selectedStep >= self->v[lenParam]) {
+                        a->selectedStep = self->v[lenParam] - 1;
+                    }
                 }
             }
         }

@@ -52,6 +52,33 @@ struct _NT_algorithm {
     float v[128];  // Parameter values
 };
 
+// Mock UI data structure
+struct _NT_uiData {
+    float pots[3];          // current pot positions [0.0-1.0]
+    uint16_t controls;      // current button states, and which pots changed
+    uint16_t lastButtons;   // previous button states
+    int8_t encoders[2];     // encoder change ±1 or 0
+    uint8_t unused[2];
+};
+
+// Mock control constants
+enum {
+    kNT_button1         = (1<<0),
+    kNT_button2         = (1<<1),
+    kNT_button3         = (1<<2),
+    kNT_button4         = (1<<3),
+    kNT_potButtonL      = (1<<4),
+    kNT_potButtonC      = (1<<5),
+    kNT_potButtonR      = (1<<6),
+    kNT_encoderButtonL  = (1<<7),
+    kNT_encoderButtonR  = (1<<8),
+    kNT_encoderL        = (1<<9),
+    kNT_encoderR        = (1<<10),
+    kNT_potL            = (1<<11),
+    kNT_potC            = (1<<12),
+    kNT_potR            = (1<<13),
+};
+
 uint8_t NT_screen[128 * 64];  // Mock screen buffer
 
 // Include VSeq struct definition (we'll extract it to a header later)
@@ -93,6 +120,7 @@ struct VSeqTest : public _NT_algorithm {
     uint16_t lastEncoderRButton;
     float lastPotLValue;
     bool potCaught[3];
+    bool trackPotCaught;
     int debugOutputBus[12];
     
     VSeqTest() {
@@ -140,6 +168,7 @@ struct VSeqTest : public _NT_algorithm {
         potCaught[0] = false;
         potCaught[1] = false;
         potCaught[2] = false;
+        trackPotCaught = false;
         
         for (int i = 0; i < 12; i++) {
             debugOutputBus[i] = 0;
@@ -369,7 +398,52 @@ struct VSeqTest : public _NT_algorithm {
             }
         }
     }
+    
+    // UI function for testing track selection with catch behavior
+    void customUi(const _NT_uiData& data) {
+        // Gate sequencer mode (seq 3)
+        if (selectedSeq == 3) {
+            // Left pot: select track (0-5) with catch behavior
+            if (data.controls & kNT_potL) {
+                float potValue = data.pots[0];
+                
+                // Calculate virtual position for current track
+                float trackPosition = selectedTrack / 5.0f;
+                
+                // Check if pot has caught the track position
+                if (!trackPotCaught) {
+                    if (fabsf(potValue - trackPosition) < 0.05f) {
+                        trackPotCaught = true;
+                    }
+                }
+                
+                // Only allow track changes when caught
+                if (trackPotCaught) {
+                    // Map pot to track with hysteresis
+                    int newTrack;
+                    if (potValue < 0.10f) newTrack = 0;
+                    else if (potValue < 0.30f) newTrack = 1;
+                    else if (potValue < 0.50f) newTrack = 2;
+                    else if (potValue < 0.70f) newTrack = 3;
+                    else if (potValue < 0.90f) newTrack = 4;
+                    else newTrack = 5;
+                    
+                    // If track changed, reset catch
+                    if (newTrack != selectedTrack) {
+                        selectedTrack = newTrack;
+                        trackPotCaught = false;
+                    }
+                }
+            }
+        }
+    }
 };
+
+// Standalone customUi function for VSeqTest
+void customUi(_NT_algorithm* self, const _NT_uiData& data) {
+    VSeqTest* vseq = static_cast<VSeqTest*>(self);
+    vseq->customUi(data);
+}
 
 // Test fixture
 VSeqTest vseq;
@@ -574,6 +648,135 @@ TEST_F(VSeqSequencerTest, GateBackwardSectionLooping) {
     }
 }
 
+// UI Tests for catch-based track selection
+TEST_F(VSeqSequencerTest, TrackPotCatchBehavior) {
+    // Test that pot must catch track position before responding
+    vseq.selectedSeq = 3;
+    vseq.selectedTrack = 1;  // Track 1 = 20% position
+    vseq.trackPotCaught = false;
+    
+    _NT_uiData data = {};
+    data.controls = kNT_potL;
+    
+    // Pot at 50% - far from track 1's 20% position
+    data.pots[0] = 0.50f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 1);  // Should not change
+    EXPECT_FALSE(vseq.trackPotCaught);  // Not caught yet
+    
+    // Move pot closer - still outside 5% tolerance
+    data.pots[0] = 0.26f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 1);  // Still no change
+    EXPECT_FALSE(vseq.trackPotCaught);  // Still not caught
+    
+    // Move pot within catch range (20% ± 5%)
+    data.pots[0] = 0.22f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 1);  // Track doesn't change yet
+    EXPECT_TRUE(vseq.trackPotCaught);   // But now it's caught!
+    
+    // Now that it's caught, can change tracks
+    data.pots[0] = 0.45f;  // Move to track 2 range (30-50%)
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 2);  // Should change to track 2
+    EXPECT_FALSE(vseq.trackPotCaught);  // Catch resets on track change
+}
+
+TEST_F(VSeqSequencerTest, TrackPotFullRange) {
+    // Test moving through all tracks from 0 to 5
+    vseq.selectedSeq = 3;
+    vseq.selectedTrack = 0;
+    vseq.trackPotCaught = true;  // Start caught
+    
+    _NT_uiData data = {};
+    data.controls = kNT_potL;
+    
+    // Track 0: 0-10%
+    data.pots[0] = 0.05f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 0);
+    
+    // Move to track 1: 10-30%
+    vseq.trackPotCaught = true;  // Manually catch for test
+    data.pots[0] = 0.25f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 1);
+    
+    // Move to track 2: 30-50%
+    vseq.trackPotCaught = true;
+    data.pots[0] = 0.45f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 2);
+    
+    // Move to track 3: 50-70%
+    vseq.trackPotCaught = true;
+    data.pots[0] = 0.65f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 3);
+    
+    // Move to track 4: 70-90%
+    vseq.trackPotCaught = true;
+    data.pots[0] = 0.85f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 4);
+    
+    // Move to track 5: 90-100%
+    vseq.trackPotCaught = true;
+    data.pots[0] = 0.95f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 5);
+    
+    // Can't go beyond track 5
+    vseq.trackPotCaught = true;
+    data.pots[0] = 1.0f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 5);  // Stays at 5
+}
+
+TEST_F(VSeqSequencerTest, TrackPotNoWrapAround) {
+    // Test that tracks don't wrap around
+    vseq.selectedSeq = 3;
+    
+    // At track 5, pot at max
+    vseq.selectedTrack = 5;
+    vseq.trackPotCaught = true;
+    
+    _NT_uiData data = {};
+    data.controls = kNT_potL;
+    data.pots[0] = 1.0f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 5);  // Stays at 5, doesn't wrap to 0
+    
+    // At track 0, pot at min
+    vseq.selectedTrack = 0;
+    vseq.trackPotCaught = true;
+    data.pots[0] = 0.0f;
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 0);  // Stays at 0, doesn't wrap to 5
+}
+
+TEST_F(VSeqSequencerTest, TrackPotHysteresis) {
+    // Test hysteresis prevents flickering at boundaries
+    vseq.selectedSeq = 3;
+    vseq.selectedTrack = 1;
+    vseq.trackPotCaught = true;
+    
+    _NT_uiData data = {};
+    data.controls = kNT_potL;
+    
+    // At boundary between track 1 and 2 (30%)
+    data.pots[0] = 0.295f;  // Just below 30%
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 1);  // Still track 1
+    
+    // Cross the boundary
+    vseq.trackPotCaught = true;
+    data.pots[0] = 0.305f;  // Just above 30%
+    customUi(&vseq, data);
+    EXPECT_EQ(vseq.selectedTrack, 2);  // Now track 2
+}
+
 // Main function for running tests
 int main(int argc, char **argv) {
     std::cout << "Running VSeq Unit Tests\n";
@@ -625,6 +828,26 @@ int main(int argc, char **argv) {
     std::cout << "Test: GateBackwardSectionLooping\n";
     vseq = VSeqTest();
     test_VSeqSequencerTest_GateBackwardSectionLooping();
+    
+    // UI Tests
+    std::cout << "\nUI Tests:\n";
+    std::cout << "--------\n";
+    
+    std::cout << "Test: TrackPotCatchBehavior\n";
+    vseq = VSeqTest();
+    test_VSeqSequencerTest_TrackPotCatchBehavior();
+    
+    std::cout << "Test: TrackPotFullRange\n";
+    vseq = VSeqTest();
+    test_VSeqSequencerTest_TrackPotFullRange();
+    
+    std::cout << "Test: TrackPotNoWrapAround\n";
+    vseq = VSeqTest();
+    test_VSeqSequencerTest_TrackPotNoWrapAround();
+    
+    std::cout << "Test: TrackPotHysteresis\n";
+    vseq = VSeqTest();
+    test_VSeqSequencerTest_TrackPotHysteresis();
     
     // Summary
     std::cout << "\n=======================\n";
