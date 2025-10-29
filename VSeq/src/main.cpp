@@ -28,6 +28,7 @@ struct VSeq : public _NT_algorithm {
     int currentStep[4];         // Current step for each sequencer (0-31)
     bool pingpongForward[4];    // Direction state for pingpong mode
     int clockDivCounter[4];     // Counter for clock division
+    int clockMultCounter[4];    // Counter for clock multiplication (internal ticks)
     int ratchetCounter[4];      // Counter for ratchets within a step
     int repeatCounter[4];       // Counter for step repeats
     int section1Counter[4];     // Track section 1 repeat count
@@ -38,11 +39,14 @@ struct VSeq : public _NT_algorithm {
     int gateCurrentStep[6];     // Current step for each gate track (0-31)
     bool gatePingpongForward[6]; // Direction state for pingpong mode
     int gateClockDivCounter[6]; // Counter for clock division
+    int gateClockMultCounter[6]; // Counter for clock multiplication (internal ticks)
     int gateSwingCounter[6];    // Counter for swing timing
     int gateSection1Counter[6]; // Track section 1 repeat count
     int gateSection2Counter[6]; // Track section 2 repeat count
     bool gateInSection2[6];     // Which section is currently playing
     bool gateInFill[6];         // Whether we're in the fill section
+    int gateTriggerCounter[6];  // Countdown for trigger pulse duration
+    bool gateTriggered[6];      // Whether gate was just triggered this step
     
     // Edge detection
     float lastClockIn;
@@ -86,6 +90,7 @@ struct VSeq : public _NT_algorithm {
             currentStep[seq] = 0;
             pingpongForward[seq] = true;
             clockDivCounter[seq] = 0;
+            clockMultCounter[seq] = 0;
             ratchetCounter[seq] = 0;
             repeatCounter[seq] = 0;
             section1Counter[seq] = 0;
@@ -114,11 +119,14 @@ struct VSeq : public _NT_algorithm {
             gateCurrentStep[track] = 0;
             gatePingpongForward[track] = true;
             gateClockDivCounter[track] = 0;
+            gateClockMultCounter[track] = 0;
             gateSwingCounter[track] = 0;
             gateSection1Counter[track] = 0;
             gateSection2Counter[track] = 0;
             gateInSection2[track] = false;
             gateInFill[track] = false;
+            gateTriggerCounter[track] = 0;
+            gateTriggered[track] = false;
         }
         
         for (int i = 0; i < 12; i++) {
@@ -753,33 +761,9 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             a->resetSequencer(seq);
         }
         
-        // Clock handling with division/multiplication
+        // Clock handling - advance one step per clock
         if (clockTrig) {
-            int divFactor = 1;
-            if (clockDiv == 0) divFactor = 16;      // /16
-            else if (clockDiv == 1) divFactor = 8;  // /8
-            else if (clockDiv == 2) divFactor = 4;  // /4
-            else if (clockDiv == 3) divFactor = 2;  // /2
-            else if (clockDiv == 4) divFactor = 1;  // x1
-            else if (clockDiv == 5) divFactor = -2; // x2
-            else if (clockDiv == 6) divFactor = -4; // x4
-            else if (clockDiv == 7) divFactor = -8; // x8
-            else if (clockDiv == 8) divFactor = -16;// x16
-            
-            if (divFactor > 0) {
-                // Division: increment counter, advance when reaching divFactor
-                a->clockDivCounter[seq]++;
-                if (a->clockDivCounter[seq] >= divFactor) {
-                    a->clockDivCounter[seq] = 0;
-                    a->advanceSequencer(seq, direction, stepCount, splitPoint, sec1Reps, sec2Reps);
-                }
-            } else {
-                // Multiplication: advance multiple times per clock
-                int multFactor = -divFactor;
-                for (int i = 0; i < multFactor; i++) {
-                    a->advanceSequencer(seq, direction, stepCount, splitPoint, sec1Reps, sec2Reps);
-                }
-            }
+            a->advanceSequencer(seq, direction, stepCount, splitPoint, sec1Reps, sec2Reps);
         }
         
         // Clamp current step to step count (safety check)
@@ -848,41 +832,12 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             a->gateInFill[track] = false;
         }
         
-        // Clock handling with division/multiplication
+        // Clock handling - advance one step per clock
         if (clockTrig) {
-            int divFactor = 1;
-            if (clockDiv == 0) divFactor = 16;      // /16
-            else if (clockDiv == 1) divFactor = 8;  // /8
-            else if (clockDiv == 2) divFactor = 4;  // /4
-            else if (clockDiv == 3) divFactor = 2;  // /2
-            else if (clockDiv == 4) divFactor = 1;  // x1
-            else if (clockDiv == 5) divFactor = -2; // x2
-            else if (clockDiv == 6) divFactor = -4; // x4
-            else if (clockDiv == 7) divFactor = -8; // x8
-            else if (clockDiv == 8) divFactor = -16;// x16
+            // Determine section boundaries
+            int section1End = (splitPoint > 0 && splitPoint < trackLength) ? splitPoint : trackLength;
             
-            bool shouldAdvance = false;
-            
-            if (divFactor > 0) {
-                // Division: increment counter, advance when reaching divFactor
-                a->gateClockDivCounter[track]++;
-                if (a->gateClockDivCounter[track] >= divFactor) {
-                    a->gateClockDivCounter[track] = 0;
-                    shouldAdvance = true;
-                }
-            } else {
-                // Multiplication: advance multiple times per clock
-                shouldAdvance = true;
-            }
-            
-            if (shouldAdvance) {
-                int numAdvances = (divFactor > 0) ? 1 : -divFactor;
-                for (int adv = 0; adv < numAdvances; adv++) {
-                    // Determine section boundaries
-                    int section1End = (splitPoint > 0 && splitPoint < trackLength) ? splitPoint : trackLength;
-                    
-                    // Advance step based on direction
-                    if (direction == 0) {  // Forward
+            if (direction == 0) {  // Forward
                         a->gateCurrentStep[track]++;
                         
                         // Check for fill trigger on last repetition of section 1
@@ -965,21 +920,31 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                             }
                         }
                     }
+                    
+                // After advancing, mark if current step should trigger
+                int currentStep = a->gateCurrentStep[track];
+                if (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]) {
+                    // Gate is active on this step - trigger!
+                    a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
                 }
+        }
+        
+        // Countdown trigger pulses every buffer
+        if (a->gateTriggerCounter[track] > 0) {
+            a->gateTriggerCounter[track] -= numFrames;  // Countdown by buffer size
+            if (a->gateTriggerCounter[track] < 0) {
+                a->gateTriggerCounter[track] = 0;
             }
         }
         
-        // Output gate for current step
+        // Output trigger pulse
         if (outputBus > 0 && outputBus <= 28) {
-            int currentStep = a->gateCurrentStep[track];
-            if (currentStep >= 0 && currentStep < 32) {
-                bool gateActive = a->gateSteps[track][currentStep];
-                
-                // Write to all frames in the output bus
-                float* outBus = busFrames + ((outputBus - 1) * numFrames);
-                for (int frame = 0; frame < numFrames; frame++) {
-                    outBus[frame] = gateActive ? 1.0f : 0.0f;
-                }
+            bool triggerActive = a->gateTriggerCounter[track] > 0;
+            
+            // Write to all frames in the output bus
+            float* outBus = busFrames + ((outputBus - 1) * numFrames);
+            for (int frame = 0; frame < numFrames; frame++) {
+                outBus[frame] = triggerActive ? 5.0f : 0.0f;  // 5V trigger
             }
         }
     }
@@ -1018,19 +983,24 @@ bool draw(_NT_algorithm* self) {
         // Actually, let's use step position: steps 0-7=page0, 8-15=page1, 16-23=page2, 24-31=page3
         currentPage = a->selectedStep / 8;
         
-        // Draw page indicators - 4 groups of 8 steps each
+        // Draw page indicators at top:
+        // - Show which 8-step group (dotted/solid for steps 0-7, 8-15, 16-23, 24-31)
+        // - AND which sequencer we're on (brightness for seq 0-3)
         for (int group = 0; group < 4; group++) {
             int groupWidth = 8 * stepWidth;  // 8 steps per group = 64px
             int barStartX = (group * groupWidth) + (stepWidth / 2);
             int barWidth = groupWidth - stepWidth;
             
+            // Determine brightness: bright if this is the current sequencer (seq 3 = gate seq)
+            int brightness = (group == seq) ? 255 : 80;
+            
             if (group == currentPage) {
-                // Current page: solid line
-                NT_drawShapeI(kNT_line, barStartX, 4, barStartX + barWidth - 1, 4, 255);
+                // Current 8-step page: solid line
+                NT_drawShapeI(kNT_line, barStartX, 4, barStartX + barWidth - 1, 4, brightness);
             } else {
-                // Other pages: dotted line
+                // Other 8-step pages: dotted line
                 for (int x = barStartX; x < barStartX + barWidth; x += 2) {
-                    NT_drawShapeI(kNT_rectangle, x, 4, x, 4, 255);
+                    NT_drawShapeI(kNT_rectangle, x, 4, x, 4, brightness);
                 }
             }
         }
@@ -1233,9 +1203,33 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     // Left encoder: select sequencer (0-3)
     if (data.encoders[0] != 0) {
         int delta = data.encoders[0];
+        int oldSeq = a->selectedSeq;
         a->selectedSeq += delta;
         if (a->selectedSeq < 0) a->selectedSeq = 3;
         if (a->selectedSeq > 3) a->selectedSeq = 0;
+        
+        // If sequencer changed, clamp selectedStep to new sequencer's length
+        if (a->selectedSeq != oldSeq) {
+            // Determine new sequencer's length
+            int newLength;
+            if (a->selectedSeq == 3) {
+                // Gate sequencer - get current track's length
+                int lenParam = kParamGate1Length + (a->selectedTrack * 10);
+                newLength = self->v[lenParam];
+            } else {
+                // CV sequencer - get step count
+                int lengthParam;
+                if (a->selectedSeq == 0) lengthParam = kParamSeq1StepCount;
+                else if (a->selectedSeq == 1) lengthParam = kParamSeq2StepCount;
+                else lengthParam = kParamSeq3StepCount;
+                newLength = self->v[lengthParam];
+            }
+            
+            // Clamp selectedStep to new length
+            if (a->selectedStep >= newLength) {
+                a->selectedStep = newLength - 1;
+            }
+        }
     }
     
     // Gate sequencer mode (seq 3)
@@ -1250,15 +1244,33 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
             if (newTrack < 0) newTrack = 0;
             if (newTrack > 5) newTrack = 5;
             
-            a->selectedTrack = newTrack;
+            // If track changed, clamp selectedStep to new track's length
+            if (newTrack != a->selectedTrack) {
+                a->selectedTrack = newTrack;
+                
+                // Get new track's length
+                int lenParam = kParamGate1Length + (newTrack * 10);
+                int trackLength = self->v[lenParam];  // 1-32
+                
+                // Clamp selectedStep to track length
+                if (a->selectedStep >= trackLength) {
+                    a->selectedStep = trackLength - 1;
+                }
+            }
         }
         
-        // Right encoder: select step (0-31)
+        // Get current track length for encoder bounds
+        int lenParam = kParamGate1Length + (a->selectedTrack * 10);
+        int trackLength = self->v[lenParam];  // 1-32
+        
+        // Right encoder: select step (0 to trackLength-1)
         if (data.encoders[1] != 0) {
             int delta = data.encoders[1];
             a->selectedStep += delta;
-            if (a->selectedStep < 0) a->selectedStep = 31;
-            if (a->selectedStep > 31) a->selectedStep = 0;
+            
+            // Wrap around based on track length
+            if (a->selectedStep < 0) a->selectedStep = trackLength - 1;
+            if (a->selectedStep >= trackLength) a->selectedStep = 0;
         }
         
         // Right encoder button: toggle gate
@@ -1286,12 +1298,24 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     }
     
     // CV Sequencer mode (seq 0-2)
-    // Right encoder: select step (0-31)
+    
+    // Get current sequencer's length
+    int seq = a->selectedSeq;
+    int lengthParam;
+    if (seq == 0) lengthParam = kParamSeq1StepCount;
+    else if (seq == 1) lengthParam = kParamSeq2StepCount;
+    else lengthParam = kParamSeq3StepCount;
+    
+    int seqLength = self->v[lengthParam];  // 1-32
+    
+    // Right encoder: select step (0 to seqLength-1)
     if (data.encoders[1] != 0) {
         int delta = data.encoders[1];
         a->selectedStep += delta;
-        if (a->selectedStep < 0) a->selectedStep = 31;
-        if (a->selectedStep > 31) a->selectedStep = 0;
+        
+        // Wrap around based on sequencer length
+        if (a->selectedStep < 0) a->selectedStep = seqLength - 1;
+        if (a->selectedStep >= seqLength) a->selectedStep = 0;
         
         // Reset pot catch state when step changes
         a->potCaught[0] = false;
@@ -1456,6 +1480,18 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
         stream.addNumber(a->debugOutputBus[i]);
     }
     stream.closeArray();
+    
+    // Save gate sequencer data (6 tracks × 32 steps)
+    stream.addMemberName("gateSteps");
+    stream.openArray();
+    for (int track = 0; track < 6; track++) {
+        stream.openArray();
+        for (int step = 0; step < 32; step++) {
+            stream.addNumber(a->gateSteps[track][step] ? 1 : 0);
+        }
+        stream.closeArray();
+    }
+    stream.closeArray();
 }
 
 bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
@@ -1513,6 +1549,26 @@ bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
                 int bus;
                 if (parse.number(bus)) {
                     a->debugOutputBus[i] = bus;
+                }
+            }
+        }
+    }
+    
+    // Match "gateSteps" (optional, for gate sequencer)
+    if (parse.matchName("gateSteps")) {
+        int numTracks = 0;
+        if (parse.numberOfArrayElements(numTracks)) {
+            int tracksToLoad = (numTracks < 6) ? numTracks : 6;
+            for (int track = 0; track < tracksToLoad; track++) {
+                int numSteps = 0;
+                if (parse.numberOfArrayElements(numSteps)) {
+                    int stepsToLoad = (numSteps < 32) ? numSteps : 32;
+                    for (int step = 0; step < stepsToLoad; step++) {
+                        int value;
+                        if (parse.number(value)) {
+                            a->gateSteps[track][step] = (value != 0);
+                        }
+                    }
                 }
             }
         }
