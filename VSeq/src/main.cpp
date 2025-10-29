@@ -55,6 +55,10 @@ struct VSeq : public _NT_algorithm {
     bool potCaught[3];          // Track if each pot has caught the step value
     bool trackPotCaught;        // Track if left pot has caught track position (for gate seq)
     
+    // MIDI state tracking
+    uint8_t lastMidiCVValue[3][3];  // Last MIDI CC value sent for each CV output
+    uint8_t lastMidiGateValue[6];    // Last MIDI CC value sent for each gate track
+    
     // Debug: track actual output bus assignments
     int debugOutputBus[12];
     
@@ -97,6 +101,16 @@ struct VSeq : public _NT_algorithm {
         potCaught[1] = false;
         potCaught[2] = false;
         trackPotCaught = false;
+        
+        // Initialize MIDI tracking
+        for (int seq = 0; seq < 3; seq++) {
+            for (int out = 0; out < 3; out++) {
+                lastMidiCVValue[seq][out] = 255;  // Invalid value to force first send
+            }
+        }
+        for (int track = 0; track < 6; track++) {
+            lastMidiGateValue[track] = 255;  // Invalid value to force first send
+        }
         
         // Initialize gate sequencer
         for (int track = 0; track < 6; track++) {
@@ -1031,20 +1045,25 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 for (int frame = 0; frame < numFrames; frame++) {
                     outBus[frame] = outputValue;
                 }
+            }
+            
+            // Send MIDI CC if enabled and value has changed
+            int ccParamIdx = kParamSeq1Out1CC + (seq * 3) + out;
+            int ccNumber = self->v[ccParamIdx];  // 0 = None, 1-128 = CC 0-127
+            
+            if (ccNumber > 0) {
+                // Convert CV value to 7-bit MIDI (0-127)
+                int16_t value = a->stepValues[seq][step][out];
+                float outputValue = (value + 32768) / 65535.0f;
+                uint8_t midiValue = (uint8_t)(outputValue * 127.0f);
                 
-                // Send MIDI CC if enabled (only on clock trigger to avoid spam)
-                if (clockTrig) {
-                    int ccParamIdx = kParamSeq1Out1CC + (seq * 3) + out;
-                    int ccNumber = self->v[ccParamIdx];  // 0 = None, 1-128 = CC 0-127
-                    
-                    if (ccNumber > 0) {
-                        // Convert CV value to 7-bit MIDI (0-127)
-                        uint8_t midiValue = (uint8_t)(outputValue * 127.0f);
-                        // Get MIDI channel (1-16) and convert to status byte (0xB0-0xBF)
-                        int midiChannel = self->v[kParamMidiChannel];  // 1-16
-                        uint8_t statusByte = 0xB0 | ((midiChannel - 1) & 0x0F);
-                        NT_sendMidi3ByteMessage(~0, statusByte, ccNumber - 1, midiValue);
-                    }
+                // Only send if value changed
+                if (midiValue != a->lastMidiCVValue[seq][out]) {
+                    a->lastMidiCVValue[seq][out] = midiValue;
+                    // Get MIDI channel (1-16) and convert to status byte (0xB0-0xBF)
+                    int midiChannel = self->v[kParamMidiChannel];  // 1-16
+                    uint8_t statusByte = 0xB0 | ((midiChannel - 1) & 0x0F);
+                    NT_sendMidi3ByteMessage(~0, statusByte, ccNumber - 1, midiValue);
                 }
             }
         }
@@ -1094,14 +1113,20 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 // Gate is active on this step - trigger!
                 a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
             }
+        }
+        
+        // Send MIDI CC for gate state if value changed
+        int ccParamIdx = kParamGate1CC + track;
+        int ccNumber = self->v[ccParamIdx];  // 0 = None, 1-128 = CC 0-127
+        
+        if (ccNumber > 0) {
+            int currentStep = a->gateCurrentStep[track];
+            bool gateActive = (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]);
+            uint8_t midiValue = gateActive ? 127 : 0;
             
-            // Send MIDI CC for gate state (0 or 127)
-            int ccParamIdx = kParamGate1CC + track;
-            int ccNumber = self->v[ccParamIdx];  // 0 = None, 1-128 = CC 0-127
-            
-            if (ccNumber > 0) {
-                bool gateActive = (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]);
-                uint8_t midiValue = gateActive ? 127 : 0;
+            // Only send if value changed
+            if (midiValue != a->lastMidiGateValue[track]) {
+                a->lastMidiGateValue[track] = midiValue;
                 // Get MIDI channel (1-16) and convert to status byte (0xB0-0xBF)
                 int midiChannel = self->v[kParamMidiChannel];  // 1-16
                 uint8_t statusByte = 0xB0 | ((midiChannel - 1) & 0x0F);
