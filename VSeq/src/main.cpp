@@ -1161,8 +1161,9 @@ bool draw(_NT_algorithm* self) {
         
         // Draw step indicator dot if this is the current step
         if (step == a->currentStep[seq]) {
-            // Draw dot above the middle bar (bar 1)
+            // Draw more visible indicator above the step (2x2 box)
             int dotX = x + (barWidth + barSpacing);  // Above middle bar
+            NT_drawShapeI(kNT_rectangle, dotX, y - 3, dotX + barWidth - 1, y - 2, 255);
             NT_drawShapeI(kNT_rectangle, dotX, y - 2, dotX + barWidth - 1, y - 1, 255);
         }
         
@@ -1241,8 +1242,9 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         int delta = data.encoders[0];
         int oldSeq = a->selectedSeq;
         a->selectedSeq += delta;
-        if (a->selectedSeq < 0) a->selectedSeq = 3;
-        if (a->selectedSeq > 3) a->selectedSeq = 0;
+        // Clamp to 0-3 range (no wraparound)
+        if (a->selectedSeq < 0) a->selectedSeq = 0;
+        if (a->selectedSeq > 3) a->selectedSeq = 3;
         
         // If sequencer changed, clamp selectedStep to new sequencer's length
         if (a->selectedSeq != oldSeq) {
