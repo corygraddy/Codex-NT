@@ -27,8 +27,6 @@ struct VSeq : public _NT_algorithm {
     // Sequencer state
     int currentStep[4];         // Current step for each sequencer (0-31)
     bool pingpongForward[4];    // Direction state for pingpong mode
-    int clockDivCounter[4];     // Counter for clock division
-    int clockMultCounter[4];    // Counter for clock multiplication (internal ticks)
     int ratchetCounter[4];      // Counter for ratchets within a step
     int repeatCounter[4];       // Counter for step repeats
     int section1Counter[4];     // Track section 1 repeat count
@@ -38,8 +36,6 @@ struct VSeq : public _NT_algorithm {
     // Gate sequencer state (6 tracks)
     int gateCurrentStep[6];     // Current step for each gate track (0-31)
     bool gatePingpongForward[6]; // Direction state for pingpong mode
-    int gateClockDivCounter[6]; // Counter for clock division
-    int gateClockMultCounter[6]; // Counter for clock multiplication (internal ticks)
     int gateSwingCounter[6];    // Counter for swing timing
     int gateSection1Counter[6]; // Track section 1 repeat count
     int gateSection2Counter[6]; // Track section 2 repeat count
@@ -89,8 +85,6 @@ struct VSeq : public _NT_algorithm {
             }
             currentStep[seq] = 0;
             pingpongForward[seq] = true;
-            clockDivCounter[seq] = 0;
-            clockMultCounter[seq] = 0;
             ratchetCounter[seq] = 0;
             repeatCounter[seq] = 0;
             section1Counter[seq] = 0;
@@ -118,8 +112,6 @@ struct VSeq : public _NT_algorithm {
             }
             gateCurrentStep[track] = 0;
             gatePingpongForward[track] = true;
-            gateClockDivCounter[track] = 0;
-            gateClockMultCounter[track] = 0;
             gateSwingCounter[track] = 0;
             gateSection1Counter[track] = 0;
             gateSection2Counter[track] = 0;
@@ -230,7 +222,6 @@ struct VSeq : public _NT_algorithm {
             currentStep[seq] = 0;
         }
         pingpongForward[seq] = true;
-        clockDivCounter[seq] = 0;
         ratchetCounter[seq] = 0;
         repeatCounter[seq] = 0;
         section1Counter[seq] = 0;
@@ -824,7 +815,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         if (resetTrig) {
             a->gateCurrentStep[track] = 0;
             a->gatePingpongForward[track] = true;
-            a->gateClockDivCounter[track] = 0;
             a->gateSwingCounter[track] = 0;
             a->gateSection1Counter[track] = 0;
             a->gateSection2Counter[track] = 0;
