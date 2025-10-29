@@ -1021,6 +1021,17 @@ bool draw(_NT_algorithm* self) {
         bool currentGateState = a->gateSteps[a->selectedTrack][a->selectedStep];
         NT_drawText(60, 0, currentGateState ? "ON" : "off", currentGateState ? 255 : 100);
         
+        // Draw page indicators at top - same as CV sequencers
+        // 4 lines representing the 4 sequencer pages (CV1, CV2, CV3, Gate)
+        int pageBarY = 4;
+        int pageBarWidth = 64;  // 256px / 4 = 64px per sequencer
+        for (int i = 0; i < 4; i++) {
+            int barStartX = (i * pageBarWidth) + 4;
+            int barEndX = ((i + 1) * pageBarWidth) - 4;
+            int brightness = (i == seq) ? 255 : 80;  // Bright if current page, dim otherwise
+            NT_drawShapeI(kNT_line, barStartX, pageBarY, barEndX, pageBarY, brightness);
+        }
+        
         // 6 tracks × 32 steps
         // Screen: 256px wide, 64px tall
         // Step size: 256/32 = 8px per step
@@ -1029,33 +1040,6 @@ bool draw(_NT_algorithm* self) {
         int stepWidth = 8;
         int trackHeight = 9;
         int startY = 8;
-        
-        // Determine which page we're on based on selectedTrack (0-5 maps to pages 0-3)
-        int currentPage = a->selectedTrack / 2;  // 0-1=page0, 2-3=page1, 4-5=page2
-        // Actually, let's use step position: steps 0-7=page0, 8-15=page1, 16-23=page2, 24-31=page3
-        currentPage = a->selectedStep / 8;
-        
-        // Draw page indicators at top:
-        // - Show which 8-step group (dotted/solid for steps 0-7, 8-15, 16-23, 24-31)
-        // - AND which sequencer we're on (brightness for seq 0-3)
-        for (int group = 0; group < 4; group++) {
-            int groupWidth = 8 * stepWidth;  // 8 steps per group = 64px
-            int barStartX = (group * groupWidth) + (stepWidth / 2);
-            int barWidth = groupWidth - stepWidth;
-            
-            // Determine brightness: bright if this is the current sequencer (seq 3 = gate seq)
-            int brightness = (group == seq) ? 255 : 80;
-            
-            if (group == currentPage) {
-                // Current 8-step page: solid line
-                NT_drawShapeI(kNT_line, barStartX, 4, barStartX + barWidth - 1, 4, brightness);
-            } else {
-                // Other 8-step pages: dotted line
-                for (int x = barStartX; x < barStartX + barWidth; x += 2) {
-                    NT_drawShapeI(kNT_rectangle, x, 4, x, 4, brightness);
-                }
-            }
-        }
         
         for (int track = 0; track < 6; track++) {
             int y = startY + (track * trackHeight);
