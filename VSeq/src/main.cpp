@@ -9,10 +9,10 @@
 // VSeq: 4-channel 16-step sequencer
 // - Clock and Reset inputs
 // - 4 sequencers × 3 CV outputs = 12 total outputs
-// - Each sequencer has 16 steps × 3 values
+// - Each sequencer has 32 steps × 3 values
 // - Clock division/multiplication
 // - Direction control: Forward, Backward, Pingpong
-// - Step count: 1-16 steps
+// - Step count: 1-32 steps
 
 struct VSeq : public _NT_algorithm {
     // Sequencer data: 4 sequencers × 32 steps × 3 outputs
@@ -128,6 +128,40 @@ struct VSeq : public _NT_algorithm {
     
     // Advance sequencer to next step based on direction, with section looping
     void advanceSequencer(int seq, int direction, int stepCount, int splitPoint, int sec1Reps, int sec2Reps) {
+        // If no sections (splitPoint >= stepCount), use simple wrapping logic
+        if (splitPoint >= stepCount) {
+            if (direction == 0) {
+                // Forward
+                currentStep[seq]++;
+                if (currentStep[seq] >= stepCount) {
+                    currentStep[seq] = 0;
+                }
+            } else if (direction == 1) {
+                // Backward
+                currentStep[seq]--;
+                if (currentStep[seq] < 0) {
+                    currentStep[seq] = stepCount - 1;
+                }
+            } else {
+                // Pingpong
+                if (pingpongForward[seq]) {
+                    currentStep[seq]++;
+                    if (currentStep[seq] >= stepCount) {
+                        currentStep[seq] = stepCount - 1;
+                        pingpongForward[seq] = false;
+                    }
+                } else {
+                    currentStep[seq]--;
+                    if (currentStep[seq] < 0) {
+                        currentStep[seq] = 0;
+                        pingpongForward[seq] = true;
+                    }
+                }
+            }
+            return;
+        }
+        
+        // Section-based logic
         if (direction == 0) {
             // Forward
             currentStep[seq]++;
@@ -232,6 +266,42 @@ struct VSeq : public _NT_algorithm {
     // Advance gate sequencer to next step based on direction, with section looping and fill
     void advanceGateSequencer(int track, int direction, int trackLength, int splitPoint, 
                               int sec1Reps, int sec2Reps, int fillStart) {
+        // If no sections (splitPoint >= trackLength), use simple wrapping logic
+        if (splitPoint >= trackLength) {
+            if (direction == 0) {
+                // Forward
+                gateCurrentStep[track]++;
+                if (gateCurrentStep[track] >= trackLength) {
+                    gateCurrentStep[track] = 0;
+                }
+            } else if (direction == 1) {
+                // Backward
+                gateCurrentStep[track]--;
+                if (gateCurrentStep[track] < 0) {
+                    gateCurrentStep[track] = trackLength - 1;
+                }
+            } else if (direction == 2) {
+                // Pingpong
+                if (gatePingpongForward[track]) {
+                    gateCurrentStep[track]++;
+                    if (gateCurrentStep[track] >= trackLength) {
+                        gateCurrentStep[track] = trackLength - 2;
+                        if (gateCurrentStep[track] < 0) gateCurrentStep[track] = 0;
+                        gatePingpongForward[track] = false;
+                    }
+                } else {
+                    gateCurrentStep[track]--;
+                    if (gateCurrentStep[track] < 0) {
+                        gateCurrentStep[track] = 1;
+                        if (gateCurrentStep[track] >= trackLength) gateCurrentStep[track] = trackLength - 1;
+                        gatePingpongForward[track] = true;
+                    }
+                }
+            }
+            return;
+        }
+        
+        // Section-based logic
         // Determine section boundaries
         int section1End = (splitPoint > 0 && splitPoint < trackLength) ? splitPoint : trackLength;
         
@@ -239,9 +309,14 @@ struct VSeq : public _NT_algorithm {
             gateCurrentStep[track]++;
             
             // Check for fill trigger on last repetition of section 1
+            // Only if sections are enabled (splitPoint < trackLength) AND fill is enabled (fillStart > 0)
+            // AND we're actually repeating section 1 (sec1Reps > 1)
             if (!gateInSection2[track] && 
                 splitPoint > 0 && 
+                splitPoint < trackLength &&
+                fillStart > 0 &&
                 fillStart < splitPoint &&
+                sec1Reps > 1 &&
                 gateSection1Counter[track] == sec1Reps - 1 &&
                 gateCurrentStep[track] >= fillStart) {
                 // Fill triggered! Jump to section 2
