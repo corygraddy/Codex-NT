@@ -1169,7 +1169,7 @@ bool draw(_NT_algorithm* self) {
         
         // Draw selection underline if this is the selected step
         if (step == a->selectedStep) {
-            NT_drawShapeI(kNT_line, x, y + maxBarHeight + 1, x + barsWidth - 1, y + maxBarHeight + 1, 255);
+            NT_drawShapeI(kNT_line, x, y + maxBarHeight + 2, x + barsWidth - 1, y + maxBarHeight + 2, 255);
         }
         
         // Draw percentage dots in the gap between steps
