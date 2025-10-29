@@ -504,6 +504,22 @@ enum {
     kParamGate6Section1Reps,
     kParamGate6Section2Reps,
     kParamGate6FillStart,
+    // MIDI CC parameters
+    kParamSeq1Out1CC,
+    kParamSeq1Out2CC,
+    kParamSeq1Out3CC,
+    kParamSeq2Out1CC,
+    kParamSeq2Out2CC,
+    kParamSeq2Out3CC,
+    kParamSeq3Out1CC,
+    kParamSeq3Out2CC,
+    kParamSeq3Out3CC,
+    kParamGate1CC,
+    kParamGate2CC,
+    kParamGate3CC,
+    kParamGate4CC,
+    kParamGate5CC,
+    kParamGate6CC,
     kNumParameters
 };
 
@@ -514,6 +530,22 @@ static const char* const divisionStrings[] = {
 
 static const char* const directionStrings[] = {
     "Forward", "Backward", "Pingpong", NULL
+};
+
+static const char* const midiCCStrings[] = {
+    "None", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
+    "20", "21", "22", "23", "24", "25", "26", "27", "28", "29",
+    "30", "31", "32", "33", "34", "35", "36", "37", "38", "39",
+    "40", "41", "42", "43", "44", "45", "46", "47", "48", "49",
+    "50", "51", "52", "53", "54", "55", "56", "57", "58", "59",
+    "60", "61", "62", "63", "64", "65", "66", "67", "68", "69",
+    "70", "71", "72", "73", "74", "75", "76", "77", "78", "79",
+    "80", "81", "82", "83", "84", "85", "86", "87", "88", "89",
+    "90", "91", "92", "93", "94", "95", "96", "97", "98", "99",
+    "100", "101", "102", "103", "104", "105", "106", "107", "108", "109",
+    "110", "111", "112", "113", "114", "115", "116", "117", "118", "119",
+    "120", "121", "122", "123", "124", "125", "126", "127", NULL
 };
 
 // Parameter name strings (must be static to persist)
@@ -602,6 +634,23 @@ static char gate6SplitName[] = "Gate 6 Split";
 static char gate6Sec1Name[] = "Gate 6 Sec1 Reps";
 static char gate6Sec2Name[] = "Gate 6 Sec2 Reps";
 static char gate6FillName[] = "Gate 6 Fill Start";
+
+// MIDI CC parameter names
+static char seq1Out1CCName[] = "Seq 1 Out 1 CC";
+static char seq1Out2CCName[] = "Seq 1 Out 2 CC";
+static char seq1Out3CCName[] = "Seq 1 Out 3 CC";
+static char seq2Out1CCName[] = "Seq 2 Out 1 CC";
+static char seq2Out2CCName[] = "Seq 2 Out 2 CC";
+static char seq2Out3CCName[] = "Seq 2 Out 3 CC";
+static char seq3Out1CCName[] = "Seq 3 Out 1 CC";
+static char seq3Out2CCName[] = "Seq 3 Out 2 CC";
+static char seq3Out3CCName[] = "Seq 3 Out 3 CC";
+static char gate1CCName[] = "Gate 1 CC";
+static char gate2CCName[] = "Gate 2 CC";
+static char gate3CCName[] = "Gate 3 CC";
+static char gate4CCName[] = "Gate 4 CC";
+static char gate5CCName[] = "Gate 5 CC";
+static char gate6CCName[] = "Gate 6 CC";
 
 // Global parameter array
 static _NT_parameter parameters[kNumParameters];
@@ -804,6 +853,41 @@ static void initParameters() {
         parameters[fillParam].unit = kNT_unitNone;
         parameters[fillParam].scaling = kNT_scalingNone;
     }
+    
+    // MIDI CC parameters for CV sequencer outputs
+    const char* cvCCNames[] = {
+        seq1Out1CCName, seq1Out2CCName, seq1Out3CCName,
+        seq2Out1CCName, seq2Out2CCName, seq2Out3CCName,
+        seq3Out1CCName, seq3Out2CCName, seq3Out3CCName
+    };
+    
+    for (int i = 0; i < 9; i++) {
+        int ccParam = kParamSeq1Out1CC + i;
+        parameters[ccParam].name = cvCCNames[i];
+        parameters[ccParam].min = 0;
+        parameters[ccParam].max = 128;  // 0 = None, 1-128 = CC 0-127
+        parameters[ccParam].def = 0;    // Default: None
+        parameters[ccParam].unit = kNT_unitEnum;
+        parameters[ccParam].scaling = kNT_scalingNone;
+        parameters[ccParam].enumStrings = midiCCStrings;
+    }
+    
+    // MIDI CC parameters for gate tracks
+    const char* gateCCNames[] = {
+        gate1CCName, gate2CCName, gate3CCName,
+        gate4CCName, gate5CCName, gate6CCName
+    };
+    
+    for (int i = 0; i < 6; i++) {
+        int ccParam = kParamGate1CC + i;
+        parameters[ccParam].name = gateCCNames[i];
+        parameters[ccParam].min = 0;
+        parameters[ccParam].max = 128;  // 0 = None, 1-128 = CC 0-127
+        parameters[ccParam].def = 0;    // Default: None
+        parameters[ccParam].unit = kNT_unitEnum;
+        parameters[ccParam].scaling = kNT_scalingNone;
+        parameters[ccParam].enumStrings = midiCCStrings;
+    }
 }
 
 // Parameter pages
@@ -931,6 +1015,19 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 for (int frame = 0; frame < numFrames; frame++) {
                     outBus[frame] = outputValue;
                 }
+                
+                // Send MIDI CC if enabled (only on clock trigger to avoid spam)
+                if (clockTrig) {
+                    int ccParamIdx = kParamSeq1Out1CC + (seq * 3) + out;
+                    int ccNumber = self->v[ccParamIdx];  // 0 = None, 1-128 = CC 0-127
+                    
+                    if (ccNumber > 0) {
+                        // Convert CV value to 7-bit MIDI (0-127)
+                        uint8_t midiValue = (uint8_t)(outputValue * 127.0f);
+                        // Send MIDI CC on channel 1 (0xB0)
+                        NT_sendMidi3ByteMessage(~0, 0xB0, ccNumber - 1, midiValue);
+                    }
+                }
             }
         }
     }
@@ -978,6 +1075,17 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             if (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]) {
                 // Gate is active on this step - trigger!
                 a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
+            }
+            
+            // Send MIDI CC for gate state (0 or 127)
+            int ccParamIdx = kParamGate1CC + track;
+            int ccNumber = self->v[ccParamIdx];  // 0 = None, 1-128 = CC 0-127
+            
+            if (ccNumber > 0) {
+                bool gateActive = (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]);
+                uint8_t midiValue = gateActive ? 127 : 0;
+                // Send MIDI CC on channel 1 (0xB0)
+                NT_sendMidi3ByteMessage(~0, 0xB0, ccNumber - 1, midiValue);
             }
         }
         
