@@ -906,12 +906,16 @@ static uint8_t paramPageSeq3Out[] = { kParamSeq3Out1, kParamSeq3Out2, kParamSeq3
 static uint8_t paramPageSeq1Params[] = { kParamSeq1ClockDiv, kParamSeq1Direction, kParamSeq1StepCount, kParamSeq1SplitPoint, kParamSeq1Section1Reps, kParamSeq1Section2Reps, 0 };
 static uint8_t paramPageSeq2Params[] = { kParamSeq2ClockDiv, kParamSeq2Direction, kParamSeq2StepCount, kParamSeq2SplitPoint, kParamSeq2Section1Reps, kParamSeq2Section2Reps, 0 };
 static uint8_t paramPageSeq3Params[] = { kParamSeq3ClockDiv, kParamSeq3Direction, kParamSeq3StepCount, kParamSeq3SplitPoint, kParamSeq3Section1Reps, kParamSeq3Section2Reps, 0 };
+static uint8_t paramPageSeq1MIDI[] = { kParamSeq1Out1CC, kParamSeq1Out2CC, kParamSeq1Out3CC, 0 };
+static uint8_t paramPageSeq2MIDI[] = { kParamSeq2Out1CC, kParamSeq2Out2CC, kParamSeq2Out3CC, 0 };
+static uint8_t paramPageSeq3MIDI[] = { kParamSeq3Out1CC, kParamSeq3Out2CC, kParamSeq3Out3CC, 0 };
 static uint8_t paramPageGate1[] = { kParamGate1Out, kParamGate1Run, kParamGate1Length, kParamGate1Direction, kParamGate1ClockDiv, kParamGate1Swing, kParamGate1SplitPoint, kParamGate1Section1Reps, kParamGate1Section2Reps, kParamGate1FillStart, 0 };
 static uint8_t paramPageGate2[] = { kParamGate2Out, kParamGate2Run, kParamGate2Length, kParamGate2Direction, kParamGate2ClockDiv, kParamGate2Swing, kParamGate2SplitPoint, kParamGate2Section1Reps, kParamGate2Section2Reps, kParamGate2FillStart, 0 };
 static uint8_t paramPageGate3[] = { kParamGate3Out, kParamGate3Run, kParamGate3Length, kParamGate3Direction, kParamGate3ClockDiv, kParamGate3Swing, kParamGate3SplitPoint, kParamGate3Section1Reps, kParamGate3Section2Reps, kParamGate3FillStart, 0 };
 static uint8_t paramPageGate4[] = { kParamGate4Out, kParamGate4Run, kParamGate4Length, kParamGate4Direction, kParamGate4ClockDiv, kParamGate4Swing, kParamGate4SplitPoint, kParamGate4Section1Reps, kParamGate4Section2Reps, kParamGate4FillStart, 0 };
 static uint8_t paramPageGate5[] = { kParamGate5Out, kParamGate5Run, kParamGate5Length, kParamGate5Direction, kParamGate5ClockDiv, kParamGate5Swing, kParamGate5SplitPoint, kParamGate5Section1Reps, kParamGate5Section2Reps, kParamGate5FillStart, 0 };
 static uint8_t paramPageGate6[] = { kParamGate6Out, kParamGate6Run, kParamGate6Length, kParamGate6Direction, kParamGate6ClockDiv, kParamGate6Swing, kParamGate6SplitPoint, kParamGate6Section1Reps, kParamGate6Section2Reps, kParamGate6FillStart, 0 };
+static uint8_t paramPageGateMIDI[] = { kParamGate1CC, kParamGate2CC, kParamGate3CC, kParamGate4CC, kParamGate5CC, kParamGate6CC, 0 };
 
 static _NT_parameterPage pageArray[] = {
     { .name = "Inputs", .numParams = 3, .params = paramPageInputs },
@@ -921,16 +925,20 @@ static _NT_parameterPage pageArray[] = {
     { .name = "Seq 1 Params", .numParams = 6, .params = paramPageSeq1Params },
     { .name = "Seq 2 Params", .numParams = 6, .params = paramPageSeq2Params },
     { .name = "Seq 3 Params", .numParams = 6, .params = paramPageSeq3Params },
+    { .name = "Seq 1 MIDI CC", .numParams = 3, .params = paramPageSeq1MIDI },
+    { .name = "Seq 2 MIDI CC", .numParams = 3, .params = paramPageSeq2MIDI },
+    { .name = "Seq 3 MIDI CC", .numParams = 3, .params = paramPageSeq3MIDI },
     { .name = "Trig Track 1", .numParams = 10, .params = paramPageGate1 },
     { .name = "Trig Track 2", .numParams = 10, .params = paramPageGate2 },
     { .name = "Trig Track 3", .numParams = 10, .params = paramPageGate3 },
     { .name = "Trig Track 4", .numParams = 10, .params = paramPageGate4 },
     { .name = "Trig Track 5", .numParams = 10, .params = paramPageGate5 },
-    { .name = "Trig Track 6", .numParams = 10, .params = paramPageGate6 }
+    { .name = "Trig Track 6", .numParams = 10, .params = paramPageGate6 },
+    { .name = "Trig MIDI CC", .numParams = 6, .params = paramPageGateMIDI }
 };
 
 static _NT_parameterPages pages = {
-    .numPages = 13,
+    .numPages = 17,
     .pages = pageArray
 };
 
