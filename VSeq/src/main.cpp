@@ -6,32 +6,28 @@
 #include <cmath>
 #include <cstring>
 
-// VSeq: 4-channel 16-step sequencer
+// VSeq: 3 CV sequencers + 1 gate sequencer
 // - Clock and Reset inputs
-// - 4 sequencers × 3 CV outputs = 12 total outputs
-// - Each sequencer has 32 steps × 3 values
-// - Clock division/multiplication
+// - 3 CV sequencers × 3 outputs = 9 CV outputs
+// - 1 Gate sequencer with 6 tracks
+// - Each sequencer has 32 steps
 // - Direction control: Forward, Backward, Pingpong
-// - Step count: 1-32 steps
+// - Section looping with configurable repeats
+// - Fill feature for gate sequencer
 
 struct VSeq : public _NT_algorithm {
-    // Sequencer data: 4 sequencers × 32 steps × 3 outputs
-    int16_t stepValues[4][32][3];
+    // Sequencer data: 3 CV sequencers × 32 steps × 3 outputs
+    int16_t stepValues[3][32][3];
     
-    // Step modes: 0=normal, 1=2-ratchet, 2=3-ratchet, 3=4-ratchet, 4=2-repeat, 5=3-repeat, 6=4-repeat
-    uint8_t stepMode[4][32];
-    
-    // Gate sequencer data (replaces seq 3): 6 tracks × 32 steps
+    // Gate sequencer data: 6 tracks × 32 steps
     bool gateSteps[6][32];
     
-    // Sequencer state
-    int currentStep[4];         // Current step for each sequencer (0-31)
-    bool pingpongForward[4];    // Direction state for pingpong mode
-    int ratchetCounter[4];      // Counter for ratchets within a step
-    int repeatCounter[4];       // Counter for step repeats
-    int section1Counter[4];     // Track section 1 repeat count
-    int section2Counter[4];     // Track section 2 repeat count
-    bool inSection2[4];         // Which section is currently playing
+    // CV Sequencer state (3 sequencers)
+    int currentStep[3];         // Current step for each sequencer (0-31)
+    bool pingpongForward[3];    // Direction state for pingpong mode
+    int section1Counter[3];     // Track section 1 repeat count
+    int section2Counter[3];     // Track section 2 repeat count
+    bool inSection2[3];         // Which section is currently playing
     
     // Gate sequencer state (6 tracks)
     int gateCurrentStep[6];     // Current step for each gate track (0-31)
@@ -50,7 +46,7 @@ struct VSeq : public _NT_algorithm {
     
     // UI state
     int selectedStep;           // 0-31
-    int selectedSeq;            // 0-3 (which sequencer to view/edit)
+    int selectedSeq;            // 0-2 for CV seqs, 3 for gate seq
     int selectedTrack;          // 0-5 (for gate sequencer)
     int lastSelectedStep;       // Track when step changes to update pots
     uint16_t lastButton4State;  // For debouncing button 4
@@ -64,29 +60,24 @@ struct VSeq : public _NT_algorithm {
     VSeq() {
         // Initialize step values to test patterns (visible voltages)
         // Each sequencer gets different voltage levels for testing
-        for (int seq = 0; seq < 4; seq++) {
+        for (int seq = 0; seq < 3; seq++) {
             for (int step = 0; step < 32; step++) {
                 for (int out = 0; out < 3; out++) {
                     // Create test patterns: different voltages for each output
                     // seq 0: 2V, 4V, 6V
                     // seq 1: 1V, 3V, 5V
                     // seq 2: 3V, 5V, 7V
-                    // seq 3: 2.5V, 4.5V, 6.5V
                     float voltage = 2.0f + (seq * 1.0f) + (out * 2.0f);
                     if (seq == 1) voltage -= 1.0f;
-                    if (seq == 3) voltage += 0.5f;
                     
                     // Convert voltage (0-10V range) to int16_t (-32768 to 32767)
                     // 0V = -32768, 10V = 32767
                     float normalized = voltage / 10.0f;  // 0.0-1.0
                     stepValues[seq][step][out] = (int16_t)((normalized * 65535.0f) - 32768.0f);
                 }
-                stepMode[seq][step] = 0;  // Normal mode
             }
             currentStep[seq] = 0;
             pingpongForward[seq] = true;
-            ratchetCounter[seq] = 0;
-            repeatCounter[seq] = 0;
             section1Counter[seq] = 0;
             section2Counter[seq] = 0;
             inSection2[seq] = false;
@@ -256,8 +247,6 @@ struct VSeq : public _NT_algorithm {
             currentStep[seq] = 0;
         }
         pingpongForward[seq] = true;
-        ratchetCounter[seq] = 0;
-        repeatCounter[seq] = 0;
         section1Counter[seq] = 0;
         section2Counter[seq] = 0;
         inSection2[seq] = false;
@@ -544,12 +533,6 @@ static char seq3StepName[] = "Seq 3 Steps";
 static char seq3SplitName[] = "Seq 3 Split Point";
 static char seq3Sec1Name[] = "Seq 3 Sec1 Reps";
 static char seq3Sec2Name[] = "Seq 3 Sec2 Reps";
-static char seq4DivName[] = "Seq 4 Clock Div";
-static char seq4DirName[] = "Seq 4 Direction";
-static char seq4StepName[] = "Seq 4 Steps";
-static char seq4SplitName[] = "Seq 4 Split Point";
-static char seq4Sec1Name[] = "Seq 4 Sec1 Reps";
-static char seq4Sec2Name[] = "Seq 4 Sec2 Reps";
 
 // Gate track parameter names
 static char gate1OutName[] = "Gate 1 Out";
@@ -897,16 +880,14 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     a->lastClockIn = clockIn;
     a->lastResetIn = resetIn;
     
-    // Process each sequencer
-    for (int seq = 0; seq < 4; seq++) {
-        int divParam = kParamSeq1ClockDiv + (seq * 6);
+    // Process each CV sequencer (3 total)
+    for (int seq = 0; seq < 3; seq++) {
         int dirParam = kParamSeq1Direction + (seq * 6);
         int stepParam = kParamSeq1StepCount + (seq * 6);
         int splitParam = kParamSeq1SplitPoint + (seq * 6);
         int sec1Param = kParamSeq1Section1Reps + (seq * 6);
         int sec2Param = kParamSeq1Section2Reps + (seq * 6);
         
-        int clockDiv = self->v[divParam];   // 0-8 (/16 to x16)
         int direction = self->v[dirParam];  // 0=Forward, 1=Backward, 2=Pingpong
         int stepCount = self->v[stepParam]; // 1-32
         int splitPoint = self->v[splitParam]; // 1-31
@@ -958,7 +939,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int runParam = kParamGate1Run + (track * 10);
         int lenParam = kParamGate1Length + (track * 10);
         int dirParam = kParamGate1Direction + (track * 10);
-        int divParam = kParamGate1ClockDiv + (track * 10);
         int splitParam = kParamGate1SplitPoint + (track * 10);
         int sec1Param = kParamGate1Section1Reps + (track * 10);
         int sec2Param = kParamGate1Section2Reps + (track * 10);
@@ -968,7 +948,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int isRunning = self->v[runParam];     // 0 = stopped, 1 = running
         int trackLength = self->v[lenParam];   // 1-32
         int direction = self->v[dirParam];     // 0=Forward, 1=Backward, 2=Pingpong
-        int clockDiv = self->v[divParam];      // 0-8 (/16 to x16)
         int splitPoint = self->v[splitParam];  // 0-31 (0 = no split)
         int sec1Reps = self->v[sec1Param];     // 1-99
         int sec2Reps = self->v[sec2Param];     // 1-99
@@ -1027,7 +1006,7 @@ bool draw(_NT_algorithm* self) {
     // Clear screen
     NT_drawShapeI(kNT_rectangle, 0, 0, 256, 64, 0);  // Black background
     
-    int seq = a->selectedSeq;  // 0-3
+    int seq = a->selectedSeq;  // 0-2 for CV, 3 for gate
     
     // If seq 3 (4th sequencer), draw gate sequencer instead
     if (seq == 3) {
@@ -1271,7 +1250,7 @@ uint32_t hasCustomUi(_NT_algorithm* self) {
 void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     VSeq* a = (VSeq*)self;
     
-    // Left encoder: select sequencer (0-3)
+    // Left encoder: select sequencer (0-2 for CV, 3 for gate)
     if (data.encoders[0] != 0) {
         int delta = data.encoders[0];
         int oldSeq = a->selectedSeq;
@@ -1394,15 +1373,7 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
         a->potCaught[2] = false;
     }
     
-    // Button 4: cycle through ratchet/repeat modes for selected step
-    uint16_t currentButton4 = data.controls & kNT_button4;
-    uint16_t lastButton4 = a->lastButton4State & kNT_button4;
-    if (currentButton4 && !lastButton4) {  // Rising edge only
-        a->stepMode[a->selectedSeq][a->selectedStep]++;
-        if (a->stepMode[a->selectedSeq][a->selectedStep] > 6) {
-            a->stepMode[a->selectedSeq][a->selectedStep] = 0;
-        }
-    }
+    // Button 4: (currently unused - previously was ratchet/repeat mode cycling)
     a->lastButton4State = data.controls;
     
     // Pots control the 3 values for the selected step with catch logic
@@ -1519,7 +1490,7 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
     // Save all step values as 3D array
     stream.addMemberName("stepValues");
     stream.openArray();
-    for (int seq = 0; seq < 4; seq++) {
+    for (int seq = 0; seq < 3; seq++) {
         stream.openArray();
         for (int step = 0; step < 32; step++) {
             stream.openArray();
@@ -1527,18 +1498,6 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
                 stream.addNumber((int)a->stepValues[seq][step][out]);
             }
             stream.closeArray();
-        }
-        stream.closeArray();
-    }
-    stream.closeArray();
-    
-    // Save step modes
-    stream.addMemberName("stepModes");
-    stream.openArray();
-    for (int seq = 0; seq < 4; seq++) {
-        stream.openArray();
-        for (int step = 0; step < 32; step++) {
-            stream.addNumber((int)a->stepMode[seq][step]);
         }
         stream.closeArray();
     }
@@ -1571,8 +1530,10 @@ bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
     // Match "stepValues"
     if (parse.matchName("stepValues")) {
         int numSeqs = 0;
-        if (parse.numberOfArrayElements(numSeqs) && numSeqs == 4) {
-            for (int seq = 0; seq < 4; seq++) {
+        if (parse.numberOfArrayElements(numSeqs)) {
+            // Support both 3 and 4 sequencer presets (backwards compatibility)
+            int seqsToLoad = (numSeqs < 3) ? numSeqs : 3;
+            for (int seq = 0; seq < seqsToLoad; seq++) {
                 int numSteps = 0;
                 if (parse.numberOfArrayElements(numSteps)) {
                     // Support both 16 and 32 step presets
@@ -1586,25 +1547,6 @@ bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
                                     a->stepValues[seq][step][out] = (int16_t)value;
                                 }
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Match "stepModes" (optional, for backwards compatibility)
-    if (parse.matchName("stepModes")) {
-        int numSeqs = 0;
-        if (parse.numberOfArrayElements(numSeqs) && numSeqs == 4) {
-            for (int seq = 0; seq < 4; seq++) {
-                int numSteps = 0;
-                if (parse.numberOfArrayElements(numSteps)) {
-                    int stepsToLoad = (numSteps < 32) ? numSteps : 32;
-                    for (int step = 0; step < stepsToLoad; step++) {
-                        int mode;
-                        if (parse.number(mode)) {
-                            a->stepMode[seq][step] = (uint8_t)mode;
                         }
                     }
                 }
