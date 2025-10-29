@@ -228,6 +228,97 @@ struct VSeq : public _NT_algorithm {
         section2Counter[seq] = 0;
         inSection2[seq] = false;
     }
+    
+    // Advance gate sequencer to next step based on direction, with section looping and fill
+    void advanceGateSequencer(int track, int direction, int trackLength, int splitPoint, 
+                              int sec1Reps, int sec2Reps, int fillStart) {
+        // Determine section boundaries
+        int section1End = (splitPoint > 0 && splitPoint < trackLength) ? splitPoint : trackLength;
+        
+        if (direction == 0) {  // Forward
+            gateCurrentStep[track]++;
+            
+            // Check for fill trigger on last repetition of section 1
+            if (!gateInSection2[track] && 
+                splitPoint > 0 && 
+                fillStart < splitPoint &&
+                gateSection1Counter[track] == sec1Reps - 1 &&
+                gateCurrentStep[track] >= fillStart) {
+                // Fill triggered! Jump to section 2
+                gateSection1Counter[track] = 0;
+                gateInSection2[track] = true;
+                gateCurrentStep[track] = splitPoint;
+            }
+            // Check if we've crossed a section boundary
+            else if (!gateInSection2[track] && gateCurrentStep[track] >= section1End) {
+                // Completed section 1
+                gateSection1Counter[track]++;
+                if (gateSection1Counter[track] >= sec1Reps) {
+                    // Move to section 2
+                    gateSection1Counter[track] = 0;
+                    gateInSection2[track] = true;
+                    if (splitPoint > 0) {
+                        gateCurrentStep[track] = splitPoint;
+                    } else {
+                        gateCurrentStep[track] = 0;
+                    }
+                } else {
+                    // Repeat section 1
+                    gateCurrentStep[track] = 0;
+                }
+            } else if (gateInSection2[track] && gateCurrentStep[track] >= trackLength) {
+                // Completed section 2
+                gateSection2Counter[track]++;
+                if (gateSection2Counter[track] >= sec2Reps) {
+                    // Back to section 1
+                    gateSection2Counter[track] = 0;
+                    gateInSection2[track] = false;
+                }
+                gateCurrentStep[track] = (splitPoint > 0) ? splitPoint : 0;
+                if (!gateInSection2[track]) {
+                    gateCurrentStep[track] = 0;
+                }
+            }
+        } else if (direction == 1) {  // Backward
+            gateCurrentStep[track]--;
+            
+            if (gateInSection2[track] && gateCurrentStep[track] < splitPoint) {
+                gateSection2Counter[track]++;
+                if (gateSection2Counter[track] >= sec2Reps) {
+                    gateSection2Counter[track] = 0;
+                    gateInSection2[track] = false;
+                    gateCurrentStep[track] = section1End - 1;
+                } else {
+                    gateCurrentStep[track] = trackLength - 1;
+                }
+            } else if (!gateInSection2[track] && gateCurrentStep[track] < 0) {
+                gateSection1Counter[track]++;
+                if (gateSection1Counter[track] >= sec1Reps) {
+                    gateSection1Counter[track] = 0;
+                    gateInSection2[track] = true;
+                    gateCurrentStep[track] = trackLength - 1;
+                } else {
+                    gateCurrentStep[track] = section1End - 1;
+                }
+            }
+        } else if (direction == 2) {  // Pingpong
+            if (gatePingpongForward[track]) {
+                gateCurrentStep[track]++;
+                if (gateCurrentStep[track] >= trackLength) {
+                    gateCurrentStep[track] = trackLength - 2;
+                    if (gateCurrentStep[track] < 0) gateCurrentStep[track] = 0;
+                    gatePingpongForward[track] = false;
+                }
+            } else {
+                gateCurrentStep[track]--;
+                if (gateCurrentStep[track] < 0) {
+                    gateCurrentStep[track] = 1;
+                    if (gateCurrentStep[track] >= trackLength) gateCurrentStep[track] = trackLength - 1;
+                    gatePingpongForward[track] = true;
+                }
+            }
+        }
+    }
 };
 
 // Helper function to set a pixel in NT_screen
@@ -824,99 +915,14 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         
         // Clock handling - advance one step per clock
         if (clockTrig) {
-            // Determine section boundaries
-            int section1End = (splitPoint > 0 && splitPoint < trackLength) ? splitPoint : trackLength;
+            a->advanceGateSequencer(track, direction, trackLength, splitPoint, sec1Reps, sec2Reps, fillStart);
             
-            if (direction == 0) {  // Forward
-                        a->gateCurrentStep[track]++;
-                        
-                        // Check for fill trigger on last repetition of section 1
-                        if (!a->gateInSection2[track] && 
-                            splitPoint > 0 && 
-                            fillStart < splitPoint &&
-                            a->gateSection1Counter[track] == sec1Reps - 1 &&
-                            a->gateCurrentStep[track] >= fillStart) {
-                            // Fill triggered! Jump to section 2
-                            a->gateSection1Counter[track] = 0;
-                            a->gateInSection2[track] = true;
-                            a->gateCurrentStep[track] = splitPoint;
-                        }
-                        // Check if we've crossed a section boundary
-                        else if (!a->gateInSection2[track] && a->gateCurrentStep[track] >= section1End) {
-                            // Completed section 1
-                            a->gateSection1Counter[track]++;
-                            if (a->gateSection1Counter[track] >= sec1Reps) {
-                                // Move to section 2
-                                a->gateSection1Counter[track] = 0;
-                                a->gateInSection2[track] = true;
-                                if (splitPoint > 0) {
-                                    a->gateCurrentStep[track] = splitPoint;
-                                } else {
-                                    a->gateCurrentStep[track] = 0;
-                                }
-                            } else {
-                                // Repeat section 1
-                                a->gateCurrentStep[track] = 0;
-                            }
-                        } else if (a->gateInSection2[track] && a->gateCurrentStep[track] >= trackLength) {
-                            // Completed section 2
-                            a->gateSection2Counter[track]++;
-                            if (a->gateSection2Counter[track] >= sec2Reps) {
-                                // Back to section 1
-                                a->gateSection2Counter[track] = 0;
-                                a->gateInSection2[track] = false;
-                            }
-                            a->gateCurrentStep[track] = (splitPoint > 0) ? splitPoint : 0;
-                            if (!a->gateInSection2[track]) {
-                                a->gateCurrentStep[track] = 0;
-                            }
-                        }
-                    } else if (direction == 1) {  // Backward
-                        a->gateCurrentStep[track]--;
-                        
-                        if (a->gateInSection2[track] && a->gateCurrentStep[track] < splitPoint) {
-                            a->gateSection2Counter[track]++;
-                            if (a->gateSection2Counter[track] >= sec2Reps) {
-                                a->gateSection2Counter[track] = 0;
-                                a->gateInSection2[track] = false;
-                                a->gateCurrentStep[track] = section1End - 1;
-                            } else {
-                                a->gateCurrentStep[track] = trackLength - 1;
-                            }
-                        } else if (!a->gateInSection2[track] && a->gateCurrentStep[track] < 0) {
-                            a->gateSection1Counter[track]++;
-                            if (a->gateSection1Counter[track] >= sec1Reps) {
-                                a->gateSection1Counter[track] = 0;
-                                a->gateInSection2[track] = true;
-                                a->gateCurrentStep[track] = trackLength - 1;
-                            } else {
-                                a->gateCurrentStep[track] = section1End - 1;
-                            }
-                        }
-                    } else if (direction == 2) {  // Pingpong
-                        if (a->gatePingpongForward[track]) {
-                            a->gateCurrentStep[track]++;
-                            if (a->gateCurrentStep[track] >= trackLength) {
-                                a->gateCurrentStep[track] = trackLength - 2;
-                                if (a->gateCurrentStep[track] < 0) a->gateCurrentStep[track] = 0;
-                                a->gatePingpongForward[track] = false;
-                            }
-                        } else {
-                            a->gateCurrentStep[track]--;
-                            if (a->gateCurrentStep[track] < 0) {
-                                a->gateCurrentStep[track] = 1;
-                                if (a->gateCurrentStep[track] >= trackLength) a->gateCurrentStep[track] = trackLength - 1;
-                                a->gatePingpongForward[track] = true;
-                            }
-                        }
-                    }
-                    
-                // After advancing, mark if current step should trigger
-                int currentStep = a->gateCurrentStep[track];
-                if (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]) {
-                    // Gate is active on this step - trigger!
-                    a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
-                }
+            // After advancing, mark if current step should trigger
+            int currentStep = a->gateCurrentStep[track];
+            if (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]) {
+                // Gate is active on this step - trigger!
+                a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
+            }
         }
         
         // Countdown trigger pulses every buffer
