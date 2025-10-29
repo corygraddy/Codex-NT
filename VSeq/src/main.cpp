@@ -403,6 +403,7 @@ inline void setPixel(int x, int y, int brightness) {
 enum {
     kParamClockIn = 0,
     kParamResetIn,
+    kParamMidiChannel,
     // Sequencer 1 outputs
     kParamSeq1Out1,
     kParamSeq1Out2,
@@ -672,6 +673,13 @@ static void initParameters() {
     parameters[kParamResetIn].unit = kNT_unitCvInput;
     parameters[kParamResetIn].scaling = kNT_scalingNone;
     
+    parameters[kParamMidiChannel].name = "MIDI Channel";
+    parameters[kParamMidiChannel].min = 1;
+    parameters[kParamMidiChannel].max = 16;
+    parameters[kParamMidiChannel].def = 1;
+    parameters[kParamMidiChannel].unit = kNT_unitNone;
+    parameters[kParamMidiChannel].scaling = kNT_scalingNone;
+    
     // CV Outputs (12 total)
     const char* outNames[] = {
         "Seq 1 Out 1", "Seq 1 Out 2", "Seq 1 Out 3",
@@ -891,7 +899,7 @@ static void initParameters() {
 }
 
 // Parameter pages
-static uint8_t paramPageInputs[] = { kParamClockIn, kParamResetIn, 0 };
+static uint8_t paramPageInputs[] = { kParamClockIn, kParamResetIn, kParamMidiChannel, 0 };
 static uint8_t paramPageSeq1Out[] = { kParamSeq1Out1, kParamSeq1Out2, kParamSeq1Out3, 0 };
 static uint8_t paramPageSeq2Out[] = { kParamSeq2Out1, kParamSeq2Out2, kParamSeq2Out3, 0 };
 static uint8_t paramPageSeq3Out[] = { kParamSeq3Out1, kParamSeq3Out2, kParamSeq3Out3, 0 };
@@ -906,7 +914,7 @@ static uint8_t paramPageGate5[] = { kParamGate5Out, kParamGate5Run, kParamGate5L
 static uint8_t paramPageGate6[] = { kParamGate6Out, kParamGate6Run, kParamGate6Length, kParamGate6Direction, kParamGate6ClockDiv, kParamGate6Swing, kParamGate6SplitPoint, kParamGate6Section1Reps, kParamGate6Section2Reps, kParamGate6FillStart, 0 };
 
 static _NT_parameterPage pageArray[] = {
-    { .name = "Inputs", .numParams = 2, .params = paramPageInputs },
+    { .name = "Inputs", .numParams = 3, .params = paramPageInputs },
     { .name = "Seq 1 Outs", .numParams = 3, .params = paramPageSeq1Out },
     { .name = "Seq 2 Outs", .numParams = 3, .params = paramPageSeq2Out },
     { .name = "Seq 3 Outs", .numParams = 3, .params = paramPageSeq3Out },
@@ -1024,8 +1032,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     if (ccNumber > 0) {
                         // Convert CV value to 7-bit MIDI (0-127)
                         uint8_t midiValue = (uint8_t)(outputValue * 127.0f);
-                        // Send MIDI CC on channel 1 (0xB0)
-                        NT_sendMidi3ByteMessage(~0, 0xB0, ccNumber - 1, midiValue);
+                        // Get MIDI channel (1-16) and convert to status byte (0xB0-0xBF)
+                        int midiChannel = self->v[kParamMidiChannel];  // 1-16
+                        uint8_t statusByte = 0xB0 | ((midiChannel - 1) & 0x0F);
+                        NT_sendMidi3ByteMessage(~0, statusByte, ccNumber - 1, midiValue);
                     }
                 }
             }
@@ -1084,8 +1094,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             if (ccNumber > 0) {
                 bool gateActive = (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]);
                 uint8_t midiValue = gateActive ? 127 : 0;
-                // Send MIDI CC on channel 1 (0xB0)
-                NT_sendMidi3ByteMessage(~0, 0xB0, ccNumber - 1, midiValue);
+                // Get MIDI channel (1-16) and convert to status byte (0xB0-0xBF)
+                int midiChannel = self->v[kParamMidiChannel];  // 1-16
+                uint8_t statusByte = 0xB0 | ((midiChannel - 1) & 0x0F);
+                NT_sendMidi3ByteMessage(~0, statusByte, ccNumber - 1, midiValue);
             }
         }
         
