@@ -55,10 +55,6 @@ struct VSeq : public _NT_algorithm {
     bool potCaught[3];          // Track if each pot has caught the step value
     bool trackPotCaught;        // Track if left pot has caught track position (for gate seq)
     
-    // MIDI state tracking
-    uint8_t lastMidiCVValue[3][3];  // Last MIDI CC value sent for each CV output
-    uint8_t lastMidiGateValue[6];    // Last MIDI CC value sent for each gate track
-    
     // Debug: track actual output bus assignments
     int debugOutputBus[12];
     
@@ -101,16 +97,6 @@ struct VSeq : public _NT_algorithm {
         potCaught[1] = false;
         potCaught[2] = false;
         trackPotCaught = false;
-        
-        // Initialize MIDI tracking
-        for (int seq = 0; seq < 3; seq++) {
-            for (int out = 0; out < 3; out++) {
-                lastMidiCVValue[seq][out] = 255;  // Invalid value to force first send
-            }
-        }
-        for (int track = 0; track < 6; track++) {
-            lastMidiGateValue[track] = 255;  // Invalid value to force first send
-        }
         
         // Initialize gate sequencer
         for (int track = 0; track < 6; track++) {
@@ -417,7 +403,6 @@ inline void setPixel(int x, int y, int brightness) {
 enum {
     kParamClockIn = 0,
     kParamResetIn,
-    kParamMidiChannel,
     // Sequencer 1 outputs
     kParamSeq1Out1,
     kParamSeq1Out2,
@@ -519,22 +504,6 @@ enum {
     kParamGate6Section1Reps,
     kParamGate6Section2Reps,
     kParamGate6FillStart,
-    // MIDI CC parameters
-    kParamSeq1Out1CC,
-    kParamSeq1Out2CC,
-    kParamSeq1Out3CC,
-    kParamSeq2Out1CC,
-    kParamSeq2Out2CC,
-    kParamSeq2Out3CC,
-    kParamSeq3Out1CC,
-    kParamSeq3Out2CC,
-    kParamSeq3Out3CC,
-    kParamGate1CC,
-    kParamGate2CC,
-    kParamGate3CC,
-    kParamGate4CC,
-    kParamGate5CC,
-    kParamGate6CC,
     kNumParameters
 };
 
@@ -545,22 +514,6 @@ static const char* const divisionStrings[] = {
 
 static const char* const directionStrings[] = {
     "Forward", "Backward", "Pingpong", NULL
-};
-
-static const char* const midiCCStrings[] = {
-    "None", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-    "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-    "20", "21", "22", "23", "24", "25", "26", "27", "28", "29",
-    "30", "31", "32", "33", "34", "35", "36", "37", "38", "39",
-    "40", "41", "42", "43", "44", "45", "46", "47", "48", "49",
-    "50", "51", "52", "53", "54", "55", "56", "57", "58", "59",
-    "60", "61", "62", "63", "64", "65", "66", "67", "68", "69",
-    "70", "71", "72", "73", "74", "75", "76", "77", "78", "79",
-    "80", "81", "82", "83", "84", "85", "86", "87", "88", "89",
-    "90", "91", "92", "93", "94", "95", "96", "97", "98", "99",
-    "100", "101", "102", "103", "104", "105", "106", "107", "108", "109",
-    "110", "111", "112", "113", "114", "115", "116", "117", "118", "119",
-    "120", "121", "122", "123", "124", "125", "126", "127", NULL
 };
 
 // Parameter name strings (must be static to persist)
@@ -650,23 +603,6 @@ static char gate6Sec1Name[] = "Gate 6 Sec1 Reps";
 static char gate6Sec2Name[] = "Gate 6 Sec2 Reps";
 static char gate6FillName[] = "Gate 6 Fill Start";
 
-// MIDI CC parameter names
-static char seq1Out1CCName[] = "Seq 1 Out 1 CC";
-static char seq1Out2CCName[] = "Seq 1 Out 2 CC";
-static char seq1Out3CCName[] = "Seq 1 Out 3 CC";
-static char seq2Out1CCName[] = "Seq 2 Out 1 CC";
-static char seq2Out2CCName[] = "Seq 2 Out 2 CC";
-static char seq2Out3CCName[] = "Seq 2 Out 3 CC";
-static char seq3Out1CCName[] = "Seq 3 Out 1 CC";
-static char seq3Out2CCName[] = "Seq 3 Out 2 CC";
-static char seq3Out3CCName[] = "Seq 3 Out 3 CC";
-static char gate1CCName[] = "Gate 1 CC";
-static char gate2CCName[] = "Gate 2 CC";
-static char gate3CCName[] = "Gate 3 CC";
-static char gate4CCName[] = "Gate 4 CC";
-static char gate5CCName[] = "Gate 5 CC";
-static char gate6CCName[] = "Gate 6 CC";
-
 // Global parameter array
 static _NT_parameter parameters[kNumParameters];
 
@@ -686,13 +622,6 @@ static void initParameters() {
     parameters[kParamResetIn].def = 2;
     parameters[kParamResetIn].unit = kNT_unitCvInput;
     parameters[kParamResetIn].scaling = kNT_scalingNone;
-    
-    parameters[kParamMidiChannel].name = "MIDI Channel";
-    parameters[kParamMidiChannel].min = 1;
-    parameters[kParamMidiChannel].max = 16;
-    parameters[kParamMidiChannel].def = 1;
-    parameters[kParamMidiChannel].unit = kNT_unitNone;
-    parameters[kParamMidiChannel].scaling = kNT_scalingNone;
     
     // CV Outputs (12 total)
     const char* outNames[] = {
@@ -875,84 +804,41 @@ static void initParameters() {
         parameters[fillParam].unit = kNT_unitNone;
         parameters[fillParam].scaling = kNT_scalingNone;
     }
-    
-    // MIDI CC parameters for CV sequencer outputs
-    const char* cvCCNames[] = {
-        seq1Out1CCName, seq1Out2CCName, seq1Out3CCName,
-        seq2Out1CCName, seq2Out2CCName, seq2Out3CCName,
-        seq3Out1CCName, seq3Out2CCName, seq3Out3CCName
-    };
-    
-    for (int i = 0; i < 9; i++) {
-        int ccParam = kParamSeq1Out1CC + i;
-        parameters[ccParam].name = cvCCNames[i];
-        parameters[ccParam].min = 0;
-        parameters[ccParam].max = 128;  // 0 = None, 1-128 = CC 0-127
-        parameters[ccParam].def = 0;    // Default: None
-        parameters[ccParam].unit = kNT_unitEnum;
-        parameters[ccParam].scaling = kNT_scalingNone;
-        parameters[ccParam].enumStrings = midiCCStrings;
-    }
-    
-    // MIDI CC parameters for gate tracks
-    const char* gateCCNames[] = {
-        gate1CCName, gate2CCName, gate3CCName,
-        gate4CCName, gate5CCName, gate6CCName
-    };
-    
-    for (int i = 0; i < 6; i++) {
-        int ccParam = kParamGate1CC + i;
-        parameters[ccParam].name = gateCCNames[i];
-        parameters[ccParam].min = 0;
-        parameters[ccParam].max = 128;  // 0 = None, 1-128 = CC 0-127
-        parameters[ccParam].def = 0;    // Default: None
-        parameters[ccParam].unit = kNT_unitEnum;
-        parameters[ccParam].scaling = kNT_scalingNone;
-        parameters[ccParam].enumStrings = midiCCStrings;
-    }
 }
 
 // Parameter pages
-static uint8_t paramPageInputs[] = { kParamClockIn, kParamResetIn, kParamMidiChannel, 0 };
+static uint8_t paramPageInputs[] = { kParamClockIn, kParamResetIn, 0 };
 static uint8_t paramPageSeq1Out[] = { kParamSeq1Out1, kParamSeq1Out2, kParamSeq1Out3, 0 };
 static uint8_t paramPageSeq2Out[] = { kParamSeq2Out1, kParamSeq2Out2, kParamSeq2Out3, 0 };
 static uint8_t paramPageSeq3Out[] = { kParamSeq3Out1, kParamSeq3Out2, kParamSeq3Out3, 0 };
 static uint8_t paramPageSeq1Params[] = { kParamSeq1ClockDiv, kParamSeq1Direction, kParamSeq1StepCount, kParamSeq1SplitPoint, kParamSeq1Section1Reps, kParamSeq1Section2Reps, 0 };
 static uint8_t paramPageSeq2Params[] = { kParamSeq2ClockDiv, kParamSeq2Direction, kParamSeq2StepCount, kParamSeq2SplitPoint, kParamSeq2Section1Reps, kParamSeq2Section2Reps, 0 };
 static uint8_t paramPageSeq3Params[] = { kParamSeq3ClockDiv, kParamSeq3Direction, kParamSeq3StepCount, kParamSeq3SplitPoint, kParamSeq3Section1Reps, kParamSeq3Section2Reps, 0 };
-static uint8_t paramPageSeq1MIDI[] = { kParamSeq1Out1CC, kParamSeq1Out2CC, kParamSeq1Out3CC, 0 };
-static uint8_t paramPageSeq2MIDI[] = { kParamSeq2Out1CC, kParamSeq2Out2CC, kParamSeq2Out3CC, 0 };
-static uint8_t paramPageSeq3MIDI[] = { kParamSeq3Out1CC, kParamSeq3Out2CC, kParamSeq3Out3CC, 0 };
 static uint8_t paramPageGate1[] = { kParamGate1Out, kParamGate1Run, kParamGate1Length, kParamGate1Direction, kParamGate1ClockDiv, kParamGate1Swing, kParamGate1SplitPoint, kParamGate1Section1Reps, kParamGate1Section2Reps, kParamGate1FillStart, 0 };
 static uint8_t paramPageGate2[] = { kParamGate2Out, kParamGate2Run, kParamGate2Length, kParamGate2Direction, kParamGate2ClockDiv, kParamGate2Swing, kParamGate2SplitPoint, kParamGate2Section1Reps, kParamGate2Section2Reps, kParamGate2FillStart, 0 };
 static uint8_t paramPageGate3[] = { kParamGate3Out, kParamGate3Run, kParamGate3Length, kParamGate3Direction, kParamGate3ClockDiv, kParamGate3Swing, kParamGate3SplitPoint, kParamGate3Section1Reps, kParamGate3Section2Reps, kParamGate3FillStart, 0 };
 static uint8_t paramPageGate4[] = { kParamGate4Out, kParamGate4Run, kParamGate4Length, kParamGate4Direction, kParamGate4ClockDiv, kParamGate4Swing, kParamGate4SplitPoint, kParamGate4Section1Reps, kParamGate4Section2Reps, kParamGate4FillStart, 0 };
 static uint8_t paramPageGate5[] = { kParamGate5Out, kParamGate5Run, kParamGate5Length, kParamGate5Direction, kParamGate5ClockDiv, kParamGate5Swing, kParamGate5SplitPoint, kParamGate5Section1Reps, kParamGate5Section2Reps, kParamGate5FillStart, 0 };
 static uint8_t paramPageGate6[] = { kParamGate6Out, kParamGate6Run, kParamGate6Length, kParamGate6Direction, kParamGate6ClockDiv, kParamGate6Swing, kParamGate6SplitPoint, kParamGate6Section1Reps, kParamGate6Section2Reps, kParamGate6FillStart, 0 };
-static uint8_t paramPageGateMIDI[] = { kParamGate1CC, kParamGate2CC, kParamGate3CC, kParamGate4CC, kParamGate5CC, kParamGate6CC, 0 };
 
 static _NT_parameterPage pageArray[] = {
-    { .name = "Inputs", .numParams = 3, .params = paramPageInputs },
+    { .name = "Inputs", .numParams = 2, .params = paramPageInputs },
     { .name = "Seq 1 Outs", .numParams = 3, .params = paramPageSeq1Out },
     { .name = "Seq 2 Outs", .numParams = 3, .params = paramPageSeq2Out },
     { .name = "Seq 3 Outs", .numParams = 3, .params = paramPageSeq3Out },
     { .name = "Seq 1 Params", .numParams = 6, .params = paramPageSeq1Params },
     { .name = "Seq 2 Params", .numParams = 6, .params = paramPageSeq2Params },
     { .name = "Seq 3 Params", .numParams = 6, .params = paramPageSeq3Params },
-    { .name = "Seq 1 MIDI CC", .numParams = 3, .params = paramPageSeq1MIDI },
-    { .name = "Seq 2 MIDI CC", .numParams = 3, .params = paramPageSeq2MIDI },
-    { .name = "Seq 3 MIDI CC", .numParams = 3, .params = paramPageSeq3MIDI },
     { .name = "Trig Track 1", .numParams = 10, .params = paramPageGate1 },
     { .name = "Trig Track 2", .numParams = 10, .params = paramPageGate2 },
     { .name = "Trig Track 3", .numParams = 10, .params = paramPageGate3 },
     { .name = "Trig Track 4", .numParams = 10, .params = paramPageGate4 },
     { .name = "Trig Track 5", .numParams = 10, .params = paramPageGate5 },
-    { .name = "Trig Track 6", .numParams = 10, .params = paramPageGate6 },
-    { .name = "Trig MIDI CC", .numParams = 6, .params = paramPageGateMIDI }
+    { .name = "Trig Track 6", .numParams = 10, .params = paramPageGate6 }
 };
 
 static _NT_parameterPages pages = {
-    .numPages = 17,
+    .numPages = 13,
     .pages = pageArray
 };
 
@@ -1046,26 +932,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     outBus[frame] = outputValue;
                 }
             }
-            
-            // Send MIDI CC if enabled and value has changed
-            int ccParamIdx = kParamSeq1Out1CC + (seq * 3) + out;
-            int ccNumber = self->v[ccParamIdx];  // 0 = None, 1-128 = CC 0-127
-            
-            if (ccNumber > 0) {
-                // Convert CV value to 7-bit MIDI (0-127)
-                int16_t value = a->stepValues[seq][step][out];
-                float outputValue = (value + 32768) / 65535.0f;
-                uint8_t midiValue = (uint8_t)(outputValue * 127.0f);
-                
-                // Only send if value changed
-                if (midiValue != a->lastMidiCVValue[seq][out]) {
-                    a->lastMidiCVValue[seq][out] = midiValue;
-                    // Get MIDI channel (1-16) and convert to status byte (0xB0-0xBF)
-                    int midiChannel = self->v[kParamMidiChannel];  // 1-16
-                    uint8_t statusByte = 0xB0 | ((midiChannel - 1) & 0x0F);
-                    NT_sendMidi3ByteMessage(~0, statusByte, ccNumber - 1, midiValue);
-                }
-            }
         }
     }
     
@@ -1088,25 +954,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int sec1Reps = self->v[sec1Param];     // 1-99
         int sec2Reps = self->v[sec2Param];     // 1-99
         int fillStart = self->v[fillParam];    // 1-32 (step where fill replaces section 1 on last rep)
-        
-        // Send MIDI CC for gate state if value changed (regardless of run state)
-        int ccParamIdx = kParamGate1CC + track;
-        int ccNumber = self->v[ccParamIdx];  // 0 = None, 1-128 = CC 0-127
-        
-        if (ccNumber > 0) {
-            int currentStep = a->gateCurrentStep[track];
-            bool gateActive = (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]);
-            uint8_t midiValue = gateActive ? 127 : 0;
-            
-            // Only send if value changed
-            if (midiValue != a->lastMidiGateValue[track]) {
-                a->lastMidiGateValue[track] = midiValue;
-                // Get MIDI channel (1-16) and convert to status byte (0xB0-0xBF)
-                int midiChannel = self->v[kParamMidiChannel];  // 1-16
-                uint8_t statusByte = 0xB0 | ((midiChannel - 1) & 0x0F);
-                NT_sendMidi3ByteMessage(~0, statusByte, ccNumber - 1, midiValue);
-            }
-        }
         
         // Skip sequencer advancement if not running
         if (isRunning == 0) continue;

@@ -1,0 +1,48 @@
+================================================================================
+CODEX-NT PROJECT CHANGELOG
+================================================================================
+Track bugs, fixes, new features, and new plugins across all projects
+--------------------------------------------------------------------------------
+
+Date: 2025-10-29
+Project: VSeq
+Type: Feature Removed
+Description: Removed all MIDI CC functionality
+- Removed MIDI CC parameters for all sequencer outputs (9 CV + 6 gate tracks)
+- Removed MIDI channel parameter
+- Removed MIDI parameter pages from UI
+- Removed MIDI sending code from step() function
+- Removed MIDI state tracking arrays
+Reason: MIDI implementation had bugs - only track 6 working, CC value stuck at 48
+
+--------------------------------------------------------------------------------
+
+Date: 
+Project: VFader
+Type: 
+Description: 
+- 
+- 
+Notes: 
+
+--------------------------------------------------------------------------------
+
+[Template for future entries:]
+
+Date: YYYY-MM-DD
+Project: [VSeq / CompositionMatrix / DistingLua / etc]
+Type: [Bug / Fix / New Feature / New Plugin]
+Description: 
+- 
+- 
+Notes: 
+
+--------------------------------------------------------------------------------
+
+- VFader - When mapping a fader to a gain parameter setting the top value to 75 instead of 
+100 or setting it to 25 instead of 100 does nothing. The top of the fader bar is 
+still the same volume as it was. The note max and min was tested but the number wasn't. 
+Either they are both bugged, so the note was broken or just the number isn't implemented yet. 
+- VFader - the fader is still wobbling above 0. Should have control over that. 
+- VSeq - I changed a bunch of parameters and all my triggers disappeared. I don't know what 
+I did...

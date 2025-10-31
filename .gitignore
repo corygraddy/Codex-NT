@@ -6,3 +6,4 @@ build/
 VFader/build/
 PluginTemplate/build/
 .venv/
+docs/
