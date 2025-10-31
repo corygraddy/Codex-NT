@@ -1,0 +1,309 @@
+{
+"kind": "disting NT preset",
+ "author": "Cory Graddy          ",
+ "saved-from": ["v1.11.0","Oct 20 2025 12:26:47"]
+ ,
+ "engine": {
+ "sampleRate": 44100,
+  "blockSize": 24}
+ ,
+ "name": "vloop               ",
+ "version": 2,
+ "slots": [{
+  "guid": "clck",
+   "specs": [2,0,0]
+   ,
+   "name": "Clock                  ",
+   "parameters": [[0,0,1200,1,4,2,1,2,0,0,0,0]
+    ,[1,13,1,0,4,0,50,1,0,10,0,1]
+    ,[1,14,1,0,15,0,50,1,0,10,0,2]
+    ]
+   ,
+   "ui": {
+   "page": 0,
+    "items": [3,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "params"}
+   }
+  ,{
+  "guid": "VLP1",
+   "specs": [0,0,0]
+   ,
+   "vloop_analysis": {
+   "timing": {
+    "totalClockTicks": 395,
+     "totalResetTicks": 25,
+     "recordingStartTick": 225,
+     "recordingEndTick": 241,
+     "loopLengthTicks": 16}
+    ,
+    "state": {
+    "currentState": 0,
+     "transitionCount": 3,
+     "lastTransitionTick": 241,
+     "lastTransitionFrom": 2,
+     "lastTransitionTo": 0}
+    ,
+    "midiEvents": [{
+     "timestamp": 2,
+      "status": 144,
+      "data1": 36,
+      "data2": 127}
+     ,{
+     "timestamp": 2,
+      "status": 176,
+      "data1": 1,
+      "data2": 64}
+     ,{
+     "timestamp": 4,
+      "status": 128,
+      "data1": 36,
+      "data2": 64}
+     ,{
+     "timestamp": 8,
+      "status": 144,
+      "data1": 71,
+      "data2": 1}
+     ,{
+     "timestamp": 8,
+      "status": 176,
+      "data1": 1,
+      "data2": 64}
+     ,{
+     "timestamp": 8,
+      "status": 128,
+      "data1": 71,
+      "data2": 64}
+     ,{
+     "timestamp": 9,
+      "status": 144,
+      "data1": 71,
+      "data2": 1}
+     ,{
+     "timestamp": 9,
+      "status": 176,
+      "data1": 1,
+      "data2": 64}
+     ,{
+     "timestamp": 9,
+      "status": 128,
+      "data1": 71,
+      "data2": 64}
+     ,{
+     "timestamp": 5,
+      "status": 144,
+      "data1": 71,
+      "data2": 1}
+     ,{
+     "timestamp": 5,
+      "status": 176,
+      "data1": 1,
+      "data2": 64}
+     ,{
+     "timestamp": 5,
+      "status": 128,
+      "data1": 71,
+      "data2": 64}
+     ,{
+     "timestamp": 13,
+      "status": 144,
+      "data1": 53,
+      "data2": 127}
+     ,{
+     "timestamp": 13,
+      "status": 176,
+      "data1": 1,
+      "data2": 64}
+     ,{
+     "timestamp": 16,
+      "status": 128,
+      "data1": 53,
+      "data2": 64}
+     ,{
+     "timestamp": 27,
+      "status": 144,
+      "data1": 36,
+      "data2": 1}
+     ,{
+     "timestamp": 27,
+      "status": 176,
+      "data1": 1,
+      "data2": 64}
+     ,{
+     "timestamp": 34,
+      "status": 128,
+      "data1": 36,
+      "data2": 64}
+     ,{
+     "timestamp": 40,
+      "status": 144,
+      "data1": 36,
+      "data2": 1}
+     ,{
+     "timestamp": 40,
+      "status": 176,
+      "data1": 1,
+      "data2": 64}
+     ,{
+     "timestamp": 48,
+      "status": 128,
+      "data1": 36,
+      "data2": 64}
+     ,{
+     "timestamp": 59,
+      "status": 144,
+      "data1": 40,
+      "data2": 127}
+     ,{
+     "timestamp": 59,
+      "status": 176,
+      "data1": 1,
+      "data2": 64}
+     ,{
+     "timestamp": 55,
+      "status": 128,
+      "data1": 40,
+      "data2": 64}
+     ,{
+     "timestamp": 65,
+      "status": 144,
+      "data1": 57,
+      "data2": 1}
+     ,{
+     "timestamp": 65,
+      "status": 176,
+      "data1": 1,
+      "data2": 64}
+     ,{
+     "timestamp": 73,
+      "status": 128,
+      "data1": 57,
+      "data2": 64}
+     ]
+    }
+   ,
+   "name": "VLoop                  ",
+   "parameters": [0,13,14,0,5]
+   ,
+   "ui": {
+   "page": 1,
+    "items": [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "params"}
+   }
+  ,{
+  "guid": "spsq",
+   "specs": [0,0,0]
+   ,
+   "sequences": [{
+    "pattern": [1,84,2,2080,0,0,1,0,1158,298,341,24,0,0,0,2]
+     ,
+     "ratchet": [10,13,0,5,13,0,0,0,5,4,12,5,13,0,0,0]
+     ,
+     "pitch": [36,71,53,36,44,45,40,49,57,48,48,37,36,52,58,52]
+     ,
+     "velocity": [127,1,127,1,1,127,127,127,1,127,127,1,127,127,1,127]
+     }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ,{
+    }
+    ]
+   ,
+   "name": "Step Sequencer         ",
+   "parameters": [0,36,71,53,36,44,45,40,49,57,48,48,37,36,52,58,52,5,2,7,12,2,7,7,7,12,11,3,12,2,7,7,7,1,14,1,36,0,0,1,0,43,23,31,6,0,0,0,1,0,0,1,60,32,1,0,1,29,15,0,50,32,1,0,1,127,1,127,1,1,127,127,127,1,127,127,1,127,127,1,127,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,13,14,0,15,1,16,1,0,1,0,1,0,1,0,0,0,1,1,16,0,0,0,50,10,100,4,0,3,0,36,60,48,12,2,8,2,8,50,52,59,54,59,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1]
+   ,
+   "ui": {
+   "page": 0,
+    "items": [7,0,0,15,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "gui"}
+   }
+  ,{
+  "guid": "mix2",
+   "specs": [1,0,0]
+   ,
+   "channelNames": [" "]
+   ,
+   "name": "Mixer Stereo           ",
+   "parameters": [[0,19,20,0,0]
+    ,[]
+    ,[[[11,12,-700,0,0,0,0]
+      ]
+     ]
+    ]
+   ,
+   "ui": {
+   "page": 1,
+    "items": [0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "params"}
+   }
+  ]
+ ,
+ "ui": {
+ "currentSlot": 1,
+  "displayMode": "algorithm",
+  "perfPage": {
+  "display": "params",
+   "item": 0}
+  }
+ }
