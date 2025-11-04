@@ -41,6 +41,6 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 clean:
 	@echo "Cleaning build directory..."
-	rm -f $(BUILD_DIR)/*
+	rm -rf $(BUILD_DIR)/*
 
 -include $(DEPS)
