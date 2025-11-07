@@ -213,8 +213,9 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     } else if (!recordActive && loop->lastRecord) {
         // Knob turned down - stop recording, save loop length
         if (loop->isRecording) {
-            // Quantize end to beat boundary (1/4 note = 8 pulses)
-            loop->loopLength = ((loop->currentPulse + pulsesPerBeat - 1) / pulsesPerBeat) * pulsesPerBeat;
+            // Quantize end to nearest beat boundary (1/4 note = 8 pulses)
+            // Round to nearest instead of always rounding up
+            loop->loopLength = ((loop->currentPulse + (pulsesPerBeat / 2)) / pulsesPerBeat) * pulsesPerBeat;
         }
         loop->isRecording = false;
         loop->recordArmed = false;
@@ -265,8 +266,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     uint16_t targetPulses = autoStop * pulsesPerBeat;  // beats * pulses per beat
                     
                     if (pulsesRecorded >= targetPulses) {
-                        // Quantize end to beat boundary (1/4 note)
-                        loop->loopLength = ((loop->currentPulse + pulsesPerBeat - 1) / pulsesPerBeat) * pulsesPerBeat;
+                        // Quantize end to nearest beat boundary (1/4 note)
+                        loop->loopLength = ((loop->currentPulse + (pulsesPerBeat / 2)) / pulsesPerBeat) * pulsesPerBeat;
                         loop->isRecording = false;
                         loop->recordArmed = false;
                         
