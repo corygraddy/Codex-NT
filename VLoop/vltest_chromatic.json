@@ -38,45 +38,65 @@
   "guid": "VLOP",
    "specs": [0,0,0]
    ,
-   "loopLength": 64,
-   "currentPulse": 55,
+   "loopLength": 72,
+   "currentPulse": 57,
    "isRecording": false,
    "recordArmed": false,
    "isPlaying": false,
    "debug": {
-   "totalClockEdges": 7028,
-    "totalMidiSent": 259,
-    "totalMidiReceived": 2082,
+   "totalClockEdges": 2643,
+    "totalMidiSent": 267,
+    "totalMidiReceived": 543,
     "totalMidiPassthrough": 0,
     "totalMidiDropped": 0,
     "droppedWhileRecording": 0,
     "droppedWhilePlaying": 0,
     "droppedWhileIdle": 0,
-    "stepCallCount": 1210564,
-    "lastPulseWithMidi": 40,
+    "stepCallCount": 455142,
+    "lastPulseWithMidi": 56,
     "lastMidiSent": {
-    "status": 128,
-     "data1": 69,
-     "data2": 64}
+    "status": 176,
+     "data1": 51,
+     "data2": 0}
     }
    ,
    "buckets": [{
     "pulse": 0,
      "events": [{
+      "status": 176,
+       "data1": 54,
+       "data2": 127}
+      ,{
       "status": 144,
        "data1": 60,
-       "data2": 79}
+       "data2": 96}
+      ]
+     }
+    ,{
+    "pulse": 2,
+     "events": [{
+      "status": 128,
+       "data1": 60,
+       "data2": 64}
+      ,{
+      "status": 176,
+       "data1": 54,
+       "data2": 0}
       ]
      }
     ,{
     "pulse": 4,
      "events": [{
       "status": 144,
-       "data1": 64,
-       "data2": 75}
-      ,{
+       "data1": 61,
+       "data2": 109}
+      ]
+     }
+    ,{
+    "pulse": 6,
+     "events": [{
       "status": 128,
-       "data1": 60,
+       "data1": 61,
        "data2": 64}
       ]
      }
@@ -84,11 +104,15 @@
     "pulse": 8,
      "events": [{
       "status": 144,
-       "data1": 69,
-       "data2": 65}
-      ,{
+       "data1": 62,
+       "data2": 104}
+      ]
+     }
+    ,{
+    "pulse": 10,
+     "events": [{
       "status": 128,
-       "data1": 64,
+       "data1": 62,
        "data2": 64}
       ]
      }
@@ -96,35 +120,47 @@
     "pulse": 12,
      "events": [{
       "status": 144,
-       "data1": 60,
-       "data2": 90}
-      ,{
+       "data1": 63,
+       "data2": 112}
+      ]
+     }
+    ,{
+    "pulse": 14,
+     "events": [{
       "status": 128,
-       "data1": 69,
+       "data1": 63,
        "data2": 64}
       ]
      }
     ,{
     "pulse": 16,
      "events": [{
-      "status": 128,
-       "data1": 60,
-       "data2": 64}
-      ,{
       "status": 144,
        "data1": 64,
-       "data2": 34}
+       "data2": 100}
+      ]
+     }
+    ,{
+    "pulse": 18,
+     "events": [{
+      "status": 128,
+       "data1": 64,
+       "data2": 64}
       ]
      }
     ,{
     "pulse": 20,
      "events": [{
       "status": 144,
-       "data1": 69,
-       "data2": 80}
-      ,{
+       "data1": 65,
+       "data2": 96}
+      ]
+     }
+    ,{
+    "pulse": 22,
+     "events": [{
       "status": 128,
-       "data1": 64,
+       "data1": 65,
        "data2": 64}
       ]
      }
@@ -132,11 +168,15 @@
     "pulse": 24,
      "events": [{
       "status": 144,
-       "data1": 64,
-       "data2": 81}
-      ,{
+       "data1": 66,
+       "data2": 110}
+      ]
+     }
+    ,{
+    "pulse": 26,
+     "events": [{
       "status": 128,
-       "data1": 69,
+       "data1": 66,
        "data2": 64}
       ]
      }
@@ -144,24 +184,124 @@
     "pulse": 28,
      "events": [{
       "status": 144,
-       "data1": 69,
-       "data2": 74}
+       "data1": 67,
+       "data2": 99}
+      ]
+     }
+    ,{
+    "pulse": 30,
+     "events": [{
+      "status": 128,
+       "data1": 67,
+       "data2": 64}
+      ]
+     }
+    ,{
+    "pulse": 32,
+     "events": [{
+      "status": 144,
+       "data1": 68,
+       "data2": 112}
+      ]
+     }
+    ,{
+    "pulse": 34,
+     "events": [{
+      "status": 128,
+       "data1": 68,
+       "data2": 64}
       ]
      }
     ,{
     "pulse": 36,
      "events": [{
+      "status": 144,
+       "data1": 69,
+       "data2": 103}
+      ]
+     }
+    ,{
+    "pulse": 38,
+     "events": [{
       "status": 128,
-       "data1": 60,
+       "data1": 69,
        "data2": 64}
       ]
      }
     ,{
     "pulse": 40,
      "events": [{
+      "status": 144,
+       "data1": 70,
+       "data2": 108}
+      ]
+     }
+    ,{
+    "pulse": 42,
+     "events": [{
       "status": 128,
-       "data1": 69,
+       "data1": 70,
        "data2": 64}
+      ]
+     }
+    ,{
+    "pulse": 44,
+     "events": [{
+      "status": 144,
+       "data1": 71,
+       "data2": 107}
+      ]
+     }
+    ,{
+    "pulse": 46,
+     "events": [{
+      "status": 128,
+       "data1": 71,
+       "data2": 64}
+      ]
+     }
+    ,{
+    "pulse": 48,
+     "events": [{
+      "status": 144,
+       "data1": 72,
+       "data2": 99}
+      ]
+     }
+    ,{
+    "pulse": 50,
+     "events": [{
+      "status": 128,
+       "data1": 72,
+       "data2": 64}
+      ]
+     }
+    ,{
+    "pulse": 52,
+     "events": [{
+      "status": 144,
+       "data1": 60,
+       "data2": 96}
+      ]
+     }
+    ,{
+    "pulse": 54,
+     "events": [{
+      "status": 176,
+       "data1": 51,
+       "data2": 127}
+      ,{
+      "status": 128,
+       "data1": 60,
+       "data2": 64}
+      ]
+     }
+    ,{
+    "pulse": 56,
+     "events": [{
+      "status": 176,
+       "data1": 51,
+       "data2": 0}
       ]
      }
     ]
@@ -194,11 +334,11 @@
       "min": 0,
       "max": 1}
      }
-    ,2,0]
+    ,0,0]
    ,
    "ui": {
    "page": 0,
-    "items": [4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    "items": [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     ,
     "display": "params"}
    }

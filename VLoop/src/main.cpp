@@ -15,7 +15,6 @@ struct MidiEvent {
 
 #define MAX_EVENTS_PER_PULSE 16
 #define MAX_LOOP_LENGTH 512
-#define MAX_PASSTHROUGH_BUFFER 32  // Buffer for MIDI passthrough
 
 // Simple fixed-size vector for events at each pulse
 struct EventBucket {
@@ -52,20 +51,11 @@ struct VLoop : public _NT_algorithm {
     bool lastClear;
     uint16_t lastPulseWithEvent;  // Track last pulse that had MIDI recorded
     
-    // MIDI passthrough buffer (to avoid sending from midiMessage callback)
-    MidiEvent passthroughBuffer[MAX_PASSTHROUGH_BUFFER];
-    uint8_t passthroughCount;
-    
 #if VLOOP_DEBUG
     // Debug counters (only when VLOOP_DEBUG is true)
     uint32_t totalClockEdges;
     uint32_t totalMidiSent;
     uint32_t totalMidiReceived;
-    uint32_t totalMidiPassthrough;
-    uint32_t totalMidiDropped;
-    uint32_t droppedWhileRecording;
-    uint32_t droppedWhilePlaying;
-    uint32_t droppedWhileIdle;
     uint32_t noteOnReceived;
     uint32_t noteOffReceived;
     uint32_t noteOnRecorded;
@@ -94,16 +84,10 @@ struct VLoop : public _NT_algorithm {
         lastPlay = false;
         lastClear = false;
         lastPulseWithEvent = 0;
-        passthroughCount = 0;
 #if VLOOP_DEBUG
         totalClockEdges = 0;
         totalMidiSent = 0;
         totalMidiReceived = 0;
-        totalMidiPassthrough = 0;
-        totalMidiDropped = 0;
-        droppedWhileRecording = 0;
-        droppedWhilePlaying = 0;
-        droppedWhileIdle = 0;
         noteOnReceived = 0;
         noteOffReceived = 0;
         noteOnRecorded = 0;
@@ -172,10 +156,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     loop->stepCallCount++;
 #endif
     
-    // NOTE: MIDI passthrough disabled - causes CPU overload
-    // Users should route MIDI manually in disting NT if passthrough needed
-    loop->passthroughCount = 0;  // Clear buffer without sending
-    
     // Get parameter values
     int clockBusIndex = (int)loop->v[kParamClockInput] - 1;
     bool recordActive = loop->v[kParamRecord] > 0.5f;
@@ -206,11 +186,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         loop->totalClockEdges = 0;
         loop->totalMidiSent = 0;
         loop->totalMidiReceived = 0;
-        loop->totalMidiPassthrough = 0;
-        loop->totalMidiDropped = 0;
-        loop->droppedWhileRecording = 0;
-        loop->droppedWhilePlaying = 0;
-        loop->droppedWhileIdle = 0;
         loop->noteOnReceived = 0;
         loop->noteOffReceived = 0;
         loop->noteOnRecorded = 0;
@@ -362,6 +337,12 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
 void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte2) {
     VLoop* loop = (VLoop*)self;
     
+    // PASSTHROUGH: Immediately echo MIDI to all other destinations
+    // This allows other algorithms/outputs to receive the MIDI that VLoop intercepts
+    // Don't send to Internal to avoid infinite recursion
+    const uint8_t otherDestinations = kNT_destinationUSB | kNT_destinationBreakout | kNT_destinationSelectBus;
+    NT_sendMidi3ByteMessage(otherDestinations, byte0, byte1, byte2);
+    
 #if VLOOP_DEBUG
     loop->totalMidiReceived++;
     // Count note on/off
@@ -370,27 +351,6 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
         loop->noteOnReceived++;
     } else if (msgType == 0x80 || (msgType == 0x90 && byte2 == 0)) {  // Note off
         loop->noteOffReceived++;
-    }
-#endif
-    
-    // Buffer MIDI for passthrough (send from step() to avoid reentrancy issues)
-    if (loop->passthroughCount < MAX_PASSTHROUGH_BUFFER) {
-        loop->passthroughBuffer[loop->passthroughCount].data[0] = byte0;
-        loop->passthroughBuffer[loop->passthroughCount].data[1] = byte1;
-        loop->passthroughBuffer[loop->passthroughCount].data[2] = byte2;
-        loop->passthroughCount++;
-    }
-#if VLOOP_DEBUG
-    else {
-        loop->totalMidiDropped++;
-        // Track what state we were in when dropping
-        if (loop->isRecording) {
-            loop->droppedWhileRecording++;
-        } else if (loop->isPlaying) {
-            loop->droppedWhilePlaying++;
-        } else {
-            loop->droppedWhileIdle++;
-        }
     }
 #endif
     
@@ -486,16 +446,6 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
     stream.addNumber((int)loop->totalMidiSent);
     stream.addMemberName("totalMidiReceived");
     stream.addNumber((int)loop->totalMidiReceived);
-    stream.addMemberName("totalMidiPassthrough");
-    stream.addNumber((int)loop->totalMidiPassthrough);
-    stream.addMemberName("totalMidiDropped");
-    stream.addNumber((int)loop->totalMidiDropped);
-    stream.addMemberName("droppedWhileRecording");
-    stream.addNumber((int)loop->droppedWhileRecording);
-    stream.addMemberName("droppedWhilePlaying");
-    stream.addNumber((int)loop->droppedWhilePlaying);
-    stream.addMemberName("droppedWhileIdle");
-    stream.addNumber((int)loop->droppedWhileIdle);
     stream.addMemberName("noteOnReceived");
     stream.addNumber((int)loop->noteOnReceived);
     stream.addMemberName("noteOffReceived");
