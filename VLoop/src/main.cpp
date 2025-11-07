@@ -114,8 +114,6 @@ enum {
     kParamRecord,
     kParamPlay,
     kParamClear,
-    kParamQuantize,
-    kParamAutoStop,
     kParamMidiOutChannel,
     kNumParams
 };
@@ -125,12 +123,10 @@ static const _NT_parameter parameters[] = {
     { .name = "Record", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
     { .name = "Play", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
     { .name = "Clear", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
-    { .name = "Quantize", .min = 0, .max = 2, .def = 0, .scaling = kNT_scalingNone },  // 0=1/32, 1=1/16, 2=1/8
-    { .name = "Auto Stop", .min = 0, .max = 16, .def = 0, .scaling = kNT_scalingNone }, // 0=off, 1-16=beats
     { .name = "MIDI Out Ch", .min = 1, .max = 16, .def = 2, .scaling = kNT_scalingNone } // Output channel (default ch 2)
 };
 
-static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamQuantize, kParamAutoStop, kParamMidiOutChannel };
+static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamMidiOutChannel };
 static const _NT_parameterPage pages[] = {
     { .name = "VLoop", .numParams = ARRAY_SIZE(page1), .params = page1 }
 };
@@ -252,13 +248,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     bool recordActive = loop->v[kParamRecord] > 0.5f;
     bool playActive = loop->v[kParamPlay] > 0.5f;
     bool clearActive = loop->v[kParamClear] > 0.5f;
-#if VLOOP_DEBUG
-    int quantize = (int)loop->v[kParamQuantize];  // 0=1/32, 1=1/16, 2=1/8
-#endif
-    int autoStop = (int)loop->v[kParamAutoStop];   // 0=off, 1-16=beats
-    
-    // Assuming clock input is 1/32 notes (8 pulses per beat)
-    int pulsesPerBeat = 8;  // 1/32 notes, 8 per quarter note
     
     // Handle Clear knob
     if (clearActive && !loop->lastClear) {
@@ -314,11 +303,17 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             loop->loopLength = 0;
         }
     } else if (!recordActive && loop->lastRecord) {
-        // Knob turned down - stop recording
+        // Record turned OFF - stop recording
         if (loop->isRecording && !loop->isPlaying) {
             // Was doing initial recording (not overdub)
-            // Quantize end to beat boundary AFTER last recorded event
-            loop->loopLength = ((loop->lastPulseWithEvent + pulsesPerBeat) / pulsesPerBeat) * pulsesPerBeat;
+            // Set loop length to exact last recorded event + 1 pulse
+            loop->loopLength = loop->lastPulseWithEvent + 1;
+            
+            // If Play is ON, auto-start playback
+            if (playActive && loop->loopLength > 0) {
+                loop->isPlaying = true;
+                loop->currentPulse = 0;
+            }
         }
         // If overdubbing, loop length stays the same
         loop->isRecording = false;
@@ -367,23 +362,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 loop->currentPulse++;
                 if (loop->currentPulse >= MAX_LOOP_LENGTH) {
                     loop->currentPulse = MAX_LOOP_LENGTH - 1;
-                }
-                
-                // Check for auto-stop
-                if (autoStop > 0) {
-                    uint16_t pulsesRecorded = loop->currentPulse - loop->recordStartPulse;
-                    uint16_t targetPulses = autoStop * pulsesPerBeat;  // beats * pulses per beat
-                    
-                    if (pulsesRecorded >= targetPulses) {
-                        // Quantize end to beat boundary AFTER last recorded event
-                        loop->loopLength = ((loop->lastPulseWithEvent + pulsesPerBeat) / pulsesPerBeat) * pulsesPerBeat;
-                        loop->isRecording = false;
-                        loop->recordArmed = false;
-                        
-                        // Auto-start playback
-                        loop->isPlaying = true;
-                        loop->currentPulse = 0;
-                    }
                 }
             } else if (loop->recordArmed) {
                 // Armed but not recording - stay at pulse 0, waiting for first MIDI
@@ -503,29 +481,25 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
         return;
     }
     
-    // Apply quantization - quantize to NEAREST quantized pulse
-    int quantize = (int)loop->v[kParamQuantize];
-    int quantizeDivisor = 1 << quantize;  // 1, 2, or 4
-    
-    // Round to nearest quantized pulse instead of skipping
-    uint16_t quantizedPulse = ((loop->currentPulse + (quantizeDivisor / 2)) / quantizeDivisor) * quantizeDivisor;
+    // Record MIDI event at current pulse (no quantization)
+    uint16_t recordPulse = loop->currentPulse;
     
     // Ensure we don't go past max length
-    if (quantizedPulse >= MAX_LOOP_LENGTH) {
-        quantizedPulse = MAX_LOOP_LENGTH - 1;
+    if (recordPulse >= MAX_LOOP_LENGTH) {
+        recordPulse = MAX_LOOP_LENGTH - 1;
     }
     
-    // Add event to quantized pulse's bucket
-    if (quantizedPulse < MAX_LOOP_LENGTH) {
+    // Add event to current pulse's bucket
+    if (recordPulse < MAX_LOOP_LENGTH) {
         MidiEvent event;
         event.data[0] = byte0;
         event.data[1] = byte1;
         event.data[2] = byte2;
-        bool added = loop->eventBuckets[quantizedPulse].add(event);
+        bool added = loop->eventBuckets[recordPulse].add(event);
         
         if (added) {
             // Track last pulse with recorded event
-            loop->lastPulseWithEvent = quantizedPulse;
+            loop->lastPulseWithEvent = recordPulse;
             
 #if VLOOP_DEBUG
             // Count recorded notes
