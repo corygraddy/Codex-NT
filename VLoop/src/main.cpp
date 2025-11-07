@@ -179,15 +179,18 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     loop->currentPulse = MAX_LOOP_LENGTH - 1;
                 }
             } else if (loop->isPlaying && loop->loopLength > 0) {
-                // Send all events at current pulse (direct bucket lookup - O(1))
-                EventBucket& bucket = loop->eventBuckets[loop->currentPulse];
-                for (uint8_t i = 0; i < bucket.count; i++) {
-                    NT_sendMidi3ByteMessage(
-                        ~0,
-                        bucket.events[i].data[0],
-                        bucket.events[i].data[1],
-                        bucket.events[i].data[2]
-                    );
+                // Bounds check before accessing bucket
+                if (loop->currentPulse < loop->loopLength && loop->currentPulse < MAX_LOOP_LENGTH) {
+                    // Send all events at current pulse (direct bucket lookup - O(1))
+                    EventBucket& bucket = loop->eventBuckets[loop->currentPulse];
+                    for (uint8_t i = 0; i < bucket.count && i < MAX_EVENTS_PER_PULSE; i++) {
+                        NT_sendMidi3ByteMessage(
+                            ~0,
+                            bucket.events[i].data[0],
+                            bucket.events[i].data[1],
+                            bucket.events[i].data[2]
+                        );
+                    }
                 }
                 
                 // Advance to next pulse
