@@ -293,24 +293,34 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     
     // Handle Record knob changes
     if (recordActive && !loop->lastRecord) {
-        // Knob turned up - ARM record mode (wait for first MIDI)
-        loop->isPlaying = false;
-        loop->isRecording = false;
-        loop->recordArmed = true;
-        loop->currentPulse = 0;
-        loop->lastPulseWithEvent = 0;
-        // Clear all buckets
-        for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
-            loop->eventBuckets[i].clear();
+        // Knob turned up
+        if (loop->loopLength > 0 && loop->isPlaying) {
+            // OVERDUB MODE: Loop exists and is playing
+            // Enable recording without clearing or stopping playback
+            loop->isRecording = true;
+            loop->recordArmed = false;
+            // Keep playing, keep currentPulse, DON'T clear buckets
+        } else {
+            // NEW RECORDING: ARM record mode (wait for first MIDI)
+            loop->isPlaying = false;
+            loop->isRecording = false;
+            loop->recordArmed = true;
+            loop->currentPulse = 0;
+            loop->lastPulseWithEvent = 0;
+            // Clear all buckets for fresh recording
+            for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
+                loop->eventBuckets[i].clear();
+            }
+            loop->loopLength = 0;
         }
-        loop->loopLength = 0;
     } else if (!recordActive && loop->lastRecord) {
-        // Knob turned down - stop recording, save loop length
-        if (loop->isRecording) {
+        // Knob turned down - stop recording
+        if (loop->isRecording && !loop->isPlaying) {
+            // Was doing initial recording (not overdub)
             // Quantize end to beat boundary AFTER last recorded event
-            // This ensures we don't cut off the last note
             loop->loopLength = ((loop->lastPulseWithEvent + pulsesPerBeat) / pulsesPerBeat) * pulsesPerBeat;
         }
+        // If overdubbing, loop length stays the same
         loop->isRecording = false;
         loop->recordArmed = false;
     }
