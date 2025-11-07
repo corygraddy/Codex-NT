@@ -65,6 +65,14 @@ struct VLoop : public _NT_algorithm {
     uint32_t droppedWhileRecording;
     uint32_t droppedWhilePlaying;
     uint32_t droppedWhileIdle;
+    uint32_t noteOnReceived;
+    uint32_t noteOffReceived;
+    uint32_t noteOnRecorded;
+    uint32_t noteOffRecorded;
+    uint32_t noteOnSent;
+    uint32_t noteOffSent;
+    uint32_t midiSkippedNotRecording;
+    uint32_t midiSkippedQuantization;
     uint32_t stepCallCount;
     uint16_t lastPulseWithMidi;
     uint8_t lastMidiStatus;
@@ -93,6 +101,14 @@ struct VLoop : public _NT_algorithm {
         droppedWhileRecording = 0;
         droppedWhilePlaying = 0;
         droppedWhileIdle = 0;
+        noteOnReceived = 0;
+        noteOffReceived = 0;
+        noteOnRecorded = 0;
+        noteOffRecorded = 0;
+        noteOnSent = 0;
+        noteOffSent = 0;
+        midiSkippedNotRecording = 0;
+        midiSkippedQuantization = 0;
         stepCallCount = 0;
         lastPulseWithMidi = 0;
         lastMidiStatus = 0;
@@ -275,6 +291,14 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                         loop->lastMidiData1 = bucket.events[i].data[1];
                         loop->lastMidiData2 = bucket.events[i].data[2];
                         loop->totalMidiSent++;
+                        
+                        // Count sent notes
+                        uint8_t msgType = bucket.events[i].data[0] & 0xF0;
+                        if (msgType == 0x90 && bucket.events[i].data[2] > 0) {  // Note on
+                            loop->noteOnSent++;
+                        } else if (msgType == 0x80 || (msgType == 0x90 && bucket.events[i].data[2] == 0)) {  // Note off
+                            loop->noteOffSent++;
+                        }
 #endif
                         
                         // Send only to Internal (for routing to other slots)
@@ -302,6 +326,13 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
     
 #if VLOOP_DEBUG
     loop->totalMidiReceived++;
+    // Count note on/off
+    uint8_t msgType = byte0 & 0xF0;
+    if (msgType == 0x90 && byte2 > 0) {  // Note on (velocity > 0)
+        loop->noteOnReceived++;
+    } else if (msgType == 0x80 || (msgType == 0x90 && byte2 == 0)) {  // Note off
+        loop->noteOffReceived++;
+    }
 #endif
     
     // Buffer MIDI for passthrough (send from step() to avoid reentrancy issues)
@@ -338,7 +369,12 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
     }
     
     // Only record when in recording mode
-    if (!loop->isRecording) return;
+    if (!loop->isRecording) {
+#if VLOOP_DEBUG
+        loop->midiSkippedNotRecording++;
+#endif
+        return;
+    }
     
     // Apply quantization - only record on quantized pulses
     int quantize = (int)loop->v[kParamQuantize];
@@ -346,6 +382,9 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
     
     if (loop->currentPulse % quantizeDivisor != 0) {
         // Not on a quantized pulse, skip recording this event
+#if VLOOP_DEBUG
+        loop->midiSkippedQuantization++;
+#endif
         return;
     }
     
@@ -356,6 +395,16 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
         event.data[1] = byte1;
         event.data[2] = byte2;
         loop->eventBuckets[loop->currentPulse].add(event);
+        
+#if VLOOP_DEBUG
+        // Count recorded notes
+        uint8_t msgType = byte0 & 0xF0;
+        if (msgType == 0x90 && byte2 > 0) {  // Note on
+            loop->noteOnRecorded++;
+        } else if (msgType == 0x80 || (msgType == 0x90 && byte2 == 0)) {  // Note off
+            loop->noteOffRecorded++;
+        }
+#endif
     }
 }
 
@@ -398,6 +447,22 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
     stream.addNumber((int)loop->droppedWhilePlaying);
     stream.addMemberName("droppedWhileIdle");
     stream.addNumber((int)loop->droppedWhileIdle);
+    stream.addMemberName("noteOnReceived");
+    stream.addNumber((int)loop->noteOnReceived);
+    stream.addMemberName("noteOffReceived");
+    stream.addNumber((int)loop->noteOffReceived);
+    stream.addMemberName("noteOnRecorded");
+    stream.addNumber((int)loop->noteOnRecorded);
+    stream.addMemberName("noteOffRecorded");
+    stream.addNumber((int)loop->noteOffRecorded);
+    stream.addMemberName("noteOnSent");
+    stream.addNumber((int)loop->noteOnSent);
+    stream.addMemberName("noteOffSent");
+    stream.addNumber((int)loop->noteOffSent);
+    stream.addMemberName("midiSkippedNotRecording");
+    stream.addNumber((int)loop->midiSkippedNotRecording);
+    stream.addMemberName("midiSkippedQuantization");
+    stream.addNumber((int)loop->midiSkippedQuantization);
     stream.addMemberName("stepCallCount");
     stream.addNumber((int)loop->stepCallCount);
     stream.addMemberName("lastPulseWithMidi");
