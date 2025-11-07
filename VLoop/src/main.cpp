@@ -160,9 +160,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     }
     loop->lastPlay = playActive;
     
-    // Process all frames looking for clock edge
+    // Process all frames looking for clock edge (detect only ONE edge per step)
     const int totalFrames = numFramesBy4 * 4;
-    for (int frame = 0; frame < totalFrames; frame++) {
+    bool clockEdgeDetected = false;
+    for (int frame = 0; frame < totalFrames && !clockEdgeDetected; frame++) {
         // Read clock CV from selected bus
         float clockCV = busFrames[clockBusIndex * totalFrames + frame];
         
@@ -171,6 +172,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         loop->lastClockCV = clockCV;
         
         if (clockEdge) {
+            clockEdgeDetected = true;
+            
             if (loop->isRecording) {
                 // Increment pulse counter BEFORE recording more events
                 // This ensures events recorded before next clock get the next pulse number
@@ -179,17 +182,16 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     loop->currentPulse = MAX_LOOP_LENGTH - 1;
                 }
             } else if (loop->isPlaying && loop->loopLength > 0) {
-                // Send all events at current pulse when clock edge happens
+                // Send only FIRST event at current pulse to respect MIDI serial timing
                 if (loop->currentPulse < loop->loopLength && loop->currentPulse < MAX_LOOP_LENGTH) {
                     EventBucket& bucket = loop->eventBuckets[loop->currentPulse];
-                    // Limit to 4 events max to prevent overflow
-                    uint8_t maxEvents = (bucket.count < 4) ? bucket.count : 4;
-                    for (uint8_t i = 0; i < maxEvents; i++) {
+                    // Send only the first event (0.96ms MIDI serial time)
+                    if (bucket.count > 0) {
                         NT_sendMidi3ByteMessage(
                             ~0,
-                            bucket.events[i].data[0],
-                            bucket.events[i].data[1],
-                            bucket.events[i].data[2]
+                            bucket.events[0].data[0],
+                            bucket.events[0].data[1],
+                            bucket.events[0].data[2]
                         );
                     }
                 }
