@@ -343,6 +343,15 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 // Advance to next pulse
                 loop->currentPulse++;
                 if (loop->currentPulse >= loop->loopLength) {
+                    // Loop wrap - send all-notes-off to prevent stuck notes
+                    for (uint8_t channel = 0; channel < 16; channel++) {
+                        NT_sendMidi3ByteMessage(
+                            kNT_destinationInternal,
+                            0xB0 | channel,  // CC on this channel
+                            123,              // All Notes Off
+                            0
+                        );
+                    }
                     loop->currentPulse = 0; // Loop wrap
                 }
             }
