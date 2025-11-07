@@ -357,16 +357,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             loop->totalClockEdges++;
 #endif
             
-            if (loop->isRecording) {
-                // Already recording - increment pulse counter
-                loop->currentPulse++;
-                if (loop->currentPulse >= MAX_LOOP_LENGTH) {
-                    loop->currentPulse = MAX_LOOP_LENGTH - 1;
-                }
-            } else if (loop->recordArmed) {
-                // Armed but not recording - stay at pulse 0, waiting for first MIDI
-                // Do nothing, let midiMessage() start the recording
-            } else if (loop->isPlaying && loop->loopLength > 0) {
+            // Handle playback FIRST (if playing, send MIDI)
+            if (loop->isPlaying && loop->loopLength > 0) {
                 // Send ALL events at current pulse
                 if (loop->currentPulse < loop->loopLength && loop->currentPulse < MAX_LOOP_LENGTH) {
                     EventBucket& bucket = loop->eventBuckets[loop->currentPulse];
@@ -421,6 +413,19 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     );
                     loop->currentPulse = 0; // Loop wrap
                 }
+            }
+            // Handle recording (initial recording only, not overdub)
+            else if (loop->isRecording && !loop->isPlaying) {
+                // Initial recording - increment pulse counter
+                loop->currentPulse++;
+                if (loop->currentPulse >= MAX_LOOP_LENGTH) {
+                    loop->currentPulse = MAX_LOOP_LENGTH - 1;
+                }
+            }
+            // Record armed - waiting for first MIDI
+            else if (loop->recordArmed) {
+                // Armed but not recording - stay at pulse 0, waiting for first MIDI
+                // Do nothing, let midiMessage() start the recording
             }
         }
     }
