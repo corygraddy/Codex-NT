@@ -114,6 +114,7 @@ enum {
     kParamRecord,
     kParamPlay,
     kParamClear,
+    kParamQuantize,
     kParamMidiOutChannel,
     kNumParams
 };
@@ -123,10 +124,11 @@ static const _NT_parameter parameters[] = {
     { .name = "Record", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
     { .name = "Play", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
     { .name = "Clear", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
+    { .name = "Quantize", .min = 0, .max = 4, .def = 0, .scaling = kNT_scalingNone },  // 0=off, 1=1/32, 2=1/16, 3=1/8, 4=1/4
     { .name = "MIDI Out Ch", .min = 1, .max = 16, .def = 2, .scaling = kNT_scalingNone } // Output channel (default ch 2)
 };
 
-static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamMidiOutChannel };
+static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamQuantize, kParamMidiOutChannel };
 static const _NT_parameterPage pages[] = {
     { .name = "VLoop", .numParams = ARRAY_SIZE(page1), .params = page1 }
 };
@@ -306,8 +308,18 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         // Record turned OFF - stop recording
         if (loop->isRecording && !loop->isPlaying) {
             // Was doing initial recording (not overdub)
-            // Set loop length to exact last recorded event + 1 pulse
-            loop->loopLength = loop->lastPulseWithEvent + 1;
+            // Get quantization setting
+            int quantize = (int)loop->v[kParamQuantize];
+            int quantizePulses = (quantize == 0) ? 1 : (1 << (quantize - 1));
+            
+            // Quantize loop length to nearest quantized pulse
+            uint16_t rawLength = loop->lastPulseWithEvent + 1;
+            if (quantize > 0) {
+                // Round to nearest quantized pulse
+                loop->loopLength = ((rawLength + (quantizePulses / 2)) / quantizePulses) * quantizePulses;
+            } else {
+                loop->loopLength = rawLength;
+            }
             
             // If Play is ON, auto-start playback
             if (playActive && loop->loopLength > 0) {
@@ -486,15 +498,25 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
         return;
     }
     
-    // Record MIDI event at current pulse (no quantization)
+    // Get quantization setting: 0=off, 1=1/32, 2=1/16, 3=1/8, 4=1/4
+    // In terms of clock pulses (assuming clock is at highest resolution you need):
+    // 0=no quantize, 1=1 pulse, 2=2 pulses, 3=4 pulses, 4=8 pulses
+    int quantize = (int)loop->v[kParamQuantize];
+    int quantizePulses = (quantize == 0) ? 1 : (1 << (quantize - 1));  // 0→1, 1→1, 2→2, 3→4, 4→8
+    
+    // Quantize current pulse to nearest quantized pulse
     uint16_t recordPulse = loop->currentPulse;
+    if (quantize > 0) {
+        // Round to nearest quantized pulse
+        recordPulse = ((recordPulse + (quantizePulses / 2)) / quantizePulses) * quantizePulses;
+    }
     
     // Ensure we don't go past max length
     if (recordPulse >= MAX_LOOP_LENGTH) {
         recordPulse = MAX_LOOP_LENGTH - 1;
     }
     
-    // Add event to current pulse's bucket
+    // Add event to quantized pulse's bucket
     if (recordPulse < MAX_LOOP_LENGTH) {
         MidiEvent event;
         event.data[0] = byte0;
