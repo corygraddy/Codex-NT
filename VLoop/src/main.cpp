@@ -41,7 +41,9 @@ struct EventBucket {
 };
 
 struct VLoop : public _NT_algorithm {
-    EventBucket eventBuckets[MAX_LOOP_LENGTH];
+    EventBucket eventBuckets[MAX_LOOP_LENGTH];      // Main "safe" loop buffer
+    EventBucket committedOverdub[MAX_LOOP_LENGTH];  // Last committed overdub (can be undone)
+    EventBucket activeOverdub[MAX_LOOP_LENGTH];     // Current overdub in progress
     uint16_t currentPulse;
     uint16_t loopLength;
     bool isRecording;
@@ -52,6 +54,7 @@ struct VLoop : public _NT_algorithm {
     bool lastRecord;
     bool lastPlay;
     bool lastClear;
+    bool lastUndo;
     uint16_t lastPulseWithEvent;  // Track last pulse that had MIDI recorded
     
 #if VLOOP_DEBUG
@@ -86,6 +89,7 @@ struct VLoop : public _NT_algorithm {
         lastRecord = false;
         lastPlay = false;
         lastClear = false;
+        lastUndo = false;
         lastPulseWithEvent = 0;
 #if VLOOP_DEBUG
         totalClockEdges = 0;
@@ -114,7 +118,9 @@ enum {
     kParamRecord,
     kParamPlay,
     kParamClear,
+    kParamUndo,
     kParamQuantize,
+    kParamLoopEndQuant,
     kParamMidiOutChannel,
     kNumParams
 };
@@ -124,11 +130,13 @@ static const _NT_parameter parameters[] = {
     { .name = "Record", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
     { .name = "Play", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
     { .name = "Clear", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
-    { .name = "Quantize", .min = 0, .max = 4, .def = 0, .scaling = kNT_scalingNone },  // 0=off, 1=1/32, 2=1/16, 3=1/8, 4=1/4
+    { .name = "Undo", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
+    { .name = "Note Quant", .min = 0, .max = 4, .def = 0, .scaling = kNT_scalingNone },  // 0=off, 1=1/32, 2=1/16, 3=1/8, 4=1/4
+    { .name = "Loop End Quant", .min = 0, .max = 4, .def = 4, .scaling = kNT_scalingNone },  // Default to 1/4 note
     { .name = "MIDI Out Ch", .min = 1, .max = 16, .def = 2, .scaling = kNT_scalingNone } // Output channel (default ch 2)
 };
 
-static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamQuantize, kParamMidiOutChannel };
+static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamUndo, kParamQuantize, kParamLoopEndQuant, kParamMidiOutChannel };
 static const _NT_parameterPage pages[] = {
     { .name = "VLoop", .numParams = ARRAY_SIZE(page1), .params = page1 }
 };
@@ -250,12 +258,15 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     bool recordActive = loop->v[kParamRecord] > 0.5f;
     bool playActive = loop->v[kParamPlay] > 0.5f;
     bool clearActive = loop->v[kParamClear] > 0.5f;
+    bool undoActive = loop->v[kParamUndo] > 0.5f;
     
-    // Handle Clear knob
+    // Handle Clear knob - ALWAYS clears everything
     if (clearActive && !loop->lastClear) {
-        // Clear all event buckets
+        // FULL CLEAR: Clear everything
         for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
             loop->eventBuckets[i].clear();
+            loop->committedOverdub[i].clear();
+            loop->activeOverdub[i].clear();
         }
         loop->loopLength = 0;
         loop->currentPulse = 0;
@@ -282,15 +293,39 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     }
     loop->lastClear = clearActive;
     
+    // Handle Undo knob - Clears committed overdub only (keeps main loop)
+    if (undoActive && !loop->lastUndo) {
+        // UNDO: Clear committed and active overdub buffers
+        for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
+            loop->committedOverdub[i].clear();
+            loop->activeOverdub[i].clear();
+        }
+        // Keep playing the main loop
+    }
+    loop->lastUndo = undoActive;
+    
     // Handle Record knob changes
     if (recordActive && !loop->lastRecord) {
-        // Knob turned up
+        // Record turned ON
         if (loop->loopLength > 0 && loop->isPlaying) {
             // OVERDUB MODE: Loop exists and is playing
-            // Enable recording without clearing or stopping playback
+            // First, commit any previous overdub by merging committed into main
+            for (int i = 0; i < loop->loopLength && i < MAX_LOOP_LENGTH; i++) {
+                EventBucket& committed = loop->committedOverdub[i];
+                EventBucket& main = loop->eventBuckets[i];
+                
+                // Merge committed into main
+                for (uint8_t j = 0; j < committed.count; j++) {
+                    main.add(committed.events[j]);
+                }
+                
+                // Clear committed buffer (it's now part of main)
+                committed.clear();
+            }
+            
+            // Now enable recording to activeOverdub
             loop->isRecording = true;
             loop->recordArmed = false;
-            // Keep playing, keep currentPulse, DON'T clear buckets
         } else {
             // NEW RECORDING: ARM record mode (wait for first MIDI)
             loop->isPlaying = false;
@@ -298,9 +333,11 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             loop->recordArmed = true;
             loop->currentPulse = 0;
             loop->lastPulseWithEvent = 0;
-            // Clear all buckets for fresh recording
+            // Clear all buffers for fresh recording
             for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
                 loop->eventBuckets[i].clear();
+                loop->committedOverdub[i].clear();
+                loop->activeOverdub[i].clear();
             }
             loop->loopLength = 0;
         }
@@ -308,15 +345,15 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         // Record turned OFF - stop recording
         if (loop->isRecording && !loop->isPlaying) {
             // Was doing initial recording (not overdub)
-            // Get quantization setting
-            int quantize = (int)loop->v[kParamQuantize];
-            int quantizePulses = (quantize == 0) ? 1 : (1 << (quantize - 1));
+            // Get loop end quantization setting (separate from note quantization)
+            int loopEndQuant = (int)loop->v[kParamLoopEndQuant];
+            int quantizePulses = (loopEndQuant == 0) ? 1 : (1 << (loopEndQuant - 1));
             
-            // Quantize loop length to nearest quantized pulse
+            // Quantize loop length - ROUND UP to next quantized pulse to avoid cutting short
             uint16_t rawLength = loop->lastPulseWithEvent + 1;
-            if (quantize > 0) {
-                // Round to nearest quantized pulse
-                loop->loopLength = ((rawLength + (quantizePulses / 2)) / quantizePulses) * quantizePulses;
+            if (loopEndQuant > 0) {
+                // Round UP to next quantized pulse (ceiling division)
+                loop->loopLength = ((rawLength + quantizePulses - 1) / quantizePulses) * quantizePulses;
             } else {
                 loop->loopLength = rawLength;
             }
@@ -371,42 +408,61 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             
             // Handle playback FIRST (if playing, send MIDI)
             if (loop->isPlaying && loop->loopLength > 0) {
-                // Send ALL events at current pulse
+                // Send events from BOTH main buffer AND committed overdub buffer
                 if (loop->currentPulse < loop->loopLength && loop->currentPulse < MAX_LOOP_LENGTH) {
-                    EventBucket& bucket = loop->eventBuckets[loop->currentPulse];
+                    // Get output channel
+                    uint8_t outputChannel = ((int)loop->v[kParamMidiOutChannel] - 1) & 0x0F;
                     
-                    // Send all events in this bucket
-                    for (uint8_t i = 0; i < bucket.count; i++) {
+                    // Play main buffer events
+                    EventBucket& mainBucket = loop->eventBuckets[loop->currentPulse];
+                    for (uint8_t i = 0; i < mainBucket.count; i++) {
 #if VLOOP_DEBUG
                         loop->lastPulseWithMidi = loop->currentPulse;
-                        loop->lastMidiStatus = bucket.events[i].data[0];
-                        loop->lastMidiData1 = bucket.events[i].data[1];
-                        loop->lastMidiData2 = bucket.events[i].data[2];
+                        loop->lastMidiStatus = mainBucket.events[i].data[0];
+                        loop->lastMidiData1 = mainBucket.events[i].data[1];
+                        loop->lastMidiData2 = mainBucket.events[i].data[2];
                         loop->totalMidiSent++;
                         
-                        // Count sent notes
-                        uint8_t msgType = bucket.events[i].data[0] & 0xF0;
-                        if (msgType == 0x90 && bucket.events[i].data[2] > 0) {  // Note on
+                        uint8_t msgType = mainBucket.events[i].data[0] & 0xF0;
+                        if (msgType == 0x90 && mainBucket.events[i].data[2] > 0) {
                             loop->noteOnSent++;
-                        } else if (msgType == 0x80 || (msgType == 0x90 && bucket.events[i].data[2] == 0)) {  // Note off
+                        } else if (msgType == 0x80 || (msgType == 0x90 && mainBucket.events[i].data[2] == 0)) {
                             loop->noteOffSent++;
                         }
 #endif
+                        uint8_t statusByte = mainBucket.events[i].data[0];
+                        uint8_t messageType = statusByte & 0xF0;
+                        uint8_t remappedStatus = messageType | outputChannel;
                         
-                        // Get output channel parameter (1-16, convert to 0-15)
-                        uint8_t outputChannel = ((int)loop->v[kParamMidiOutChannel] - 1) & 0x0F;
-                        
-                        // Remap to output channel (preserve original message type, replace channel)
-                        uint8_t statusByte = bucket.events[i].data[0];
-                        uint8_t messageType = statusByte & 0xF0;  // Extract message type
-                        uint8_t remappedStatus = messageType | outputChannel;  // Apply output channel
-                        
-                        // Send only to Internal (for routing to other slots)
                         NT_sendMidi3ByteMessage(
                             kNT_destinationInternal,
-                            remappedStatus,  // Use remapped channel
-                            bucket.events[i].data[1],
-                            bucket.events[i].data[2]
+                            remappedStatus,
+                            mainBucket.events[i].data[1],
+                            mainBucket.events[i].data[2]
+                        );
+                    }
+                    
+                    // Play committed overdub events
+                    EventBucket& committedBucket = loop->committedOverdub[loop->currentPulse];
+                    for (uint8_t i = 0; i < committedBucket.count; i++) {
+#if VLOOP_DEBUG
+                        loop->totalMidiSent++;
+                        uint8_t msgType = committedBucket.events[i].data[0] & 0xF0;
+                        if (msgType == 0x90 && committedBucket.events[i].data[2] > 0) {
+                            loop->noteOnSent++;
+                        } else if (msgType == 0x80 || (msgType == 0x90 && committedBucket.events[i].data[2] == 0)) {
+                            loop->noteOffSent++;
+                        }
+#endif
+                        uint8_t statusByte = committedBucket.events[i].data[0];
+                        uint8_t messageType = statusByte & 0xF0;
+                        uint8_t remappedStatus = messageType | outputChannel;
+                        
+                        NT_sendMidi3ByteMessage(
+                            kNT_destinationInternal,
+                            remappedStatus,
+                            committedBucket.events[i].data[1],
+                            committedBucket.events[i].data[2]
                         );
                     }
                 }
@@ -414,8 +470,25 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 // Advance to next pulse
                 loop->currentPulse++;
                 if (loop->currentPulse >= loop->loopLength) {
-                    // Loop wrap - send all-notes-off to prevent stuck notes
-                    // Send on output channel only
+                    // Loop wrap!
+                    
+                    // If overdubbing, commit active overdub to committed buffer
+                    if (loop->isRecording) {
+                        for (int pulse = 0; pulse < loop->loopLength && pulse < MAX_LOOP_LENGTH; pulse++) {
+                            EventBucket& active = loop->activeOverdub[pulse];
+                            EventBucket& committed = loop->committedOverdub[pulse];
+                            
+                            // Add all active overdub events to committed buffer
+                            for (uint8_t i = 0; i < active.count; i++) {
+                                committed.add(active.events[i]);
+                            }
+                            
+                            // Clear active overdub buffer for next cycle
+                            active.clear();
+                        }
+                    }
+                    
+                    // Send all-notes-off to prevent stuck notes
                     uint8_t outputChannel = ((int)loop->v[kParamMidiOutChannel] - 1) & 0x0F;
                     NT_sendMidi3ByteMessage(
                         kNT_destinationInternal,
@@ -511,22 +584,36 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
         recordPulse = ((recordPulse + (quantizePulses / 2)) / quantizePulses) * quantizePulses;
     }
     
-    // Ensure we don't go past max length
-    if (recordPulse >= MAX_LOOP_LENGTH) {
+    // Ensure we don't go past max length (or loop length during overdub)
+    if (loop->isPlaying && recordPulse >= loop->loopLength) {
+        recordPulse = recordPulse % loop->loopLength;  // Wrap to loop length during overdub
+    } else if (recordPulse >= MAX_LOOP_LENGTH) {
         recordPulse = MAX_LOOP_LENGTH - 1;
     }
     
-    // Add event to quantized pulse's bucket
+    // Choose buffer: active overdub if playing (overdub mode), main buffer if not (initial recording)
+    EventBucket* targetBucket;
+    if (loop->isPlaying) {
+        // OVERDUB MODE: Record to active overdub buffer (will be committed at loop wrap)
+        targetBucket = &loop->activeOverdub[recordPulse];
+    } else {
+        // INITIAL RECORDING: Record directly to main buffer
+        targetBucket = &loop->eventBuckets[recordPulse];
+    }
+    
+    // Add event to target bucket
     if (recordPulse < MAX_LOOP_LENGTH) {
         MidiEvent event;
         event.data[0] = byte0;
         event.data[1] = byte1;
         event.data[2] = byte2;
-        bool added = loop->eventBuckets[recordPulse].add(event);
+        bool added = targetBucket->add(event);
         
         if (added) {
-            // Track last pulse with recorded event
-            loop->lastPulseWithEvent = recordPulse;
+            // Track last pulse with recorded event (for initial recording only)
+            if (!loop->isPlaying) {
+                loop->lastPulseWithEvent = recordPulse;
+            }
             
 #if VLOOP_DEBUG
             // Count recorded notes
