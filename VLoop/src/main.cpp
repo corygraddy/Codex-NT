@@ -44,8 +44,6 @@ struct VLoop : public _NT_algorithm {
     bool lastRecord;
     bool lastPlay;
     bool lastClear;
-    uint8_t pendingEventIndex;  // Track which event we're sending from current bucket
-    bool hasPendingEvents;       // Flag if we have events to send
     
     VLoop() {
         currentPulse = 0;
@@ -56,8 +54,6 @@ struct VLoop : public _NT_algorithm {
         lastRecord = false;
         lastPlay = false;
         lastClear = false;
-        pendingEventIndex = 0;
-        hasPendingEvents = false;
     }
 };
 
@@ -183,10 +179,19 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     loop->currentPulse = MAX_LOOP_LENGTH - 1;
                 }
             } else if (loop->isPlaying && loop->loopLength > 0) {
-                // On clock edge, mark that we have events to send for this pulse
+                // Send all events at current pulse when clock edge happens
                 if (loop->currentPulse < loop->loopLength && loop->currentPulse < MAX_LOOP_LENGTH) {
-                    loop->hasPendingEvents = true;
-                    loop->pendingEventIndex = 0;
+                    EventBucket& bucket = loop->eventBuckets[loop->currentPulse];
+                    // Limit to 4 events max to prevent overflow
+                    uint8_t maxEvents = (bucket.count < 4) ? bucket.count : 4;
+                    for (uint8_t i = 0; i < maxEvents; i++) {
+                        NT_sendMidi3ByteMessage(
+                            ~0,
+                            bucket.events[i].data[0],
+                            bucket.events[i].data[1],
+                            bucket.events[i].data[2]
+                        );
+                    }
                 }
                 
                 // Advance to next pulse
@@ -194,27 +199,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 if (loop->currentPulse >= loop->loopLength) {
                     loop->currentPulse = 0; // Loop wrap
                 }
-            }
-        }
-        
-        // Send pending MIDI events gradually (one per audio frame to avoid buffer overflow)
-        if (loop->isPlaying && loop->hasPendingEvents) {
-            uint16_t sendPulse = (loop->currentPulse == 0) ? loop->loopLength - 1 : loop->currentPulse - 1;
-            if (sendPulse < MAX_LOOP_LENGTH) {
-                EventBucket& bucket = loop->eventBuckets[sendPulse];
-                if (loop->pendingEventIndex < bucket.count && loop->pendingEventIndex < MAX_EVENTS_PER_PULSE) {
-                    NT_sendMidi3ByteMessage(
-                        ~0,
-                        bucket.events[loop->pendingEventIndex].data[0],
-                        bucket.events[loop->pendingEventIndex].data[1],
-                        bucket.events[loop->pendingEventIndex].data[2]
-                    );
-                    loop->pendingEventIndex++;
-                } else {
-                    loop->hasPendingEvents = false;
-                }
-            } else {
-                loop->hasPendingEvents = false;
             }
         }
     }
