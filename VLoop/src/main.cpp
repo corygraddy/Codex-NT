@@ -50,6 +50,7 @@ struct VLoop : public _NT_algorithm {
     bool lastRecord;
     bool lastPlay;
     bool lastClear;
+    uint16_t lastPulseWithEvent;  // Track last pulse that had MIDI recorded
     
     // MIDI passthrough buffer (to avoid sending from midiMessage callback)
     MidiEvent passthroughBuffer[MAX_PASSTHROUGH_BUFFER];
@@ -91,6 +92,7 @@ struct VLoop : public _NT_algorithm {
         lastRecord = false;
         lastPlay = false;
         lastClear = false;
+        lastPulseWithEvent = 0;
         passthroughCount = 0;
 #if VLOOP_DEBUG
         totalClockEdges = 0;
@@ -205,6 +207,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         loop->isRecording = false;
         loop->recordArmed = true;
         loop->currentPulse = 0;
+        loop->lastPulseWithEvent = 0;
         // Clear all buckets
         for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
             loop->eventBuckets[i].clear();
@@ -213,9 +216,9 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     } else if (!recordActive && loop->lastRecord) {
         // Knob turned down - stop recording, save loop length
         if (loop->isRecording) {
-            // Quantize end to nearest beat boundary (1/4 note = 8 pulses)
-            // Round to nearest instead of always rounding up
-            loop->loopLength = ((loop->currentPulse + (pulsesPerBeat / 2)) / pulsesPerBeat) * pulsesPerBeat;
+            // Quantize end to beat boundary AFTER last recorded event
+            // This ensures we don't cut off the last note
+            loop->loopLength = ((loop->lastPulseWithEvent + pulsesPerBeat) / pulsesPerBeat) * pulsesPerBeat;
         }
         loop->isRecording = false;
         loop->recordArmed = false;
@@ -266,8 +269,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     uint16_t targetPulses = autoStop * pulsesPerBeat;  // beats * pulses per beat
                     
                     if (pulsesRecorded >= targetPulses) {
-                        // Quantize end to nearest beat boundary (1/4 note)
-                        loop->loopLength = ((loop->currentPulse + (pulsesPerBeat / 2)) / pulsesPerBeat) * pulsesPerBeat;
+                        // Quantize end to beat boundary AFTER last recorded event
+                        loop->loopLength = ((loop->lastPulseWithEvent + pulsesPerBeat) / pulsesPerBeat) * pulsesPerBeat;
                         loop->isRecording = false;
                         loop->recordArmed = false;
                         
@@ -396,6 +399,9 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
         event.data[1] = byte1;
         event.data[2] = byte2;
         loop->eventBuckets[loop->currentPulse].add(event);
+        
+        // Track last pulse with recorded event
+        loop->lastPulseWithEvent = loop->currentPulse;
         
 #if VLOOP_DEBUG
         // Count recorded notes
