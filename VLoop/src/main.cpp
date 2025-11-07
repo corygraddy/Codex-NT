@@ -414,29 +414,29 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
         return;
     }
     
-    // Apply quantization - only record on quantized pulses
+    // Apply quantization - quantize to NEAREST quantized pulse
     int quantize = (int)loop->v[kParamQuantize];
     int quantizeDivisor = 1 << quantize;  // 1, 2, or 4
     
-    if (loop->currentPulse % quantizeDivisor != 0) {
-        // Not on a quantized pulse, skip recording this event
-#if VLOOP_DEBUG
-        loop->midiSkippedQuantization++;
-#endif
-        return;
+    // Round to nearest quantized pulse instead of skipping
+    uint16_t quantizedPulse = ((loop->currentPulse + (quantizeDivisor / 2)) / quantizeDivisor) * quantizeDivisor;
+    
+    // Ensure we don't go past max length
+    if (quantizedPulse >= MAX_LOOP_LENGTH) {
+        quantizedPulse = MAX_LOOP_LENGTH - 1;
     }
     
-    // Add event to current pulse's bucket
-    if (loop->currentPulse < MAX_LOOP_LENGTH) {
+    // Add event to quantized pulse's bucket
+    if (quantizedPulse < MAX_LOOP_LENGTH) {
         MidiEvent event;
         event.data[0] = byte0;
         event.data[1] = byte1;
         event.data[2] = byte2;
-        bool added = loop->eventBuckets[loop->currentPulse].add(event);
+        bool added = loop->eventBuckets[quantizedPulse].add(event);
         
         if (added) {
             // Track last pulse with recorded event
-            loop->lastPulseWithEvent = loop->currentPulse;
+            loop->lastPulseWithEvent = quantizedPulse;
             
 #if VLOOP_DEBUG
             // Count recorded notes
