@@ -6,7 +6,7 @@
 #define VLOOP_DEBUG true
 
 // Test mode - set to true to enable test sequence generation
-#define VLOOP_TEST_SEQUENCE true
+#define VLOOP_TEST_SEQUENCE false
 
 struct MidiEvent {
     uint8_t data[3];
