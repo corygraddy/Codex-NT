@@ -74,6 +74,7 @@ struct VLoop : public _NT_algorithm {
     uint32_t noteOffSent;
     uint32_t midiSkippedNotRecording;
     uint32_t midiSkippedQuantization;
+    uint32_t bucketOverflows;
     uint32_t stepCallCount;
     uint16_t lastPulseWithMidi;
     uint8_t lastMidiStatus;
@@ -111,6 +112,7 @@ struct VLoop : public _NT_algorithm {
         noteOffSent = 0;
         midiSkippedNotRecording = 0;
         midiSkippedQuantization = 0;
+        bucketOverflows = 0;
         stepCallCount = 0;
         lastPulseWithMidi = 0;
         lastMidiStatus = 0;
@@ -197,6 +199,29 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         loop->currentPulse = 0;
         loop->isRecording = false;
         loop->isPlaying = false;
+        loop->lastPulseWithEvent = 0;
+        
+#if VLOOP_DEBUG
+        // Reset debug counters on clear
+        loop->totalClockEdges = 0;
+        loop->totalMidiSent = 0;
+        loop->totalMidiReceived = 0;
+        loop->totalMidiPassthrough = 0;
+        loop->totalMidiDropped = 0;
+        loop->droppedWhileRecording = 0;
+        loop->droppedWhilePlaying = 0;
+        loop->droppedWhileIdle = 0;
+        loop->noteOnReceived = 0;
+        loop->noteOffReceived = 0;
+        loop->noteOnRecorded = 0;
+        loop->noteOffRecorded = 0;
+        loop->noteOnSent = 0;
+        loop->noteOffSent = 0;
+        loop->midiSkippedNotRecording = 0;
+        loop->midiSkippedQuantization = 0;
+        loop->bucketOverflows = 0;
+        loop->stepCallCount = 0;
+#endif
     }
     loop->lastClear = clearActive;
     
@@ -398,18 +423,26 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
         event.data[0] = byte0;
         event.data[1] = byte1;
         event.data[2] = byte2;
-        loop->eventBuckets[loop->currentPulse].add(event);
+        bool added = loop->eventBuckets[loop->currentPulse].add(event);
         
-        // Track last pulse with recorded event
-        loop->lastPulseWithEvent = loop->currentPulse;
-        
+        if (added) {
+            // Track last pulse with recorded event
+            loop->lastPulseWithEvent = loop->currentPulse;
+            
 #if VLOOP_DEBUG
-        // Count recorded notes
-        uint8_t msgType = byte0 & 0xF0;
-        if (msgType == 0x90 && byte2 > 0) {  // Note on
-            loop->noteOnRecorded++;
-        } else if (msgType == 0x80 || (msgType == 0x90 && byte2 == 0)) {  // Note off
-            loop->noteOffRecorded++;
+            // Count recorded notes
+            uint8_t msgType = byte0 & 0xF0;
+            if (msgType == 0x90 && byte2 > 0) {  // Note on
+                loop->noteOnRecorded++;
+            } else if (msgType == 0x80 || (msgType == 0x90 && byte2 == 0)) {  // Note off
+                loop->noteOffRecorded++;
+            }
+#endif
+        }
+#if VLOOP_DEBUG
+        else {
+            // Bucket was full - event dropped!
+            loop->bucketOverflows++;
         }
 #endif
     }
@@ -470,6 +503,8 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
     stream.addNumber((int)loop->midiSkippedNotRecording);
     stream.addMemberName("midiSkippedQuantization");
     stream.addNumber((int)loop->midiSkippedQuantization);
+    stream.addMemberName("bucketOverflows");
+    stream.addNumber((int)loop->bucketOverflows);
     stream.addMemberName("stepCallCount");
     stream.addNumber((int)loop->stepCallCount);
     stream.addMemberName("lastPulseWithMidi");
