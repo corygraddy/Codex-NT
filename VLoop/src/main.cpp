@@ -284,9 +284,6 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
     loop->totalMidiReceived++;
 #endif
     
-    // Always pass through incoming MIDI to output
-    NT_sendMidi3ByteMessage(kNT_destinationInternal, byte0, byte1, byte2);
-    
     // Don't record system messages
     if ((byte0 & 0xF0) == 0xF0) return;
     
