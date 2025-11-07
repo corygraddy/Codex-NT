@@ -152,19 +152,9 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     loop->stepCallCount++;
 #endif
     
-    // Send buffered MIDI passthrough first
-    for (uint8_t i = 0; i < loop->passthroughCount; i++) {
-        NT_sendMidi3ByteMessage(
-            kNT_destinationInternal,
-            loop->passthroughBuffer[i].data[0],
-            loop->passthroughBuffer[i].data[1],
-            loop->passthroughBuffer[i].data[2]
-        );
-#if VLOOP_DEBUG
-        loop->totalMidiPassthrough++;
-#endif
-    }
-    loop->passthroughCount = 0;  // Clear buffer
+    // NOTE: MIDI passthrough disabled - causes CPU overload
+    // Users should route MIDI manually in disting NT if passthrough needed
+    loop->passthroughCount = 0;  // Clear buffer without sending
     
     // Get parameter values
     int clockBusIndex = (int)loop->v[kParamClockInput] - 1;
