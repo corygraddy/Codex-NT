@@ -1,0 +1,153 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Draft//EN">
+
+<! File:       tutorial_first_startup.html>
+<! Library:    seq66/data/share/tutorial>
+<! Author:     Chris Ahlstrom >
+<! Date:       2022-05-19>
+<! Updates:    2023-07-19>
+<! Version:    $Revision$>
+<! License:    $XPC_SUITE_GPL_LICENSES$>
+
+<head>
+   <title> Seq66 Basic Tutorial: First Startup </title>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+   <meta http-equiv="Content-Style-Type" content="text" />
+   <meta http-equiv="Content-Language" content="en-us">
+   <meta name="generator" content="vim">
+   <meta name="description" content="Seq66 Basic Tutorial">
+   <meta name="keywords" content="seq66 sequencer live midi">
+   <link href="css/slide.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+   <table
+      align="left"
+      width="800"
+      height="512"
+      cellpadding="4"
+      cellspacing="0">
+      <tbody>
+         <tr>
+            <br>
+         </tr>
+         <tr>
+            <td align="center" valign="center" colspan="3"
+               height="80" class="slideheader">
+               <p class="slideheader">
+                  Seq66 Basic Tutorial
+                  <p class="slidetopic"> First Startup </p>
+               </p>
+            </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" colspan="3" height="2"> &nbsp; </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" colspan="3" class="slideintro">
+                <p class="slideintro">
+                The first startup of <i>Seq66</i> makes default settings,
+                and creates the configuration files when <i>Seq66</i> exits.
+                Now is a good time to make sure the desktop theme, the
+                <i>Qt</i> theme, <code>qss</code> style-sheet, and the
+                <code>palette</code> all come together for a nice look.
+                See the user's manual for details.
+                </p>
+            </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" colspan="3" height="0"> &nbsp; </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" colspan="1">
+              <ul>
+                 <li>
+                    <b> Ports. </b>
+                    This diagram shows the MIDI port
+                    setups on <i>Linux</i> using the <i>ALSA</i> engine (the
+                    default).  It will look different if <i>JACK</i> is used, or
+                    if running in <i>Windows</i>.
+                    The top section is "Clocks" (MIDI-out ports),
+                    with enabled ports set to "Off".
+                    The bottom section is "Input" (MIDI-in ports);
+                    check-marked ports are enabled for recording.
+                 </li>
+                 <li>
+                    <b> JACK. </b>
+                    Running <code>qseq66 --jack</code> or setting
+                    <i>JACK</i> in <i>Preferences / JACK</i>) requires
+                    using <code>a2jmidid</code> or a recent version
+                    of <i>JACK</i> to expose USB MIDI ports to
+                    <i>JACK</i>.
+                 </li>
+                 <li>
+                    <b> Windows. </b>
+                    Running <code>qpseq66.exe</code> might show an
+                    error; the
+                    <i>Microsoft MIDI Mapper</i> has grabbed the port(s).
+                    See the manual or
+                 <code>C:/Program Files/Seq66/data/ readme.windows</code>.
+                 </li>
+                 <li>
+                    <b> First Exit. </b>
+                    At exit, <i>Seq66</i> saves the current settings
+                    in the files shown <a href="configuration.html">here</a>.
+                 </li>
+                 <li>
+                    <b> Smoke Test. </b>
+                    Load a demo file like
+                    <code>Peter Gunn - reconstructed.midi</code>
+                    in <code>/usr/local/share/seq66-0.99/midi/</code>
+                    (<i>Linux</i>) or
+                    <code>C:/Program Files/Seq66/data/midi</code>.
+                    (<i>Windows</i>).
+                    Go to the "None" drop-down box at
+                    the top and select the desired output (hardware/software
+                    synthesizer).
+                    Click the "Play" button and verify that it
+                    <i>smokes</i> (plays)!
+                 </li>
+              </ul>
+            </td>
+            <td align="center" valign="center" colspan="2">
+               <table>
+                    <tr>
+                         <p align="left">
+                          If not, try trouble-shooting;
+                          if that fails, ask us!  Save the song with this
+                          output for later demos.
+                         </p>
+                    </tr>
+                    <tr>
+                        <td align="center" valign="center">
+                          <p class="slideintro">
+                             <img src="images/app/ports.png"
+                               alt="Seq66 preferences showing clocks/ports"
+                               width="350" height="auto">
+                          </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="caption">
+                           <b>Output Ports ("Clocks") and Input Ports</b>
+                        </td>
+                    </tr>
+                    <p> </p>
+               </table>
+            </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" width="512"
+               colspan="3" class="slidenote">
+               <p class="slidenote">
+                  There are many many use cases for <i>Seq66</i>.
+                  No way to cover them all, even in the user's manual.
+               </p>
+            </td>
+         </tr>
+      </tbody>
+   </table>
+</body>
+
+</html>
+

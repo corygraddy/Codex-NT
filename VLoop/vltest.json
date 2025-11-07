@@ -1,0 +1,363 @@
+{
+"kind": "disting NT preset",
+ "author": "Cory Graddy          ",
+ "saved-from": ["v1.11.0","Oct 20 2025 12:26:47"]
+ ,
+ "engine": {
+ "sampleRate": 44100,
+  "blockSize": 16}
+ ,
+ "name": "vltest              ",
+ "version": 2,
+ "slots": [{
+  "guid": "clck",
+   "specs": [1,0,0]
+   ,
+   "name": "Clock                  ",
+   "parameters": [[0,0,1200,1,4,2,1,2,0,0,0,0]
+    ,[1,1,1,0,2,0,50,1,0,10,0,1]
+    ]
+   ,
+   "ui": {
+   "page": 1,
+    "items": [2,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "params"}
+   }
+  ,{
+  "guid": "VLOP",
+   "specs": [0,0,0]
+   ,
+   "eventCount": 58,
+   "loopLength": 302,
+   "currentPulse": 77,
+   "playbackIndex": 14,
+   "isRecording": false,
+   "isPlaying": true,
+   "events": [{
+    "pulse": 4,
+     "status": 144,
+     "data1": 48,
+     "data2": 99}
+    ,{
+    "pulse": 6,
+     "status": 128,
+     "data1": 48,
+     "data2": 64}
+    ,{
+    "pulse": 15,
+     "status": 144,
+     "data1": 50,
+     "data2": 94}
+    ,{
+    "pulse": 16,
+     "status": 128,
+     "data1": 50,
+     "data2": 64}
+    ,{
+    "pulse": 25,
+     "status": 144,
+     "data1": 52,
+     "data2": 94}
+    ,{
+    "pulse": 27,
+     "status": 128,
+     "data1": 52,
+     "data2": 64}
+    ,{
+    "pulse": 35,
+     "status": 144,
+     "data1": 53,
+     "data2": 91}
+    ,{
+    "pulse": 36,
+     "status": 128,
+     "data1": 53,
+     "data2": 64}
+    ,{
+    "pulse": 47,
+     "status": 144,
+     "data1": 55,
+     "data2": 96}
+    ,{
+    "pulse": 47,
+     "status": 128,
+     "data1": 55,
+     "data2": 64}
+    ,{
+    "pulse": 57,
+     "status": 144,
+     "data1": 57,
+     "data2": 95}
+    ,{
+    "pulse": 59,
+     "status": 128,
+     "data1": 57,
+     "data2": 64}
+    ,{
+    "pulse": 67,
+     "status": 144,
+     "data1": 59,
+     "data2": 94}
+    ,{
+    "pulse": 69,
+     "status": 128,
+     "data1": 59,
+     "data2": 64}
+    ,{
+    "pulse": 78,
+     "status": 144,
+     "data1": 60,
+     "data2": 88}
+    ,{
+    "pulse": 79,
+     "status": 128,
+     "data1": 60,
+     "data2": 64}
+    ,{
+    "pulse": 88,
+     "status": 144,
+     "data1": 62,
+     "data2": 90}
+    ,{
+    "pulse": 90,
+     "status": 128,
+     "data1": 62,
+     "data2": 64}
+    ,{
+    "pulse": 99,
+     "status": 144,
+     "data1": 64,
+     "data2": 89}
+    ,{
+    "pulse": 100,
+     "status": 128,
+     "data1": 64,
+     "data2": 64}
+    ,{
+    "pulse": 109,
+     "status": 144,
+     "data1": 65,
+     "data2": 93}
+    ,{
+    "pulse": 111,
+     "status": 128,
+     "data1": 65,
+     "data2": 64}
+    ,{
+    "pulse": 119,
+     "status": 144,
+     "data1": 67,
+     "data2": 88}
+    ,{
+    "pulse": 120,
+     "status": 128,
+     "data1": 67,
+     "data2": 64}
+    ,{
+    "pulse": 129,
+     "status": 144,
+     "data1": 69,
+     "data2": 87}
+    ,{
+    "pulse": 131,
+     "status": 128,
+     "data1": 69,
+     "data2": 64}
+    ,{
+    "pulse": 139,
+     "status": 144,
+     "data1": 71,
+     "data2": 92}
+    ,{
+    "pulse": 141,
+     "status": 128,
+     "data1": 71,
+     "data2": 64}
+    ,{
+    "pulse": 150,
+     "status": 144,
+     "data1": 72,
+     "data2": 89}
+    ,{
+    "pulse": 151,
+     "status": 128,
+     "data1": 72,
+     "data2": 64}
+    ,{
+    "pulse": 159,
+     "status": 144,
+     "data1": 71,
+     "data2": 91}
+    ,{
+    "pulse": 161,
+     "status": 128,
+     "data1": 71,
+     "data2": 64}
+    ,{
+    "pulse": 169,
+     "status": 144,
+     "data1": 69,
+     "data2": 93}
+    ,{
+    "pulse": 171,
+     "status": 128,
+     "data1": 69,
+     "data2": 64}
+    ,{
+    "pulse": 179,
+     "status": 144,
+     "data1": 67,
+     "data2": 92}
+    ,{
+    "pulse": 180,
+     "status": 128,
+     "data1": 67,
+     "data2": 64}
+    ,{
+    "pulse": 189,
+     "status": 144,
+     "data1": 65,
+     "data2": 94}
+    ,{
+    "pulse": 191,
+     "status": 128,
+     "data1": 65,
+     "data2": 64}
+    ,{
+    "pulse": 199,
+     "status": 144,
+     "data1": 64,
+     "data2": 90}
+    ,{
+    "pulse": 200,
+     "status": 128,
+     "data1": 64,
+     "data2": 64}
+    ,{
+    "pulse": 209,
+     "status": 144,
+     "data1": 62,
+     "data2": 93}
+    ,{
+    "pulse": 211,
+     "status": 128,
+     "data1": 62,
+     "data2": 64}
+    ,{
+    "pulse": 220,
+     "status": 144,
+     "data1": 60,
+     "data2": 91}
+    ,{
+    "pulse": 221,
+     "status": 128,
+     "data1": 60,
+     "data2": 64}
+    ,{
+    "pulse": 230,
+     "status": 144,
+     "data1": 59,
+     "data2": 87}
+    ,{
+    "pulse": 231,
+     "status": 128,
+     "data1": 59,
+     "data2": 64}
+    ,{
+    "pulse": 239,
+     "status": 144,
+     "data1": 57,
+     "data2": 93}
+    ,{
+    "pulse": 241,
+     "status": 128,
+     "data1": 57,
+     "data2": 64}
+    ,{
+    "pulse": 250,
+     "status": 144,
+     "data1": 55,
+     "data2": 95}
+    ,{
+    "pulse": 251,
+     "status": 128,
+     "data1": 55,
+     "data2": 64}
+    ,{
+    "pulse": 260,
+     "status": 144,
+     "data1": 53,
+     "data2": 88}
+    ,{
+    "pulse": 262,
+     "status": 128,
+     "data1": 53,
+     "data2": 64}
+    ,{
+    "pulse": 271,
+     "status": 144,
+     "data1": 52,
+     "data2": 90}
+    ,{
+    "pulse": 272,
+     "status": 128,
+     "data1": 52,
+     "data2": 64}
+    ,{
+    "pulse": 281,
+     "status": 144,
+     "data1": 50,
+     "data2": 91}
+    ,{
+    "pulse": 283,
+     "status": 128,
+     "data1": 50,
+     "data2": 64}
+    ,{
+    "pulse": 291,
+     "status": 144,
+     "data1": 48,
+     "data2": 79}
+    ,{
+    "pulse": 293,
+     "status": 128,
+     "data1": 48,
+     "data2": 64}
+    ]
+   ,
+   "name": "VLoop                  ",
+   "parameters": [0,1,0,1,0]
+   ,
+   "ui": {
+   "page": 0,
+    "items": [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "params"}
+   }
+  ,{
+  "guid": "pymu",
+   "specs": [4,0,0]
+   ,
+   "folder": "!LABS Soft Pno - PedOn",
+   "saveFolder": "untitled",
+   "saveFilename": "sample",
+   "name": "Poly Multisample       ",
+   "parameters": [0,2,0,0,0,-1,0,48,13081,0,0,0,0,0,0,0,0,0,0,0,0,1,13,14,0,0,1,1,0,0,60,100,77,100,0,0,0,0,0,0,1,1,1,1,1,1,1,2,0,0,1,1,0,0,1,0,3,0,0,1,0,0,0,0,-1,0,0,0,1000,0,0,0,0,500,0,-200]
+   ,
+   "ui": {
+   "page": 0,
+    "items": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "params"}
+   }
+  ]
+ ,
+ "ui": {
+ "currentSlot": 1,
+  "displayMode": "algorithm",
+  "perfPage": {
+  "display": "params",
+   "item": 0}
+  }
+ }

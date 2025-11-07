@@ -1,0 +1,251 @@
+%-------------------------------------------------------------------------------
+% seq66 recording
+%-------------------------------------------------------------------------------
+%
+% \file        seq66 recording.tex
+% \library     Documents
+% \author      Chris Ahlstrom
+% \date        2023-11-25
+% \update      2025-07-02
+% \version     $Revision$
+% \license     $XPC_GPL_LICENSE$
+%
+%     Provides a discussion of the MIDI GUI recording that Seq66
+%     supports.
+%
+%-------------------------------------------------------------------------------
+
+\section{Seq66 Recording In Depth}
+\label{sec:recording}
+
+   Recording in \textsl{Seq66} has been greatly enhanced.
+   Multiple patterns can be recorded at once, with events
+   routed to particular patterns based on the buss number the event came
+   in on, or its channel number.
+   Additional ways to toggle recording have been added.
+   Additional recording alterations have been added, such as on-the-fly note
+   mapping.
+   It can get a bit complex to keep track of, hence this section,
+   which walks the user through some scenarios.
+
+   Before getting started, note that recording also
+   can be done during count-in via the metronome feature.
+   See \sectionref{subsection:edit_preferences_metronome}.
+
+\subsection{Recording Scenarios}
+\label{sec:recording_scenarios}
+
+   The following recording scenarios are available:
+
+   \begin{itemize}
+      \item \textbf{Standard Recording}.
+         This provides the normal method of recording. Open a pattern in a
+         window and enable recording, or right-click on its live-grid
+         slot and enable recording..
+         The last slot selected for recording receives the events.
+         Events are received from all enabled MIDI input ports.
+         In this mode the record-button at the bottom of the main window
+         is red.
+         The slot popup-menu does not provide for setting an input buss
+         in this mode.
+      \item \textbf{Record-by-Bus}.
+         In this mode, any pattern that specifies a specific input buss
+         can be enabled for recording.
+         Incoming events are routed to the first pattern that has an input
+         buss matching the buss on which the event was recorded.
+         In this mode the record-button at the bottom of the main window
+         is green.
+         To designate a recording buss, first go to
+         \textbf{Edit / Preferences / MIDI Input} and enable
+         \textbf{Record into patterns by bus}.
+         Then right-click on the pattern and select an
+         \textbf{Input bus}. (This popup menu entry only appears when
+         record-by-bus is active.)
+      \item \textbf{Record-by-Channel}.
+         In this mode, one enables recording in patterns numbered from 0 to 15
+         (channels 1 to 16) with output channels set from 0 to 15.
+         Incoming events are analyze for their channel and are recording into
+         the corresponding pattern number.
+         In this mode the record-button at the bottom of the main window
+         is yellow.
+      \item \textbf{One-shot Recording}.
+         When one-shot mode is selected, recording of incoming
+         events proceeds from the "L" marker to the end of the pattern length.
+   \end{itemize}
+
+   The "Record-by" options above are mutually exclusive.
+
+\subsubsection{Standard Recording}
+\label{subsubsec:recording_standard_recording}
+
+   Standard recording allows the enabling of recording in a single pattern.
+   It \textsl{requires} that the other two modes be turned off.
+   Once a pattern is set to record, no other pattern can be set to record until
+   the original pattern is set to not record.
+   The single recording pattern gets all events from any MIDI
+   input that is enabled.
+
+   In standard recording there a many ways to enable recording into
+   a pattern.
+
+   \begin{itemize}
+      \item Open the pattern editor in a window or tab or click on the
+         pattern slot to record, then click the red record
+         button at the bottom of the pattern editor.
+         The pattern will also
+         show a red circle to indicate that recording has been enabled.
+      \item Right-click on the desired pattern in the grid and select
+         \textbf{Record toggle} from the menu.
+      \item Touch a pattern or click its hot key, then
+         click the red record button at the bottom of the main window.
+      \item Select the \textbf{Record} grid mode, then select a pattern.
+         To change the selected slot, click on the red record button
+         to disable recording, then click on the desired slot.
+         Recording is active on that slot.
+         (This option is more useful in the other recording scenarios.)
+   \end{itemize}
+
+   Again, remember that, with standard recording, only one pattern can
+   accept events.
+   Also note that this mode should be used if one
+   expects to record SysEx events, which have no channel.
+
+   Lastly, note that recording proceeds from the "L" marker, which
+   can be moved from 0 first, if desired.
+
+\subsubsection{Route-Input-By-Buss}
+\label{subsubsec:recording_route_by_buss}
+
+   \index{record!by buss}
+   Route-input-by-buss (also known as record-by-buss)
+   is enabled whenever a pattern in a song specifies an
+   input buss \textsl{and}
+   \textbf{Edit / Preferences / MIDI Input / Record into patterns by
+   bus} is checked. It is an 'rc' file option.
+   If it is enabled, it supercedes the
+   \textbf{record-by-channel} option and
+   disables that standard recording mode described above.
+
+   When route-by-bus is enabled, an internal container is populated with
+   all the patterns in the current play-set that specify an input buss.
+   This container is rebuilt when a sequence is added or removed.
+   It is stored in the \texttt{c\_midiinbus} SeqSpec in the song.
+
+   If route-by-bus is enabled, a sequence with an input bus that matches the
+   buss associated with the incoming event is looked up, and input is
+   streamed to it.
+
+   In this scenario, multiple patterns can be enabled for recording,
+   and output from multiple input ports are routed appropriately.
+
+   For the green record button to be enabled, at least one pattern
+   must specify an input bus.
+   Clicking on the green record button at the bottom of the main window
+   will turn on recording for \textsl{all}
+   patterns that specify an input buss.
+
+\subsubsection{Record-By-Channel}
+\label{subsubsec:recording_record_by_channel}
+
+   Record-by-channel can be enabled in
+   \textbf{Edit / Preferences / MIDI Input / Record into patterns by
+   channel}, which is an 'rc' file option.
+
+   It works by routing events to the first pattern that has specified an 
+   output (not input) channel that matches the channel (if applicable) of
+   the incoming MIDI event.
+   The patterns applicable are entered into a list of patterns with specified
+   output channels.
+
+   \textbf{IMPORTANT}:
+   In order for a channel to be recorded, it's corresponding pattern
+   must exist. Hence,
+   for convenience, there is a MIDI file installed, called
+   \textbf{16-blank-patterns}, which specifies all the output channels.
+   It can be copied and used for the first recording from a device
+   playing on multiple channels, or from multiple devices, each playing
+   on a different channel.
+
+   Clicking on the yellow record button at the bottom of the main window
+   will turn on recording for \textsl{all}
+   patterns, except for patterns that specify "Free" (i.e. no forced channel).
+
+   Note that the route-by-buss option, described above, supercedes this
+   option.
+
+\subsection{Recording Modes}
+\label{sec:recording_modes}
+
+   Recording can also transform (alter) the incoming events.
+   These transformations can also be applied after recording.
+   Also see \sectionref{paragraph:configuration_midi_record_quan}.
+
+   \begin{itemize}
+      \item \textbf{Tighten}.
+         Partial quantization to the current snap value.
+      \item \textbf{Quantize}.
+         Full quantization to the current snap value.
+      \item \textbf{Note-map}.
+         If a 'drums' file is active, then notes are changed
+         in note-value according to that file.
+         This is most useful for drums, but other effects are possible.
+   \end{itemize}
+
+\subsection{Seq66-to-Seq66 Recording}
+\label{sec:recording_seq_to_seq}
+
+   This section describes a way to have one instance of \textsl{Seq66}
+   (\texttt{qseq66}) interact with another.
+   The first \textsl{Seq66} to start runs with a different client name
+   (optional) and a different 'rc' file name (to not affect the normal
+   configuration of \textsl{Seq66}).
+   The first \textsl{Seq66} runs with virtual ports; the second
+   \textsl{Seq66} runs normally and can auto-connect to these
+   ports.
+
+   Run the first instance with
+   the "virtual" option; the first number is the number of output ports
+   to make, and the second is the number of input ports to make.
+
+   \begin{verbatim}
+       $ qseq66 --client first66 --rc first66 --option virtual=2,2
+   \end{verbatim}
+
+   Then run another \textsl{Seq66} normally:
+
+   \begin{verbatim}
+       $ qseq66
+   \end{verbatim}
+
+   Remap and restart if necessary.
+
+   In the \textbf{MIDI Clock} tab should be "first66:midi out 0" and
+   "first66:midi out 1".
+   In the \textbf{MIDI Input} tab should be "first66:midi in 0" and
+   "first66:midi in 1".
+   Among the ports shown, along with plugged in hardware, are:
+
+   \begin{verbatim}
+      $ aplaymidi -l
+       Port    Client name                      Port name
+       44:0    MPK mini Play mk3                MPK mini Play mk3 MIDI 1
+      128:0    first66                          midi in 0
+      128:1    first66                          midi in 1
+      ahlstrom@mlstrycoo ~/Home/ca/mls/git/seq66
+      $ arecordmidi -l
+       Port    Client name                      Port name
+       44:0    MPK mini Play mk3                MPK mini Play mk3 MIDI 1
+      128:2    first66                          midi out 0
+      128:3    first66                          midi out 1
+   \end{verbatim}
+
+   Leave this instance running, and run a plain \texttt{qseq66} command.
+   It should show the "first66" output (clocks) and input ports.
+
+   One should now be able to pass MIDI events between the two instances.
+
+% VERIFY this at some point.
+
+%-------------------------------------------------------------------------------
+% vim: ts=3 sw=3 et ft=tex
+%-------------------------------------------------------------------------------

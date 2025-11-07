@@ -1,0 +1,568 @@
+%-------------------------------------------------------------------------------
+% menu
+%-------------------------------------------------------------------------------
+%
+% \file        menu.tex
+% \library     Documents
+% \author      Chris Ahlstrom
+% \date        2015-08-31
+% \update      2025-05-31
+% \version     $Revision$
+% \license     $XPC_GPL_LICENSE$
+%
+%     Provides the Menu section of seq66-user-manual.tex.
+%
+%-------------------------------------------------------------------------------
+
+\section{Menu}
+\label{sec:menu}
+
+   The \textsl{Seq66} menu structure is more complex than
+   that of \textsl{Seq24}.  In particular, the \textsl{File} menu has two
+   variants:  a normal file menu, and a file menu when \textsl{Seq66} is
+   running under the \textsl{New/Non Session Manager}.
+   (See \sectionref{subsec:sessions_nsm}.)
+
+\subsection{Menu / File}
+\label{subsec:menu_file}
+
+   The \textbf{File} menu is used to save and load files in
+   Standard MIDI Format 0 or 1, \textsl{Cakewalk} "WRK",
+   and \textsl{Seq66} MIDI files.
+   It also supports a list of recent files, and
+   sub-menus for import and export functions,
+   which have expanded quite a bit.
+   The \textsl{Seq66} \textbf{File} menu contains the sub-items shown below.
+   The next few sub-sections discuss
+   the sub-items in the \textbf{File} menu.
+   Please note that these entries are different
+   if \textsl{Seq66} is started under the control of the
+   \textsl{New/Non Session Manager}.  
+   See \sectionref{subsubsec:sessions_file_menu}.
+   However, the import and export menus remain the same, although there are
+   slight differences in how they work.
+
+\begin{figure}[H]
+   \centering 
+   \includegraphics[scale=0.75]{main-menu/file/file-import-export-menus.png}
+   \caption{Seq66 File Menu Plus Import/Export, Composite View}
+   \label{fig:menu_file_items}
+\end{figure}
+
+   \begin{enumber}
+      \item \textbf{New}
+      \item \textbf{Open}
+      \item \textbf{Open Playlist}
+      \item \textbf{Recent MIDI files}
+      \item \textbf{Save}
+      \item \textbf{Save As}
+      \item \textbf{Import}
+      \begin{enumber}
+         \item \textbf{Project Configuration...}
+         \item \textbf{MIDI to Current Set...}
+         \item \textbf{Playlist...}
+         \index{restart!automatic}
+         Once the playlist is imported,
+         \textsl{Seq66} is automatically \textsl{\textbf{restarted}}
+         in order to load the playlist.
+         Be careful!
+      \end{enumber}
+      \item \textbf{Export}
+      \begin{enumber}
+         \item \textbf{Project Configuration...}
+         \item \textbf{MIDI Only...}
+         \item \textbf{Song...}
+         \item \textbf{SMF 0...}
+      \end{enumber}
+      \item \textbf{Quit} (\textbf{Exit} in \textsl{Windows})
+   \end{enumber}
+
+   For information on the \textbf{File} menu when \textsl{Seq66} is
+   running under the \textsl{Non Session Manager}, see
+   \sectionref{subsubsec:sessions_file_menu}.
+
+\subsubsection{Menu / File / New}
+\label{subsec:menu_file_new}
+
+   The \textbf{New} menu entry clears the current song.
+   (A play-list or mute-groups setup, if loaded, are not affected.)
+   If unsaved changes are pending, the user is prompted to save the changes.
+   Prompting for changes is more comprehensive than \textsl{Seq24}.
+   However, when in doubt, save!
+   Keep backups of your tunes and configuration files!
+
+\subsubsection{Menu / File / Open}
+\label{subsubsec:menu_file_open}
+
+   The \textbf{Open} menu entry opens a song (MIDI file or \textsl{Cakewalk}
+   WRK file), replacing the current song (after a prompt if the song was
+   modified).
+   It opens up a standard file dialog:
+
+\begin{figure}[H]
+   \centering 
+   \includegraphics[scale=0.65]{main-menu/file/light-menu-file-open.png}
+   \caption{File / Open}
+   \label{fig:menu_file_open}
+\end{figure}
+
+   This dialog lets one type a file-name, highlighting the first file
+   that matches the characters typed.
+   \textsl{Seq66} can open \textsl{Seq66}, MIDI SMF 0, and SMF 1 files, and
+   \textsl{Cakewalk} WRK files.
+   If the file is an SMF 0 file, where all channels appear on one track, the
+   track can be split so that each channel (0 to 15)
+   is stored in the corresponding
+   pattern, pattern 0 also holds meta events,
+   and pattern 16 contains the original track.
+   This feature is enabled via
+   \textbf{Edit / Preferences / Pattern / Automatic conversion of SMF 0 to SMF
+   1} or the 'usr' setting \texttt{convert-to-smf-1 = true}.
+
+   Note that a MIDI file can be drag-and-dropped from a file manager onto
+   the grid to open a file.
+
+\subsubsection{Menu / File / Open Playlist}
+\label{subsubsec:menu_file_open_playlist}
+
+   The \textbf{Open Playlist...} menu entry opens a \textsl{Seq66}
+   play-list file.
+
+\begin{figure}[H]
+   \centering 
+   \includegraphics[scale=0.65]{main-menu/file/dark-menu-file-open-playlist.png}
+   \caption{File / Open Playlist}
+   \label{fig:menu_file_open_playlist}
+\end{figure}
+
+   The playlist file contains a list of "playlist sections",
+   each listing a number of MIDI songs.
+   These playlists and songs can be
+   selected by the arrow keys or by MIDI control,
+   and are displayed and editiable in the \textsl{Playlist} tab
+   in the main window.
+   See \sectionref{sec:playlist}.
+
+\subsubsection{Menu / File / Recent MIDI files}
+\label{subsubsec:menu_file_recent}
+
+   This menu entry provides a list of the last few MIDI files created or opened;
+   play-list selections are \textsl{not} included in this list.
+
+\begin{figure}[H]
+   \centering 
+   \includegraphics[scale=0.65]{main-menu/file/menu-recent-files.png}
+   \caption{Seq66 Menu File Recent Files}
+   \label{fig:menu_file_recent_files}
+\end{figure}
+
+   Here is the long form when the 'rc' file's
+   \texttt{[recent-files] full-paths} value is set to true:
+
+\begin{figure}[H]
+   \centering 
+   \includegraphics[scale=0.65]{main-menu/file/menu-recent-files-long.png}
+   \caption{Seq66 Menu File Recent Files, Full Paths}
+   \label{fig:menu_file_recent_files_full_paths}
+\end{figure}
+
+   This list is saved in the \texttt{[recent-files]} section of the
+   'rc' configuration file.
+   In the 'rc' file, the full path to the file-name is stored.
+   This path is in "UNIX" format, using the forward slash (solidus),
+   as the path separator, even in \textsl{Windows}.
+   The \texttt{full-paths} option can be set to show the full path in the
+   recent-files drop-down menu.
+   Only unique entries are included in the recent-files list.
+   The limit is 12 recent-file entries.
+   This is a feature from \textsl{Kepler34} \cite{kepler34}.
+   One can also set \textsl{Seq66} to load the most-recent file at startup.
+   Here is an example from an 'rc' file:
+
+\begin{verbatim}
+   [recent-files]
+   full-paths = false
+   load-most-recent = true
+   count = 3
+   /home/user/git/seq66/data/b4uacuse-gm-patchless.midi
+   /home/user/git/seq66/data/midi/colours.midi
+   /home/user/git/Julian-data/TestBeeps.midi
+\end{verbatim}
+
+\subsubsection{Menu / File / Save and Save As}
+\label{subsubsec:menu_file_open_save_as}
+
+   The \textbf{Save} menu entry saves the song under its current file-name.
+   If there is no current file-name, it opens up a standard file
+   dialog to name and save the file.
+   The \textbf{Save As} menu entry saves a song under a different name.
+   It opens up the following standard file dialog, very similar to the 
+   \textbf{File Open} dialog, with an additional \textbf{Name} text-edit field.
+   The exact look of the dialog depends on system Qt settings or the current
+   Qt theme.
+
+\begin{figure}[H]
+   \centering 
+   \includegraphics[scale=0.65]{main-menu/file/dark-menu-file-save-as.png}
+   \caption{File / Save As}
+   \label{fig:menu_file_save_as}
+\end{figure}
+
+   To save a new file or save the current file to a new name,
+   enter the name in the name field, without an extension.
+   \textsl{Seq66} will append a \texttt{.midi} extension to the filename.
+   The file will be saved in a format that the Linux \textsl{file} command
+   will tag as something like:
+
+   \begin{verbatim}
+      colours.midi: Standard MIDI data (format 1) using 16 tracks at 1/192
+   \end{verbatim}
+
+   It looks like a simple MIDI file, and yet, if one re-opens it in
+   \textsl{Seq66}, one sees that the mute-groups, labeling, pattern
+   information, and song layout have been preserved in this file.
+   This information is saved in a way that MIDI-compliant software
+   should be able to use or ignore without failure.
+   After the last track in the file, a number of
+   \index{SeqSpec}
+   sequencer-specific (SeqSpec) items are saved, to preserve
+   the extra information that \textsl{Seq66} adds to the song.
+   There is no way to save a \textsl{Cakewalk} "WRK" file.
+   \textsl{Seq66} can only read them, and then save them as
+   \textsl{Seq66} files.
+
+   \index{Meta events}
+   Meta events are now handled by \textsl{Seq66}.
+   Meta events \textbf{Set Tempo}
+   and \textbf{Time Signature}
+   are now fully supported.
+   Other meta events,
+   such as \textbf{Meta MIDI Channel}
+   and \textbf{Meta MIDI Port}
+   are now read as events, and are saved back when the file is saved.
+   They cannot be edited in \textsl{Seq66}, but they are not lost.
+   (Channel and port meta events are
+   considered \textsl{obsolete} in the MIDI standard.)
+   Various meta text events, such as \textbf{Lyric},
+   can be edited and saved.
+
+\subsubsection{Menu / File / Import / Project Configuration}
+\label{subsubsec:menu_file_import_project_configuration}
+
+   This command is useful to grab an existing project configuration
+   (i.e. the set of \texttt{qseq66.*} files) and copy it
+   to the current "home" configuration directory.
+   This command is most useful in importing a project into a new
+   NSM session.
+   Previously, the "home" project would be imported automatically
+   into a new NSM session, but this was deemed confusing by some users, and
+   properly so!
+
+   This command brings up a file dialog box. Navigate to the desired
+   source directory and then select the desired 'rc' file.
+   Any configuration files in the current "home" directory are removed
+   and replaced with all files and subdirectories from the selected
+   directory.
+   If NSM is not running, \textsl{Seq66} restarts and loads the
+   imported configuration.
+   Be aware!
+   Otherwise, a prompt to restart using the NSM client is shown.
+   For more information, see
+   \sectionref{subsubsec:midi_export_file_import_project}.
+
+\subsubsection{Menu / File / Import / MIDI to Current Set}
+\label{subsubsec:menu_file_import}
+
+   The \textbf{Import} menu entry imports an SMF 0
+   or SMF 1 MIDI file as one or more patterns, one pattern per track,
+   into the specified screen-set.
+   This functionality is explained in detail in
+   \sectionref{subsubsec:midi_export_file_import}.
+
+\subsubsection{Menu / File / Import / Playlist}
+\label{subsubsec:menu_file_import_playlisMIDI to Current Sett}
+
+   A user can create a playlist that accesses MIDI files anywhere in the file
+   system.
+   However, in a session manager, it is preferable to have the configuration
+   self-contained.
+   Even without a session manager, it can be useful to copy a playlist to a
+   subdirectory in order to separate it and its MIDI files from other
+   playlists.
+   Once a project has been imported or saved, then a playlist can also be
+   imported, along with all of the MIDI files it references.
+
+   This command brings up a file dialog box. Navigate to the desired
+   source directory and then select the desired 'playlist' file.
+   This menu entry copies the playlist file and its associated
+   MIDI files; see
+   \sectionref{subsubsec:midi_export_file_import_playlist}.
+
+\subsubsection{Menu / File / Export / Project Configuration}
+\label{subsubsec:menu_file_export_project}
+
+   This menu entry lets the user select a destination directory.
+   Then the project files from the current "home" directory are copied
+   to that destination directory. Useful for backup or for making
+   an experimental configuration official.
+   See \sectionref{subsubsec:midi_export_configuration_export}.
+
+\subsubsection{Menu / File / Export / Song}
+\label{subsubsec:menu_file_export_song_as_midi}
+
+   Thanks to the \textsl{Seq32} project, the ability to export songs to MIDI
+   format has been added.  In this export, a complete song performance is
+   recoded so that other MIDI sequencers can play the performance properly.
+   This functionality is explained in detail in
+   \sectionref{subsubsec:midi_export_song_export}.
+
+\subsubsection{Menu / File / Export / MIDI Only}
+\label{subsubsec:menu_file_export_midi_only}
+
+   Sometimes it might be useful to export only the non-vendor-specific
+   (non-SeqSpec) data from a \textsl{Seq66} song, in order to reduce the
+   size of the file or to accomodate non-compliant sequencers.
+   This functionality is explained in detail in
+   \sectionref{subsubsec:midi_export_file_export_midi_only}.
+
+\subsubsection{Menu / File / Export / SMF 0}
+\label{subsubsec:menu_file_export_smf_0}
+
+   This feature allows all tracks in the song to
+   be consolidated and exported in MIDI's SMF 0 format.
+   It follows rules similar to song export.
+   See \sectionref{subsubsec:midi_export_file_export_smf_0}.
+
+\subsection{Menu / Edit}
+\label{subsec:menu_edit}
+
+   The \textbf{Edit} menu has undergone some expansion in \textsl{Seq66}.
+
+   \begin{enumber}
+      \item \textbf{Preferences...}
+      \item \textbf{Song Editor}
+      \item \textbf{Apply Song Transpose}
+      \item \textbf{Clear Mute Groups}
+      \item \textbf{Reload Mute Groups}
+      \item \textbf{Mute All Tracks}
+      \item \textbf{Unute All Tracks}
+      \item \textbf{Toggle All Tracks}
+      \item \textbf{Copy Current Set}
+      \item \textbf{Paste To Current Set}
+   \end{enumber}
+
+   \setcounter{ItemCounter}{0}      % Reset the ItemCounter for this list.
+
+   \itempar{Preferences}{edit!preferences}
+   This entry brings up a \textbf{Preferences} menu entry,
+   to allow viewing and tweaking MIDI I/O ports, displays options, JACK
+   options, and more.
+   It can also be brought up by \texttt{Ctrl-P}.
+   It has a lot of configuration items, and is
+   discussed in \sectionref{sec:edit_preferences}.
+
+   \itempar{Song Editor}{edit!song editor}
+   \index{performance editor}
+   \index{song editor}
+   This item toggles the presence of the main song/performance editor.
+   Note that the song editor is also available in the
+   \textbf{Song} tab in the main window.
+   The song/performance editor allows specifying exact numbers of loop replays;
+   this provides a canned rendition of all the patterns in theMIDI tune.
+
+   \itempar{Apply Song Transpose}{edit!song transpose}
+   \index{song transpose}
+   Selecting this item applies the global song transposition value to
+   all sequences / patterns marked as transposable.
+   This actively changes the note / pitch value of all note and aftertouch
+   events in every pattern.
+   The change can range from -12 semitones to 12 semitones.
+   For the setting of the global song transpose value, see
+   \sectionref{sec:song_editor}.
+   Normally, drum tracks are \textsl{not} transposable.
+   This can be set by clicking the "transposable" button in the
+   pattern editor.
+%  Note that transpose can be enabled in the
+%  in the sequence editor
+%  (see \sectionref{sec:pattern_editor}).
+
+   \itempar{Clear Mute Groups}{edit!clear mute groups}
+   \index{mute groups}
+   A feature of \textsl{Seq66} is that the mute groups
+   can be saved in both the 'rc' file \textsl{and} in the "MIDI" file.
+   This menu entry clears them. If this resulted in any mute-group sequences
+   status being set to false, then the user is prompted to save the MIDI
+   file, so that it will no longer have any
+   mute-group information.  And then, if the
+   application exits, the cleared mute-group information is also saved to
+   the 'rc' file.
+
+   \itempar{Reload Mute Groups}{edit!load mute groups}
+   \index{rc!mute groups}
+   This menu entry reloads the mute-groups from the 'rc' file.
+   So, if one loads a MIDI file that has its own mute groups that one does not
+   like, this command will restore one's favorite mute-grouping from the 'rc'
+   file.
+
+   \itempar{Mute All Tracks}{edit!mute all tracks}
+   \index{mute all}
+   This menu entry, useful mostly in \textbf{Live} mode,
+   immediately mutes \textsl{all} patterns in the entire song.
+   The hard-wired menu short-cut for this action is \texttt{Ctrl-M}.
+
+   \itempar{Unmute All Tracks}{edit!unmute all tracks}
+   \index{unmute all}
+   This menu entry, useful mostly in \textbf{Live} mode,
+   immediately unmutes \textsl{all} patterns in the entire song.
+   The hard-wired menu short-cut for this action is \texttt{Ctrl-U}.
+
+   \itempar{Toggle All Tracks}{edit!toggle all}
+   \index{toggle all}
+   This option toggles the mute/armed status of \textbf{all} tracks.
+   It is useful mostly \textbf{Live} mode, which overrides \textbf{Song}
+   mode even if the Song Editor is focused.
+   The hard-wired menu short-cut for this action is \texttt{Ctrl-T}.
+   The default keystroke in the 'ctrl' file is \texttt{F8}.
+
+   \itempar{Copy Current Set}{edit!copy set}
+   \index{copy set}
+   This item marks the current set (i.e. the play-set)
+   for the copying of all its patterns to another set.
+   After clicking this menu entry, one can move to another set to paste it,
+   using the following menu entry.
+
+   \itempar{Paste To Current Set}{edit!paste set}
+   \index{paste set}
+   Once a set has been copied into the internal set clipboard,
+   then this menu item is enabled.
+   Move to the desired set (whether empty or note), and then
+   click this menu item.
+   All of the patterns in the original set are pasted into the current set,
+   \textsl{overwriting all patterns} already in the set.
+   Also note that the set clipboard can be pasted after a
+   \textbf{File / New} or \textbf{File / Open},
+   to copy it into another file.
+
+\subsection{Menu / Help}
+\label{subsec:menu_help}
+
+   The usual \textbf{Help} dialog is provided.
+   As of version 0.98.8, it has been beefed up with a way to access a
+   tutorial and the user manual.
+
+   These new help items are a work in progress, so please apprise
+   us of any issues; include information on the operating system and,
+   if \textsl{Linux}, the desktop/window manager in use.
+
+\subsubsection{Menu / Help / About...}
+\label{subsubsec:menu_help_about}
+
+   \index{Help!about}
+   This menu entry shows the "About" dialog.
+   That dialog provides access to some credits for the program as well.
+   authors and the project documentors, and active link to them.
+   It also shows Git version-control information as well.
+
+\subsubsection{Menu / Help / Build Info...}
+\label{subsubsec:menu_help_build_info}
+
+   \index{Help!build info}
+   This menu entry shows the "Build Info" dialog.  This list of
+   build options enabled in the current application is the same list
+   that it generated via this command line:
+
+   \begin{verbatim}
+      $ seq66 --version
+   \end{verbatim}
+
+\subsubsection{Menu / Help / Song Summary File...}
+\label{subsubsec:menu_help_song_summary_file}
+
+   \index{Help!song summary}
+   This menu entry allows one to write a summary of the song data into a text
+   file. It brings up a file dialog which defaults to the name of the
+   currently-loaded MIDI file, with the extenstion \texttt{.text} and
+   the directory from where the MIDI file was loaded.
+   It shows the filename, the information about the sets and tracks,
+   MIDI format (0 or 1), and the PPQN.
+
+   It also shows each sequence: name, channel (128 mean there is no output
+   channel), the time signature, buss number (and any mapping), the length in
+   pulses, the event and trigger count, transposability, key and scale, and
+   color number (if any).
+   For each trigger in the pattern, its start, stop, offset, and transposition
+   values are shown.
+   This file can be helpful for trouble-shooting or solving puzzling effects in
+   the tune.
+
+\subsubsection{Menu / Help / App Keys}
+\label{subsubsec:menu_help_app_keys}
+
+   \index{Help!app keys}
+   This entry brings up a dialog that shows brief descriptions of the
+   non-automation keys available in various contexts.
+   These keys are almost exclusively hardwired and currently cannot be
+   changed via a configuration file.  By pressing a button, the desired
+   keystrokes can be quickly viewed. Note that the descriptions come from small
+   HTML files that are part of the installation.
+
+\subsubsection{Menu / Help / Tutorial}
+\label{subsubsec:menu_help_tutorial}
+
+   \index{Help!tutorial}
+   This entry brings up a short tutorial of \textsl{Seq66} in the default
+   browser. This tutorial is meant only to jump-start a new user of
+   \textsl{Seq66}, and is a work in progress.
+   It does not cover nearly as much as the user manual, so check that out in
+   the next section.
+
+   Normally, the tutorial will open a web page.  If it does not, one might need
+   to set up a default browser.  On Linux, make sure that there is a "desktop"
+   file for the browser, as in
+   \texttt{/usr/share/applications/firefox.desktop}.
+   If so, then run the following command, and then test it:
+
+   \begin{verbatim}
+      $ xdg-settings set default-web-browser firefox.desktop
+      $ xdg-open https://ahlstromcj.github.io/docs/seq66/tutorial/index.html 
+   \end{verbatim}
+
+   Windows will have its own methods, but
+   in both systems, one can override the default applications by opening
+   the specified 'usr' file (usually \texttt{qseq66.usr} or
+   \texttt{qpseq66.usr} and specifying the full path to the desired
+   applications (Linux paths shown here):
+
+   \begin{verbatim}
+      [user-options]
+      log = "/home/user/.config/seq66/seq66.log"
+      pdf-viewer = "/usr/bin/zathura"
+      browser = "/usr/bin/google-chrome"
+   \end{verbatim}
+
+   See \sectionref{subsubsec:usr_file_user_options}.
+   This setup can also be done in
+   \textbf{Edit / Preferences / Session}; see
+   \sectionref{subsection:edit_preferences_session}.
+
+\subsubsection{Menu / Help / User Manual}
+\label{subsubsec:menu_help_user_manual}
+
+   \index{Help!user manual}
+   This menu entry first tries to locate the user manual on the internet and
+   open it in the default browser. If not found, or the network is down,
+   then this entry brings up the full \textsl{Seq66} user manual in the default
+   PDF viewer.  It currently looks in the possible installation areas and in
+   the \textsl{Seq66} source tree to find the PDF.
+
+   On Linux, one can follow the setup procedure in the previous section and
+   test it via the following command, which will show the manual in the default
+   browser.:
+
+   \begin{verbatim}
+      $ xdg-open https://ahlstromcj.github.io/docs/seq66/seq66-user-manual.pdf
+   \end{verbatim}
+
+%-------------------------------------------------------------------------------
+% vim: ts=3 sw=3 et ft=tex
+%-------------------------------------------------------------------------------

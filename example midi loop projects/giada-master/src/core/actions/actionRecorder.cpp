@@ -1,0 +1,449 @@
+/* -----------------------------------------------------------------------------
+ *
+ * Giada - Your Hardcore Loopmachine
+ *
+ * -----------------------------------------------------------------------------
+ *
+ * Copyright (C) 2010-2025 Giovanni A. Zuliani | Monocasual Laboratories
+ *
+ * This file is part of Giada - Your Hardcore Loopmachine.
+ *
+ * Giada - Your Hardcore Loopmachine is free software: you can
+ * redistribute it and/or modify it under the terms of the GNU General
+ * Public License as published by the Free Software Foundation, either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * Giada - Your Hardcore Loopmachine is distributed in the hope that it
+ * will be useful, but WITHOUT ANY WARRANTY; without even the implied
+ * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Giada - Your Hardcore Loopmachine. If not, see
+ * <http://www.gnu.org/licenses/>.
+ *
+ * -------------------------------------------------------------------------- */
+
+#include "src/core/actions/actionRecorder.h"
+#include "src/core/actions/action.h"
+#include "src/core/actions/actionFactory.h"
+#include "src/core/const.h"
+#include "src/core/model/actions.h"
+#include "src/core/model/model.h"
+#include "src/core/patch.h"
+#include "src/utils/log.h"
+#include "src/utils/ver.h"
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <unordered_map>
+
+namespace giada::m
+{
+namespace
+{
+constexpr int MAX_LIVE_RECS_CHUNK = 128;
+
+/* -------------------------------------------------------------------------- */
+
+std::tuple<Frame, Frame> sanitizeFrames_(Frame f1, Frame f2, int framesInLoop)
+{
+	if (f2 == 0)
+		f2 = f1 + G_DEFAULT_ACTION_SIZE;
+
+	/* Avoid frame overflow. */
+
+	const Frame overflow = f2 - framesInLoop + 1;
+	if (overflow > 0)
+	{
+		f2 -= overflow;
+		f1 -= overflow;
+	}
+
+	return {f1, f2};
+}
+
+Frame sanitizeFrame_(Frame f, int framesInLoop)
+{
+	return std::min(f, framesInLoop - 1);
+}
+} // namespace
+
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+
+ActionRecorder::ActionRecorder(model::Model& m)
+: m_model(m)
+{
+	m_liveActions.reserve(MAX_LIVE_RECS_CHUNK);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::reset()
+{
+	m_liveActions.clear();
+	actionFactory::reset();
+	m_model.get().actions.clearAll();
+	m_model.swap(model::SwapType::NONE);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::updateBpm(float ratio, int quantizerStep)
+{
+	if (ratio == 1.0f)
+		return;
+
+	m_model.get().actions.updateKeyFrames([=](Frame old)
+	{
+		/* The division here cannot be precise. A new frame can be 44099 and the
+		quantizer set to 44100. That would mean two recs completely useless. So we
+		compute a reject value ('delta'): if it's lower than 6 frames the new frame
+		is collapsed with a quantized frame. FIXME - maybe 6 frames are too low. */
+		Frame frame = static_cast<Frame>(old * ratio);
+		if (frame != 0)
+		{
+			Frame delta = quantizerStep % frame;
+			if (delta > 0 && delta <= 6)
+				frame = frame + delta;
+		}
+		return frame;
+	});
+
+	m_model.swap(model::SwapType::NONE);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::updateSamplerate(int systemRate, int patchRate)
+{
+	if (systemRate == patchRate)
+		return;
+
+	float ratio = systemRate / (float)patchRate;
+
+	m_model.get().actions.updateKeyFrames([=](Frame old)
+	{ return floorf(old * ratio); });
+	m_model.swap(model::SwapType::NONE);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::cloneActions(ID channelId, std::size_t scene, ID newChannelId)
+{
+	copyActions(channelId, scene, scene, newChannelId);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::copyActionsToScene(ID channelId, std::size_t srcScene, std::size_t dstScene)
+{
+	copyActions(channelId, srcScene, dstScene, channelId);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::liveRec(ID channelId, std::size_t scene, MidiEvent e, Frame globalFrame)
+{
+	assert(e.isNoteOnOff()); // Can't record any other kind of events for now
+
+	/* TODO - this might allocate on the MIDI thread */
+	if (m_liveActions.size() >= m_liveActions.capacity())
+		m_liveActions.reserve(m_liveActions.size() + MAX_LIVE_RECS_CHUNK);
+
+	m_liveActions.push_back(actionFactory::makeAction(actionFactory::getNewActionId(), channelId, scene, globalFrame, e));
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::recordMidiAction(ID channelId, std::size_t scene, int note, float velocity, Frame f1, Frame f2, Frame framesInLoop)
+{
+	const auto [ff1, ff2] = sanitizeFrames_(f1, f2, framesInLoop);
+
+	MidiEvent e1 = MidiEvent::makeFrom3Bytes(MidiEvent::CHANNEL_NOTE_ON, note, 0);
+	MidiEvent e2 = MidiEvent::makeFrom3Bytes(MidiEvent::CHANNEL_NOTE_OFF, note, 0);
+
+	e1.setVelocityFloat(velocity);
+	e2.setVelocityFloat(velocity);
+
+	rec(channelId, scene, ff1, ff2, e1, e2);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::recordSampleAction(ID channelId, std::size_t scene, int type, Frame f1, Frame f2, Frame framesInLoop)
+{
+	if (isSinglePressMode(channelId))
+	{
+		const auto [ff1, ff2] = sanitizeFrames_(f1, f2, framesInLoop);
+
+		MidiEvent e1 = MidiEvent::makeFrom3Bytes(MidiEvent::CHANNEL_NOTE_ON, 0, G_MAX_VELOCITY);
+		MidiEvent e2 = MidiEvent::makeFrom3Bytes(MidiEvent::CHANNEL_NOTE_OFF, 0, G_MAX_VELOCITY);
+		rec(channelId, scene, ff1, ff2, e1, e2);
+	}
+	else
+	{
+		MidiEvent e1 = MidiEvent::makeFrom3Bytes(type, 0, G_MAX_VELOCITY);
+		rec(channelId, scene, sanitizeFrame_(f1, framesInLoop), e1);
+	}
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::deleteMidiAction(ID channelId, const Action& a)
+{
+	assert(a.isValid());
+	assert(a.event.getStatus() == MidiEvent::CHANNEL_NOTE_ON);
+
+	/* Check if 'next' exist first: could be orphaned. */
+
+	const Action* next = m_model.get().actions.findAction(a.nextId);
+
+	if (next != nullptr)
+		deleteAction(channelId, a.id, next->id);
+	else
+		deleteAction(channelId, a.id);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::deleteSampleAction(ID channelId, const Action& a)
+{
+	const Action* next = m_model.get().actions.findAction(a.nextId);
+
+	if (next != nullptr) // For ChannelMode::SINGLE_PRESS combo
+		deleteAction(channelId, a.id, next->id);
+	else
+		deleteAction(channelId, a.id);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::updateMidiAction(ID channelId, std::size_t scene, const Action& a, int note, float velocity,
+    Frame f1, Frame f2, Frame framesInLoop)
+{
+	deleteAction(channelId, a.id, a.nextId);
+	recordMidiAction(channelId, scene, note, velocity, f1, f2, framesInLoop);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::updateSampleAction(ID channelId, std::size_t scene, const Action& a, int type, Frame f1, Frame f2, Frame framesInLoop)
+{
+	if (isSinglePressMode(channelId))
+		deleteAction(channelId, a.id, a.nextId);
+	else
+		deleteAction(channelId, a.id);
+
+	recordSampleAction(channelId, scene, type, f1, f2, framesInLoop);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::updateVelocity(const Action& a, float value)
+{
+	MidiEvent event(a.event);
+	event.setVelocityFloat(value);
+	updateEvent(a.id, event);
+}
+
+/* -------------------------------------------------------------------------- */
+
+std::unordered_set<ID> ActionRecorder::consolidate(std::size_t scene)
+{
+	for (auto it = m_liveActions.begin(); it != m_liveActions.end(); ++it)
+		consolidate(*it, it - m_liveActions.begin()); // Pass current index
+
+	m_model.get().actions.rec(m_liveActions, scene);
+	m_model.swap(model::SwapType::SOFT);
+
+	std::unordered_set<ID> out;
+	for (const Action& action : m_liveActions)
+		out.insert(action.channelId);
+
+	m_liveActions.clear();
+	return out;
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::clearAllActions()
+{
+	m_model.get().tracks.forEachChannel([](Channel& ch)
+	{ ch.hasActions = false; return true; });
+	m_model.get().actions.clearAll();
+	m_model.swap(model::SwapType::HARD);
+}
+
+/* -------------------------------------------------------------------------- */
+
+bool ActionRecorder::areComposite(const Action& a1, const Action& a2) const
+{
+	return a1.event.getStatus() == MidiEvent::CHANNEL_NOTE_ON &&
+	       a2.event.getStatus() == MidiEvent::CHANNEL_NOTE_OFF &&
+	       a1.event.getNote() == a2.event.getNote() &&
+	       a1.channelId == a2.channelId;
+}
+
+/* -------------------------------------------------------------------------- */
+
+Frame ActionRecorder::fixVerticalEnvActions(Frame f, const Action& a1, const Action& a2) const
+{
+	if (a1.frame == f)
+		f += 1;
+	else if (a2.frame == f)
+		f -= 1;
+	if (a1.frame == f || a2.frame == f)
+		return -1;
+	return f;
+}
+
+/* -------------------------------------------------------------------------- */
+
+bool ActionRecorder::isSinglePressMode(ID channelId) const
+{
+	return m_model.get().tracks.getChannel(channelId).sampleChannel->mode == SamplePlayerMode::SINGLE_PRESS;
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::consolidate(const Action& a1, std::size_t i)
+{
+	/* This algorithm must start searching from the element next to 'a1': since
+	live actions are recorded in linear sequence, the potential partner of 'a1'
+	always lies beyond a1 itself. Without this trick (i.e. if it loops from
+	vector.begin() each time) the algorithm would end up matching wrong partners. */
+
+	for (auto it = m_liveActions.begin() + i; it != m_liveActions.end(); ++it)
+	{
+
+		const Action& a2 = *it;
+
+		if (!areComposite(a1, a2))
+			continue;
+
+		const_cast<Action&>(a1).nextId = a2.id;
+		const_cast<Action&>(a2).prevId = a1.id;
+
+		break;
+	}
+}
+
+/* -------------------------------------------------------------------------- */
+
+void ActionRecorder::copyActions(ID channelId, std::size_t srcScene, std::size_t dstScene, ID newChannelId)
+{
+	const std::size_t          scene = srcScene == dstScene ? srcScene : dstScene;
+	std::vector<Action>        actions;
+	std::unordered_map<ID, ID> map; // Action ID mapper, old -> new
+
+	m_model.get().actions.forEachAction([&](const Action& a)
+	{
+		if (a.channelId != channelId)
+			return;
+
+		ID newActionId = actionFactory::getNewActionId();
+
+		map.insert({a.id, newActionId});
+
+		Action clone(a);
+		clone.id        = newActionId;
+		clone.channelId = newChannelId;
+		clone.scene     = scene;
+
+		actions.push_back(clone);
+	});
+
+	/* Update nextId and prevId relationships given the new action ID. */
+
+	for (Action& a : actions)
+	{
+		if (a.prevId != 0)
+			a.prevId = map.at(a.prevId);
+		if (a.nextId != 0)
+			a.nextId = map.at(a.nextId);
+	}
+
+	m_model.get().actions.rec(actions, scene);
+	m_model.get().tracks.getChannel(newChannelId).hasActions = true;
+	m_model.swap(model::SwapType::HARD);
+}
+
+/* -------------------------------------------------------------------------- */
+
+const Action* ActionRecorder::findAction(ID id) const
+{
+	return m_model.get().actions.findAction(id);
+}
+
+bool ActionRecorder::hasActions(ID channelId, int type) const
+{
+	return m_model.get().actions.hasActions(channelId, type);
+}
+
+std::vector<Action> ActionRecorder::getActionsOnChannel(ID channelId, std::size_t scene) const
+{
+	return m_model.get().actions.getActionsOnChannel(channelId, scene);
+}
+
+void ActionRecorder::clearChannel(ID channelId, std::size_t sceneToClear)
+{
+	for (const std::size_t scene : u::vector::range(G_MAX_NUM_SCENES))
+		if (sceneToClear == G_INVALID_SCENE || sceneToClear == scene)
+			m_model.get().actions.clearChannel(channelId, scene);
+	m_model.get().tracks.getChannel(channelId).hasActions = hasActions(channelId);
+	m_model.swap(model::SwapType::HARD);
+}
+
+void ActionRecorder::clearActions(ID channelId, int type)
+{
+	m_model.get().actions.clearActions(channelId, type);
+	m_model.get().tracks.getChannel(channelId).hasActions = hasActions(channelId);
+	m_model.swap(model::SwapType::HARD);
+}
+
+Action ActionRecorder::rec(ID channelId, std::size_t scene, Frame frame, MidiEvent e)
+{
+	Action action = m_model.get().actions.rec(channelId, scene, frame, e);
+
+	m_model.get().tracks.getChannel(channelId).hasActions = true;
+	m_model.swap(model::SwapType::HARD);
+	return action;
+}
+
+void ActionRecorder::rec(ID channelId, std::size_t scene, Frame f1, Frame f2, MidiEvent e1, MidiEvent e2)
+{
+	m_model.get().tracks.getChannel(channelId).hasActions = true;
+	m_model.get().actions.rec(channelId, scene, f1, f2, e1, e2);
+	m_model.swap(model::SwapType::HARD);
+}
+
+void ActionRecorder::updateSiblings(ID id, ID prevId, ID nextId)
+{
+	m_model.get().actions.updateSiblings(id, prevId, nextId);
+	m_model.swap(model::SwapType::HARD);
+}
+
+void ActionRecorder::deleteAction(ID channelId, ID id)
+{
+	m_model.get().actions.deleteAction(id);
+	m_model.get().tracks.getChannel(channelId).hasActions = hasActions(channelId);
+	m_model.swap(model::SwapType::HARD);
+}
+
+void ActionRecorder::deleteAction(ID channelId, ID currId, ID nextId)
+{
+	m_model.get().actions.deleteAction(currId, nextId);
+	m_model.get().tracks.getChannel(channelId).hasActions = hasActions(channelId);
+	m_model.swap(model::SwapType::HARD);
+}
+
+void ActionRecorder::updateEvent(ID id, MidiEvent e)
+{
+	m_model.get().actions.updateEvent(id, e);
+	m_model.swap(model::SwapType::HARD);
+}
+} // namespace giada::m

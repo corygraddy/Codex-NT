@@ -1,0 +1,420 @@
+/*
+ *  File:       light-slide.css
+ *  Library:    seq66/data/share/tutorial
+ *  Author:     Chris Ahlstrom
+ *  Date:       2022-05-17
+ *  Updates:    2022-05-27
+ *  Version:    $Revision$
+ *  License:    $XPC_SUITE_GPL_LICENSES$
+ */
+
+body,h1,h2,h3,h4,h5,h6,p,td,th,ul,dl,div
+{
+   font-family-xxx: Geneva, Arial, Helvetica, sans-serif;
+   font-family: Roman, Times, serif;
+}
+
+:root
+{
+    --bg-color: #FFFFFF;
+    --nav-color: #E8EEF2;
+    --dir-color: #E8EEF2;
+    --intro-color: #E8EEF2;
+    --ul-color: #F0F0F0;
+    --main-color: #F0F0F0;
+    --note-color: #EBEEF2;
+    --text-color: Black;
+    --label-color: Red;
+    --treelink-color: Blue;
+    --hdr-color: #C0C0C0;
+    --hdr-text-color: Black;
+}
+
+body
+{
+    /*
+     * background-image: url('../img/stock/OS5.png');
+     * background-repeat: no-repeat;
+     * background-attachment: fixed;
+     */
+
+   background-color: var(--bg-color);
+   color: var(--text-color);
+   margin-top: 0px;
+   margin-bottom: 0px;
+   margin-right: 20px;
+   margin-left: 20px;
+}
+
+body,td
+{
+   font-size: 90%;
+}
+
+/*
+ * Dang.  Affects all tables.
+
+TABLE
+{
+   width: 816;
+   height: 512;
+   border: 1;
+}
+
+ *
+ */
+
+table
+{
+   border: 1;
+}
+
+h1
+{
+   text-align: center;
+   font-size: 160%;
+}
+
+h2
+{
+   font-size: 120%;
+}
+
+h3
+{
+   font-size: 100%;
+}
+
+caption
+{
+   font-weight: bold;
+   font-size: 100%;
+}
+
+td.caption
+{
+   font-weight: bold;
+   font-size: 90%;
+   text-align: center;
+   padding: 10px;
+}
+
+div.nav
+{
+   width: 100%;
+   background-color: var(--nav-color);
+   border-width: 1px;
+   border-style: solid;
+   border-color: #84B0C7;
+   color: var(--text-color);
+   text-align: center;
+   margin: 2px;
+   padding: 2px;
+   line-height: 140%;
+}
+
+table.navtab
+{
+   background-color: var(--nav-color);
+   border-width: 2px;
+   border-style: solid;
+   border-color: green;
+   text-align: center;
+   margin: 4px;
+   margin-right: 15px;
+   padding: 4px;
+}
+
+a.code:link
+{
+   text-decoration: none;
+   font-weight: normal;
+   color: #0000FF;
+}
+
+a.code:visited
+{
+   text-decoration: none;
+   font-weight: normal;
+   color: #0000FF;
+}
+
+.previous
+{
+   text-decoration: none;
+   font-weight: bold;
+   background-color: cyan;
+   color: Black;
+}
+
+.home
+{
+   text-decoration: none;
+   font-weight: bold;
+   background-color: var(--bg-color);
+   color: Black;
+}
+
+.next
+{
+   text-decoration: none;
+   font-weight: bold;
+   background-color: #00FF00;
+   color: White;
+}
+
+dl.el
+{
+   margin-left: -1cm;
+}
+
+.fragment
+{
+   font-family: monospace, fixed;
+   font-size: 95%;
+}
+
+pre.fragment
+{
+   border-width: 1px;
+   border-style: solid;
+   border-color: #C0C0C0;
+   background-color: var(--bg-color);
+   margin-top: 4px;
+   margin-bottom: 4px;
+   margin-left: 2px;
+   margin-right: 8px;
+   padding-left: 6px;
+   padding-right: 6px;
+   padding-top: 4px;
+   padding-bottom: 4px;
+}
+
+div.ah
+{
+   background-color: Black;
+   font-weight: bold;
+   color: #ffffff;
+   margin-bottom: 3px;
+   margin-top: 3px;
+}
+
+span.keyword      
+{
+   color: #008000;
+}
+
+span.keywordtype  
+{
+   color: #604020;
+}
+
+span.keywordflow  
+{
+   color: #e08000;
+}
+
+span.comment      
+{
+   color: #800000;
+}
+
+span.preprocessor 
+{
+   color: #806020;
+}
+
+span.stringliteral
+{
+   color: #002080;
+}
+
+span.charliteral  
+{
+   color: #008080;
+}
+
+.search    
+{
+   color: #003399;
+   font-weight: bold;
+}
+
+form.search
+{
+   margin-bottom: 0px;
+   margin-top: 0px;
+}
+
+input.search
+{
+   font-size: 75%;
+   color: #000080;
+   font-weight: normal;
+   background-color: #e8eef2;
+}
+
+td.tiny     
+{
+   font-size: 75%;
+}
+
+hr
+{
+   height: 1px;
+   border: none;
+   border-width: 1px;
+   border-style: solid;
+   border-color: Black;
+}
+
+/*
+ * For the tree view.
+ */
+
+body.tree
+{
+   background-color: var(--bg-color);
+   color: var(--text-color);
+}
+
+a.treelink
+{
+   color: var(--treelink-color);
+   text-decoration: none;
+   font-weight: bold;
+}
+
+.directory
+{
+   font-size: 9pt;
+   font-weight: bold;
+   background-color: var(--dir-color);
+   border-width: 2px;
+   border-style: solid;
+   border-color: green;
+   margin: 4px;
+   margin-right: 15px;
+   padding: 4px;
+}
+
+.directory H3
+{
+   margin: 0px;
+   margin-top: 1em;
+   font-size: 11pt;
+}
+
+.directory > H3
+{
+   margin-top: 0;
+}
+
+.directory P
+{
+   margin: 0px;
+   white-space: nowrap;
+}
+
+.directory DIV
+{
+   display: none;
+   margin: 0px;
+}
+
+.directory IMG
+{
+   vertical-align: -30%;
+}
+
+/* End styling for the tree view */
+
+/* For tutorial slides  */
+
+td.slideheader
+{
+   height: 40px;
+   background-color: var(--hdr-color);
+   border-width: 2px;
+   border-style: solid;
+   border-color: #808080;
+   color: var(--hdr-text-color);
+}
+
+p.slideheader
+{
+   margin-top: 0px;
+   margin-bottom: 0px;
+   font-weight: bold;
+   font-size: 150%;
+   color: var(--hdr-text-color);
+}
+
+p.slidetopic
+{
+   margin-top: 0px;
+   margin-bottom: 0px;
+   font-style: oblique;
+   font-weight: bold;
+   font-size: 115%;
+}
+
+td.slideintro
+{
+   background-color: var(--intro-color);
+   border-width: 2px;
+   border-style: solid;
+   border-color: #C0C0C0;
+}
+
+p.slideintro
+{
+   background-color: var(--intro-color);
+   color: var(--text-color);
+   font-weight: normal;
+   font-size: 110%;
+   margin-top: 0px;
+   margin-bottom: 0px;
+}
+
+ul
+{
+   background-color: var(--ul-color);
+   color: var(--text-color);
+}
+
+.slidemain
+{
+   background-color: var(--main-color);
+   color: var(--text-color);
+   font-weight: normal;
+   font-size: 110%;
+   margin-bottom: 6px;
+}
+
+td.slidenote
+{
+   background-color: var(--note-color);
+   border-width: 1px;
+   border-style: solid;
+   border-color: #C0C0C0;
+   color: var(--text-color);
+}
+
+.slidenote
+{
+   margin-top: 0px;
+   margin-bottom: 0px;
+   font-style: italic;
+   font-size: 90%;
+   color: var(--text-color);
+}
+
+.slidelabel
+{
+   font-size: 125%;
+   font-weight: bold;
+   font-style: oblique;
+   color: var(--label-color);
+}
+

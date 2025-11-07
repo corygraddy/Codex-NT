@@ -1,0 +1,373 @@
+%-------------------------------------------------------------------------------
+% port_mapping
+%-------------------------------------------------------------------------------
+%
+% \file        port_mapping.tex
+% \library     Documents
+% \author      Chris Ahlstrom
+% \date        2020-12-29
+% \update      2025-06-19
+% \version     $Revision$
+% \license     $XPC_GPL_LICENSE$
+%
+%     Provides a discussion of the MIDI GUI port_mapping that Seq66
+%     supports.
+%
+%-------------------------------------------------------------------------------
+
+\section{Port Mapping}
+\label{sec:port_mapping}
+
+   \textsl{Seq66}, like \textsl{Seq24}, bases its I/O port scheme on buss/port
+   \textsl{numbers}.
+   This port numbering applies whether
+   \textsl{ALSA}, \textsl{JACK}, or \textsl{Windows Multimedia}
+   are used as the MIDI engine, and whether \textsl{Seq66} is running with
+   "automatic" ports or "manual" (virtual, software-created) ports.
+   These buss numbers range from 0 on upward
+   based on the number of I/O MIDI ports active in the system.
+   In the normal "automatic" (non-virtual, non-manual) mode
+   these ports represent the hardware MIDI ports and application MIDI ports.
+   In "manual" mode, these ports represent virtual MIDI ports that the user
+   can connect manually.
+
+   When the set of MIDI devices and applications (e.g. \textsl{Qsynth}
+   changes, and \textsl{Seq66} is restarted, this numbering changes.
+   A MIDI tune the depends on the old port numbers will not play correctly.
+   Port-mapping fixes this issue; it looks up the port number on which a
+   pattern depends, finds the device name associated with this port,
+   and looks up the actual port number by name.
+
+   \textbf{Note}:
+   Port-mapping is now the default; MIDI I/O port-maps are
+   created at first start, and are always active if virtual ports are not in
+   use.
+   Once created, one can edit the 'rc' file to rearrange the mapping as desired.
+   (There is no way to do this in the \textsl{Seq66} user interface.)
+   Issues with new or unavailable ports are
+   noted in a warning dialog at start-up.
+   (The startup warning can be suppressed;
+   see \sectionref{subsection:edit_preferences_display}.)
+   The user can click the \textbf{Remap and restart} button,
+   fix the loaded pattern to use existing ports, click \textbf{OK} to ignore
+   the warning,
+   or exit, determine the existing ports using
+   \texttt{aplaymidi}, \texttt{arecordmidi}, or \texttt{jack\_lsp},
+   and edit the maps directly in the 'rc' file.
+
+   The output bus or port for a given pattern can be determined by
+   looking at the grid slots or by dumping a summary of the song to
+   a text file.
+   See \sectionref{subsubsec:menu_help_song_summary_file}.
+   Also check the specified 'ctrl' file to see if it is using
+   non-existent MIDI I/O ports.
+
+   A pattern/loop/sequence is assigned to output to a given port via
+   a buss number saved \textsl{in the pattern}, in the tune.
+   When a tune is loaded,
+   each pattern outputs to the port number specified in the pattern.
+   A problem is that MIDI device setups can change, with devices being
+   reordered, removed, or added to the MIDI devices available on the system.
+   Or if the song is opened on someone else's computer.
+   We do not want to store port names in the MIDI file.
+   They can be too long, but, more importantly,
+   they will differ between the systems of each user.
+   They can even differ when switching from ALSA to JACK, or even versions
+   of these MIDI engines.
+   Better to let the user determine the port-mapping by editing
+   the 'rc' file.
+   Mapping allows the buss number stored with a pattern to be
+   remapped to another buss number based on the "nick-name"
+   (or JACK alias) of the port.
+   It uses a simple lookup to map names to numbers.
+
+   The "nick-name" is a shortened version of the MIDI device name assigned
+   by the system.
+   For example, the long name of a MIDI port might be
+   \texttt{[5] 44:0 E-MU XMidi1X1 Tab MIDI 1}.
+   The nick-name is \texttt{E-MU XMidi1X1 Tab MIDI 1}.
+   In order find the correct port number, the long name is checked to see if it
+   \textsl{contains} the nick-name, and, if so, the corresponding port number is
+   returned.  The user can edit the 'rc' file to shorten the nick-name, if
+   desired; a nick-name \texttt{E-MU XMidi1X1} would work.
+
+   In addition, under recent versions of \textsl{JACK},
+   there is a facility to get the "alias" of USB MIDI ports,
+   even if the \textsl{a2jmidid} process is not running.
+   This allows the user to see that the port name
+   \texttt{system:midi\_capture\_5} is actually a "nanoKEY2" device.
+
+   So, with port-mapping enabled, one can set up the tune to record and play
+   MIDI using the mapped ports, and later move to another computer, modify the
+   port-maps in the 'rc' file to match, manually,
+   and record and play without issue.
+
+   The easiest way to start port-mapping (which is now automatic) is to go to
+   \textbf{Edit / Preferences / MIDI Clock}.
+   See \sectionref{subsection:edit_preferences_midi_clock}.
+   There, we see long MIDI port names made up by the system, along
+   with the \textsl{JACK} aliases that can be retrieved, and which make it easy
+   to see which devices are in play.
+
+\begin{comment}
+\begin{figure}[H]
+   \centering 
+   \includegraphics[scale=0.75]{main-menu/edit/preferences/midi_clock_pre_portmap.png}
+   \caption{Clocks List Without Port Mapping}
+   \label{fig:clocks_list_before_port_mapping}
+\end{figure}
+
+   Note the \texttt{system:midi\_playback} that is part of each port name.
+   (There is a similar "capture" portion for input ports).
+\end{comment}
+
+   Click on the \textbf{Make Maps} button.
+   This creates the initial I/O maps internally.
+   Then either restart \textsl{Seq66} or go to the \textbf{Restart Seq66}
+   button; this will save the new version of the 'rc' file.
+   Back in \textbf{Edit / Preferences / MIDI Clock},
+   one sees that the remapped names are in use.
+
+\begin{figure}[H]
+   \centering 
+   \includegraphics[scale=0.50]{main-menu/edit/preferences/midi_clock_post_portmap.png}
+   \caption{Clocks List With Port Mapping}
+   \label{fig:clocks_list_with_port_mapping}
+\end{figure}
+
+%  Note that the short names generated are partial names of either the ALSA
+%  port name or are comprised of the JACK alias name for each port.
+
+   At startup, \textsl{Seq66} matches the port-map to the ports that exist on
+   the system.  If there is no matching system port for a mapped port, then
+   that mapped port will show up as disabled in the port lists,
+   and a warning should appear.
+   If it makes sense, click on the \textbf{Remap and restart} button.
+   Or later, go to \textbf{Edit / Preferences / MIDI Clock}.
+   There, to disable the port mappings if desired, unset the
+   \textbf{MIDI I/O Port Maps} check-box.
+   To reconstruct the current setup, click on the \textbf{Recreate} button to
+   get the new mapping, and restart manually.
+   As with the normal port listings, the port-mappings are saved and
+   managed in the \textsl{Seq66} 'rc' file.
+   One can also edit that file in a text editor to
+   rearrange the mapped ports.
+
+   Note that one can also deactivate port-mapping. Both input and output
+   will always be in the same state (activated or deactivated).
+
+\subsection{Input Port Mapping}
+\label{subsec:input_port_mapping}
+
+   The input ports are also port-mapped.  Here's an
+   initial system input setup:
+
+   \begin{verbatim}
+      [midi-input]
+      6      # number of MIDI input (or control) buses
+      0  1   "[0] 0:1 system:ALSA Announce"
+      1  1   "[1] 14:0 Midi Through Port-0"
+      2  1   "[2] 28:0 Launchpad Mini MIDI 1"
+      3  1   "[3] 32:0 Q25 MIDI 1"
+      4  1   "[4] 36:0 nanoKEY2 nanoKEY2 _ CTRL"
+      5  1   "[5] 40:0 MPK mini Play mk3 MIDI 1"
+   \end{verbatim}
+
+%  To see an example from ALSA, look at the sample file
+%  \texttt{data/linux/qseq66.rc}.
+%  ALSA does not support aliases.
+%  (Neither do early versions of JACK.)
+   Note that the ALSA system "announce" buss is always disabled,
+   as \textsl{Seq66} does not use it.
+   In a future version of \textsl{Seq66} it may be removed, as it means ports
+   have to be renumbered when switching to JACK. Doh!
+   Here is the stored input port-map:
+
+   \begin{verbatim}
+      [midi-input-map]
+      0  1   "ALSA Announce"
+      1  1   "Midi Through Port-0"
+      2  1   "Launchpad Mini MIDI 1"
+      3  1   "Q25 MIDI 1"
+      4  1   "nanoKEY2 nanoKEY2 _ CTRL"
+      5  1   "MPK mini Play mk3 MIDI 1"
+   \end{verbatim}
+
+   In the user interface dropdowns for input buss, if a map is active, it is
+   put into the dropdown; any missing items are noted and are shown as
+   disabled.
+   If port-mapping is not active, then only the actual system input ports are
+   shown.
+
+\subsection{Output Port Mapping}
+\label{subsec:output_port_mapping}
+
+   Assume that the system has the following set of ports.  These busses are
+   stored in the 'rc' file when \textsl{Seq66} exits.
+%  Note the \textsl{JACK}
+%  aliases shown at the right as comments.
+
+   \begin{verbatim}
+      [midi-clock]
+      5      # number of MIDI clocks (output/display buses)
+      0  0   "[0] 14:0 Midi Through Port-0"
+      1  0   "[1] 28:0 Launchpad Mini MIDI 1"
+      2  0   "[2] 32:0 Q25 MIDI 1"
+      3  0   "[3] 36:0 nanoKEY2 nanoKEY2 _ CTRL"
+      4  0   "[4] 40:0 MPK mini Play mk3 MIDI 1"
+   \end{verbatim}
+
+%  To see an example from ALSA, look at the sample file
+%  \texttt{data/linux/qseq66.rc}.
+
+   If some items are unplugged, then this list will change, so we save it while
+   still running \textsl{Seq66}:
+   click the
+   \textbf{Make Maps} button in the
+   \textbf{Edit / Preferences/ MIDI Clock} dialog. 
+   The result is are new sections in the 'rc' file (one for clocks, one for
+   inputs).  Here is the clock map:
+
+   \begin{verbatim}
+      [midi-clock-map]
+      1      # map is active
+      0  0   "Midi Through Port-0"
+      1  0   "Launchpad Mini MIDI 1"
+      2  0   "Q25 MIDI 1"
+      3  0   "nanoKEY2 nanoKEY2 _ CTRL"
+      4  0   "MPK mini Play mk3 MIDI 1"
+   \end{verbatim}
+   
+   The map shows the nick-names or aliases of the ports.
+   These index numbers can be used as buss numbers: they can be stored
+   in a pattern, and used to direct output to a specific device.
+
+   If a pattern has stored a missing item as its output
+   buss number, this number will not be found in the system list, so that the
+   pattern will need to be remapped to an existing port.
+
+   Note that the port-mapping can be disabled by setting the first value to 0.
+   In that case, \textsl{Seq66} uses buss numbers in the normal way.
+   In the user interface dropdowns for output buss, if a map is active, it is
+   put into the dropdown; any missing items are noted and are shown as
+   disabled.
+
+   If the map is not active, then only the actual system output ports are
+   shown in the user interface.
+
+\subsection{Port Mapping for MIDI Control/Display}
+\label{subsec:input_port_mapping_example}
+
+   This example shows how MIDI control and MIDI status displays work with
+   port mapping.  First, we run \textsl{Seq66}, save the ports for
+   remapping, and exit the application.  Looking in the 'rc' file, we tweak
+   the maps:
+
+   \begin{verbatim}
+      [midi-input-map]
+      1       # map is active
+      0  0    "announce"
+      1  0    "Midi Through Port-0"
+      2  0    "Launchpad Mini MIDI 1"
+      3  0    "nanoKEY2 MIDI 1"
+      4  0    "Q25 MIDI 1"
+      5  0    "E-MU XMidi1X1 Tab MIDI 1"
+   \end{verbatim}
+
+   And:
+
+   \begin{verbatim}
+      [midi-clock-map]
+      1       # map is active
+      0  0    "Midi Through Port-0"
+      1  0    "Launchpad Mini MIDI 1"
+      2  0    "nanoKEY2 MIDI 1"
+      3  0    "Q25 MIDI 1"
+      4  0    "E-MU XMidi1X1 Tab MIDI 1"
+   \end{verbatim}
+
+   These two maps reflect the configuration at the time they were saved.
+   They reflect the output of \texttt{arecordmidi -{}-list} and
+   \texttt{aplaymidi -{}-list}.
+   After unplugging and replugging some devices, we see that the
+   \textsl{Launchpad Mini} has moved:
+
+   \begin{verbatim}
+      6   # number of input MIDI busses
+      3 0    "[3] 36:0 Launchpad Mini MIDI 1"
+
+      5   # number of MIDI clocks (output busses)
+      2 0    "[2] 36:0 Launchpad Mini MIDI 1"
+   \end{verbatim}
+
+   On input, it has moved from buss 2 to buss 3.
+   On output it has moved from buss 1 to buss 2.
+   This can be verified by running \textsl{Seq66}, immediately exiting,
+   and checking the \texttt{qseq66.rc} file.
+   We edit that file to add:
+
+   \begin{verbatim}
+      [midi-control-file]
+      "qseq66-lp-mini-alt.ctrl"
+   \end{verbatim}
+
+   With the I/O maps shown above active in the 'rc' file,
+   we can go to the 'ctrl' file (\texttt{qseq66-lp-mini-alt.ctrl}, available in
+   the \texttt{data/linux} install/source directory)
+   and set the following:
+
+   \begin{verbatim}
+      [midi-control-settings]
+      control-buss = 2              # maps to system input buss 3
+      midi-enabled = true
+
+      [midi-control-out-settings]
+      output-buss = 1               # maps to system output buss 2
+      midi-enabled = true
+   \end{verbatim}
+
+   With this setup, the lights on the Mini light-up at start-up, and the
+   buttons control the pattern, mute-groups, and automation features set up in
+   the above-mentioned 'ctrl' file.
+   The buss number will be replaced with the name of the
+   device, e.g. \texttt{output-buss = "Launchpad Mini"}, if port-mapping
+   is active.
+
+   This is tricky, but once set up,
+   one can reliably use these mapped port numbers to look up the actual
+   system port numbers.  For example, with the above setup, \textsl{Seq66} can
+   be assured that output buss 1 will always go to the
+   \textsl{Launchpad Mini}.
+
+\subsection{Port Setting SeqSpec}
+\label{subsec:port_seqspec}
+
+   In the MIDI specification, there are two obsolete MIDI Meta events,
+   "MIDI Channel" (0x20) and "MIDI Port" (0x21).
+   These events were never endorsed by the MIDI Manufacturers Associated,
+   but some versions of \textsl{Cakewalk} used them.
+   In any case, one does not generally change the channel and port during
+   playback.
+
+   However, \textsl{Seq66} needs to set the channel and port in order to
+   determined where events in a pattern are output.
+   These are specified by sequencer-specific (SeqSpec) events stored with
+   each pattern.
+
+   If the patterns uses "Free" setting of channel (0x80), each channel event
+   goes to whatever channel (0 through 15 internally) is specified in the event.
+   If a channel is specified, then all channel events are redirected to that
+   channel.
+   See \sectionref{subsubsec:midi_format_track_seqspec_midichannel}.
+
+   The port setting for each pattern is a number, as described earlier in
+   this chapter.
+   The output of a pattern goes to this numbered port in the midi-clock
+   lists.
+   Every pattern must have a port number.
+   For imported tracks, this number defaults to 0.
+   See \sectionref{subsubsec:midi_format_track_seqspec_midibus}.
+
+%-------------------------------------------------------------------------------
+% vim: ts=3 sw=3 et ft=tex
+%-------------------------------------------------------------------------------

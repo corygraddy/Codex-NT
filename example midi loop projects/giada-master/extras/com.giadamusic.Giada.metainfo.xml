@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2010-2025 Giovanni A. Zuliani | Monocasual Laboratories -->
+<component type="desktop">
+	<id>com.giadamusic.Giada</id>
+	<metadata_license>CC0</metadata_license>
+	<project_license>GPL-2.0+</project_license>
+	<name>Giada</name>
+	<summary>Your hardcore loop machine</summary>
+	<description>
+		<p>Giada is an open source, minimalistic and hardcore music production tool. Designed for DJs, live performers and electronic musicians.</p>
+	</description>
+	<developer_name>Monocasual Laboratories</developer_name>
+	<content_rating type="oars-1.1" />
+	<launchable type="desktop-id">com.giadamusic.Giada.desktop</launchable>
+	<screenshots>
+		<screenshot type="default">
+			<image>https://giadamusic.com/images/giada-canvas.png</image>
+			<caption>Giada official screenshot</caption>
+		</screenshot>
+	</screenshots>
+	<releases>
+		<release version="1.3.1" date="2025-10-24">
+			<description>
+				<p>This is a bugfix release.</p>
+				<ul>
+					<li>Fix broken plug-ins when a channel is cloned;</li>
+					<li>Prevent crash if using JACK and no samplerate choice is available;</li>
+					<li>Small improvements to project loading mechanism;</li>
+					<li>Update RtAudio library to latest commit.</li>
+				</ul>
+			</description>
+		</release>
+		<release version="1.3.0" date="2025-09-15">
+			<description>
+				<p>This release introduces support for multiple audio outputs (more than stereo). It is now possible to have multiple audio channels, each of which sends the signal to an external hardware output or internally to another software for multitrack recording of your live performances.</p>
+				<ul>
+					<li>Add support for multiple audio ouputs;</li>
+					<li>Improved JACK support allowing for multiple output connections;</li>
+					<li>UI: improved and beautified Plug-in Browser window;</li>
+					<li>Update FLTK to 1.4.4;</li>
+					<li>Refactoring and code gardening.</li>
+				</ul>
+			</description>
+		</release>
+		<release version="1.2.1" date="2025-06-28" />
+		<release version="1.2.0" date="2025-04-21" />
+		<release version="1.1.1" date="2025-02-08" />
+	</releases>
+	<update_contact>giadaloopmachine_AT_gmail.com</update_contact>
+	<url type="homepage">https://www.giadamusic.com/</url>
+	<url type="help">https://github.com/monocasual/giada/discussions</url>
+</component>

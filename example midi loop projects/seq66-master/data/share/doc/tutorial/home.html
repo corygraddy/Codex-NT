@@ -1,0 +1,201 @@
+<html>
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Draft//EN">
+
+<! File:       home.html>
+<! Library:    seq66/data/share/tutorial>
+<! Author:     Chris Ahlstrom >
+<! Date:       2022-05-16>
+<! Updates:    2022-05-27>
+<! Version:    $Revision$>
+<! License:    $XPC_SUITE_GPL_LICENSES$>
+
+<head>
+   <title> Seq66 Basic Tutorial </title>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+   <meta http-equiv="Content-Language" content="en-us">
+   <meta name="generator" content="vim">
+   <meta name="description" content="Seq66 Basic Tutorial">
+   <meta name="keywords" content="seq66 sequencer live midi">
+   <link href="css/slide.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+
+   <!--
+      This table is formatted in four rows and three columns, normally laid
+      out somewhat like the following.
+
+      class
+                      **************************************
+      slideheader    |  (COLSPAN == 3)                      |
+      slidetopic     |                                      |
+                      **************************************
+                     |  (spacer)                :     :     |
+                      **************************************
+      slideintro     |  (COLSPAN == 1, 2, or 3) :     :     |
+                     |                          :     :     |
+                     |                          :     :     |
+                      **************************************
+                     |  (spacer)                :     :     |
+                      **************************************
+                     |  (COLSPAN == 1, 2, or 3) :     :     |
+      slidemain      |                          :     :     |
+                     |                          :     :     |
+                     |                          :     :     |
+                      **************************************
+                     |  (spacer)                :     :     |
+                      **************************************
+      slidenote      |  (COLSPAN == 1)          |     |     |
+      slidelabel     |                          |     |label|
+                      **************************************
+
+      The label at the bottom right is a non-clickable label that should
+      match the name of the slide in the left-tree view's index.
+
+      Feel free to adapt it, though.  The easiest way is to copy the Home
+      slide or some other slide that looks close to what you want for the
+      page, and modify it.
+
+      You can also turn the border on if you want to, or change the width of
+      the empty cells.
+   -->
+
+   <table
+      align="left"
+      width="800"
+      height="512"
+      cellpadding="4"
+      cellspacing="0">
+      <tbody>
+         <tr>
+            <td> <br> </td>
+         </tr>
+         <tr>
+            <td align="center" valign="center" colspan="3"
+               height="80" class="slideheader">
+               <p class="slideheader">
+                  Seq66 Basic Tutorial
+                  <p class="slidetopic"> Home Page </p>
+               </p>
+            </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" colspan="3" height="24"> &nbsp; </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" colspan="3" class="slideintro">
+               <p class="slideintro">
+                  This tutorial 
+                  describes the basics of <i>Seq66</i>;
+                  it includes enough to get started with creating
+                  a song and understanding the configuration.
+                  It is a quick introduction.
+                  For the complete manual,
+                  see the <i>Help / User Manual</i> command.
+                  If this fails, send an e-mail reporting this problem and
+                  your setup (operating system, default browser and
+                  PDF viewer settings) to
+                  <a href="mailto:ahlstromcj@gmail.com">
+                     ahlstromcj@gmail.com
+                  </a>.
+                  Or find the complete manual,
+                  <code>seq66-user-manual.pdf</code>, at:
+                  </p>
+                  <ul>
+                     <li>
+                        <a
+                        href="https://ahlstromcj.github.io/docs/seq66/seq66-user-manual.pdf"
+                        target="_blank">
+                        Seq66 User Manual
+                        </a>
+                        (at <code>ahlstromcj.github.io</code>)
+                     </li>
+                     <li>
+                        <code>/usr/share/doc/seq66-0.99</code> or
+                        <code>/usr/local/share/doc/seq66-0.99</code>
+                        (<i>Linux</i>)
+                     </li>
+                     <li>
+                        <code>C:/Program Files/Seq66/doc</code>
+                        (<i>Windows</i>)
+                     </li>
+                     <li>
+                        <code>seq66/data/share/doc</code>
+                        (<i>Seq66</i> source-code package)
+                     </li>
+                  </ul>
+                  <p class="slideintro">
+                     This tutorial is simply for familiarizing
+                     people with this live-grid MIDI sequencer application.
+                  </p>
+
+                  <!--
+                  It covers only the main window, the pattern-editor,
+                  the song-editor window, and a bit about configuration.
+                  The event-editor, mute-groups, sets, and session tabs,
+                  as well as the usage of MIDI controllers,
+                  are discussed in the rather extensive user's manual.
+                  -->
+               </p>
+            </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" colspan="3" height="24"> &nbsp; </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" colspan="2">
+               <p class="slidemain">
+                  This tutorial starts with a quick survey of the most important
+                  elements, which cover creating tracks (patterns)
+                  and modifying them.
+                  More advanced elements (sets, mute-groups, playlists)
+                  are best covered in the user's manual, not this tutorial.
+               </p>
+               <p class="slidemain">
+                  Once the basics have been summarized, the tutorial begins,
+                  covering startup, configuration, creating a tune, and
+                  laying it out as a song performance.
+               </p>
+               <p class="slidemain">
+                  Use the side-bar at the left for fast navigation.
+               </p>
+               <p class="slidemain">
+                  Note that this tutorial and the user's manual are
+                  available in <i>Seq66</i> via the <i>Help</i> menu.
+               </p>
+            </td>
+            <td align="center" valign="center" width="80"> &nbsp; </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" colspan="3" height="12"> &nbsp; </td>
+         </tr>
+         <tr>
+            <td align="left" valign="top" width="405"
+               colspan="1" class="slidenote">
+               <p class="slidenote">
+                  As time goes on, this tutorial will be tweaked, especially
+                  as requested by user input at <i>GitHub</i>:
+                  <!--
+                  <a class="slidenote" href="https://github.com/ahlstromcj/seq66">
+                  </a>
+                  (currently this link does not work.
+                  Go to "https://github.com/ahlstromcj/seq66" directly).
+                  -->
+                     <b>https://github.com/ahlstromcj/seq66</b>
+               </p>
+            </td>
+            <td align="center" valign="center" width="200"> &nbsp; </td>
+            <td align="left" valign="bottom" width="100">
+               <p class="slidelabel">
+                  <font size="-1">
+                     Updated 2023-07-19
+                  </font>
+               </p>
+            </td>
+         </tr>
+      </tbody>
+   </table>
+</body>
+
+</html>
+

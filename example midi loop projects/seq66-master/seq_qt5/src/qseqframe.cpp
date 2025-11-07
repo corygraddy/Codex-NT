@@ -1,0 +1,266 @@
+/*
+ *  This file is part of seq66.
+ *
+ *  seq66 is free software; you can redistribute it and/or modify it under the
+ *  terms of the GNU General Public License as published by the Free Software
+ *  Foundation; either version 2 of the License, or (at your option) any later
+ *  version.
+ *
+ *  seq66 is distributed in the hope that it will be useful, but WITHOUT ANY
+ *  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ *  FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+ *  details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with seq66; if not, write to the Free Software Foundation, Inc., 59 Temple
+ *  Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
+/**
+ * \file          qseqframe.cpp
+ *
+ *  This module declares/defines the base class for managing the editing of
+ *  sequences.
+ *
+ * \library       seq66 application
+ * \author        Oli Kester; modifications by Chris Ahlstrom
+ * \date          2018-07-27
+ * \updates       2025-07-18
+ * \license       GNU GPLv2 or above
+ *
+ *  Seq66 (Qt version) has two different pattern editor frames to
+ *  support:
+ *
+ *      -   New.  This pattern-editor frame is used in its own window.  It is
+ *          larger and has a lot of functionality.  Furthermore, it
+ *          keeps the time, event, and data views in full view at all times
+ *          when scrolling, just like the Gtkmm-2.4 version of the pattern
+ *          editor.
+ *      -   Kepler34.  This frame is not as functional, but it does fit in the
+ *          tab better, and it scrolls the time, event, keys, and roll panels
+ *          as if they were one object.
+ */
+
+#include "cfg/settings.hpp"             /* seq66::usr()                     */
+#include "qseqdata.hpp"
+#include "qseqframe.hpp"
+#include "qseqkeys.hpp"
+#include "qseqroll.hpp"
+#include "qseqtime.hpp"
+#include "qstriggereditor.hpp"
+
+/*
+ *  Do not document the name space.
+ */
+
+namespace seq66
+{
+
+/**
+ *  Principal constructor.
+ *
+ * \param p
+ *      Provides the performer object to use for interacting with this sequence.
+ *      Among other things, this object provides the active PPQN.
+ *
+ * \param s
+ *      Provides the reference to the sequence represented by this seqedit.
+ *
+ * \param basezoom
+ *      Provides the base or starting zoom, so that it can be reset properly
+ *      by the "0" key.
+ *
+ * \param parent
+ *      Provides the parent window/widget for this container window.  Defaults
+ *      to null.
+ */
+
+qseqframe::qseqframe
+(
+    performer & p,
+    sequence & s,
+    int basezoom,
+    QWidget * parent
+) :
+    QFrame      (parent),
+    qeditbase   (p, basezoom),          /* c_default_seq_zoom   */
+    m_seq       (s),
+    m_seqkeys   (nullptr),
+    m_seqtime   (nullptr),
+    m_seqroll   (nullptr),
+    m_seqdata   (nullptr),
+    m_seqevent  (nullptr)
+{
+    // No code needed
+}
+
+qseqframe::~qseqframe ()
+{
+    // No code needed
+}
+
+bool
+qseqframe::repitch_all ()
+{
+    std::string filename = rc().notemap_filespec();
+    bool result = perf().repitch_all(filename, track());
+    if (result)
+    {
+        set_dirty();
+    }
+    else
+    {
+        // need to display error message somehow
+    }
+    return result;
+}
+
+bool
+qseqframe::repitch_selected ()
+{
+    std::string filename = rc().notemap_filespec();
+    bool result = perf().repitch_selected(filename, track());
+    if (result)
+    {
+        set_dirty();
+    }
+    else
+    {
+        // need to display error message somehow
+    }
+    return result;
+}
+
+/**
+ *  Forwards the zoom changes to the child panes.
+ */
+
+bool
+qseqframe::zoom_in ()
+{
+    bool result = qeditbase::zoom_in();
+    if (result)
+    {
+        if (not_nullptr(m_seqroll))
+            m_seqroll->zoom_in();
+
+        if (not_nullptr(m_seqtime))
+            m_seqtime->zoom_in();
+
+        if (not_nullptr(m_seqdata))
+            m_seqdata->zoom_in();
+
+        if (not_nullptr(m_seqevent))
+            m_seqevent->zoom_in();
+    }
+    return result;
+}
+
+bool
+qseqframe::zoom_out ()
+{
+    bool result = qeditbase::zoom_out();
+    if (result)
+    {
+        if (not_nullptr(m_seqroll))
+            m_seqroll->zoom_out();
+
+        if (not_nullptr(m_seqtime))
+            m_seqtime->zoom_out();
+
+        if (not_nullptr(m_seqdata))
+            m_seqdata->zoom_out();
+
+        if (not_nullptr(m_seqevent))
+            m_seqevent->zoom_out();
+    }
+    return result;
+}
+
+/**
+ *  Sets the horizontal (time) zoom parameter, z.  If valid, then the m_zoom
+ *  member is set.  The new setting is passed to the roll, time, data, and
+ *  event panels [which each call their own set_dirty() functions].
+ *
+ * \param z
+ *      The desired zoom value, which is checked for validity.
+ *
+ * \return
+ *      Returns true if the zoom value was changed.
+ */
+
+bool
+qseqframe::set_zoom (int z)
+{
+    bool result = qeditbase::set_zoom(z);
+    if (result)
+    {
+        if (not_nullptr(m_seqroll))
+            m_seqroll->set_zoom(z);
+
+        if (not_nullptr(m_seqtime))
+            m_seqtime->set_zoom(z);
+
+        if (not_nullptr(m_seqdata))
+            m_seqdata->set_zoom(z);
+
+        if (not_nullptr(m_seqevent))
+            m_seqevent->set_zoom(z);
+    }
+    return result;
+}
+
+bool
+qseqframe::reset_zoom (int ppq)
+{
+    bool result = qeditbase::reset_zoom(ppq);
+    if (result)
+    {
+        if (not_nullptr(m_seqroll))
+            m_seqroll->reset_zoom(ppq);
+
+        if (not_nullptr(m_seqtime))
+            m_seqtime->reset_zoom(ppq);
+
+        if (not_nullptr(m_seqdata))
+            m_seqdata->reset_zoom(ppq);
+
+        if (not_nullptr(m_seqevent))
+            m_seqevent->reset_zoom(ppq);
+    }
+    return result;
+}
+
+/**
+ *  Sets the dirty status of all of the panels.  However, note that in the
+ *  case of zoom, for example, it also sets dirtiness, via qseqbase.
+ *
+ *  Also be sure that the performer calls the notification apparatus when
+ *  changes in the data in the sequence occur.
+ */
+
+void
+qseqframe::set_dirty ()
+{
+    qeditbase::set_dirty();
+    if (not_nullptr(m_seqroll))
+        m_seqroll->set_dirty();
+
+    if (not_nullptr(m_seqtime))
+        m_seqtime->set_dirty();
+
+    if (not_nullptr(m_seqdata))
+        m_seqdata->set_dirty();
+
+    if (not_nullptr(m_seqevent))
+        m_seqevent->set_dirty();
+}
+
+}           // namespace seq66
+
+/*
+ * qseqframe.cpp
+ *
+ * vim: sw=4 ts=4 wm=4 et ft=cpp
+ */
+

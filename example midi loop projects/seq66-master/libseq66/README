@@ -1,0 +1,22 @@
+README for Sequencer66: Port of libseq64 to libseq66
+Chris Ahlstrom
+2015-09-10 to 2020-07-06
+
+While doing this port, we are separating related clumps of code into
+subdirectories of libseq66/include and libseq66/src, so that it is easier to
+understand the various groups of functionality represented by the cpp and hpp
+files.
+
+.       = libseq66/include:         Used for generic code and app-limits.
+cfg     = libseq66/include/cfg:     For configuration data and files.
+ctrl    = libseq66/include/ctrl:    Code for keyboard and MIDI control of play.
+midi    = libseq66/include/midi:    Code for basic MIDI data and structures.
+play    = libseq66/include/play:    Code used for patterns and playback.
+qt      = libseq66/include/qt:      Minor items specific to Qt usage.
+os      = libseq66/include/os:      Utility code for Linux/Mac/Windows.
+util    = libseq66/include/util:    Code for calculations, strings, files, etc.
+
+We are also changing the names of some of the classes, mostly to reduce the
+number of underscores and enforce more uniform naming for the classes.
+
+# vim: sw=4 ts=4 wm=4 et ft=sh

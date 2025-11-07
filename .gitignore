@@ -7,3 +7,9 @@ VFader/build/
 PluginTemplate/build/
 .venv/
 docs/
+
+# Ignore experimental/broken VLoop versions
+VLoop/src/main_v3.cpp
+VLoop/src/main_v2.cpp
+VLoop/src/*_gui.*
+VLoop/test/

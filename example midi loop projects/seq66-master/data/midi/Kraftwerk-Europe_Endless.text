@@ -1,0 +1,192 @@
+Deconstructing and Reconstructing "Europe Endless" with Seq66
+Chris Ahlstrom
+2021-04-01 to 2021-07-27
+
+Kraftwerk's "Europe Endless" is a long, repetitive tune.  So repetitive that
+the vinyl recording of it had a visible pattern in the grooves.  And it seemed
+like a good test of using the pattern editing and pattern triggers of Seq66.
+And, man, did it uncover a lot of bugs in Seq66.  Also uncovered the need for a
+trigger-transposition feature.
+
+First, we found an existing file.  Sites for a MIDI file of Kraftwerk's "Europe
+Endless":
+
+https://bhs.minor9.com/midi/assortment/G-Q/Kraftwerk%20-%20Europe%20Endless.mid
+https://midisfree.com/download/kraftwerk-europe-endless-mid/
+
+The file is fairly large: Kraftwerk - Europe Endless.mid (100384 bytes) A dump
+of this file using our "midicvt" application showed the following information:
+
+    $ midicvt Kraftwerk....mid Kraftwerk....asc
+    Copyright "Copyright \xa9 1999 by Paul Williamson  email pw@dove.net.au"
+    TimeSig 4/4 24 8
+
+Some of the tracks were 258 measures long.  Very bad display of the progress
+bar, they revealed a bug in playback... we forgot to convert milliseconds to
+microseconds!  Any, onward.  Time to deconstruct the file.  The chords and
+melodies turned out to be base patterns that were transposed from time to time.
+Chords:
+
+            0 1 2 3 4 5 6 7
+    G   =   G       B     D
+    B   =   B       D#    F#        (G +  4, G - 8)
+    F#  =   F#      A#    C#        (G + 11, G - 1)
+
+We added the various patterns as noted below, and added provisional program
+changes and volume settings using the Seq66 "Events" tab.  In this
+deconstruction/reconstruction, we do not worry about exactly duplicating
+sections that are very minor variations on a theme.  Some additional Volume
+events could be added, but they might be synth/patch-dependent.  The
+reproduction is probably about 97% faithful to the original (for example, we
+didn't add the fade-out at the end), and, at about 12000 bytes, is about 12% of
+the size of the original.
+
+We can also take this Seq66 tune as laid out in the song editor, unmute all the
+patterns, and export it as a reconstituted MIDI file, playable in any sequencer.
+In this form, it is back up to about 93000 bytes in size.  The following command
+will convert the exported version to MP3:
+
+   $ timidity K.midi -Ow -o - | ffmpeg -i - -acodec libmp3lame -ab 128k K.mp3
+              =                                                         =
+
+where "K" is "Kraftwek-Europe-Endless-exported" (see the contrib/midi directory
+of this project). At 128k, it ends up about 9 Mb in size, and so we don't
+include it with this project.
+
+Program and Controller Changes:
+
+    Track 0:    None
+    Track 1:    Ch1  Part 6     GM Chorused Piano   Vol 127
+    Track 2:    Ch2  Part 35    GM Bass             Vol 1 to 100
+    Track 3:    Ch3  Part 52    GM Synth Strings    Vol 100
+    Track 4:    Ch4  Part 39    GM Synth Bass       Vol 127
+    Track 5:    Ch5  Part 65    GM Sax              Vol 100
+    Track 6:    Ch6  Part 87    GM Synth Lead       Vol 110
+    Track 7:    Ch7  Part 91    GM Synth Pad        Vol 70
+    Track 8:    Ch10 Part 25    GM Unknown          Vol 127
+
+    These have been set for the default Qsynth setup.  However, that application
+    would crackle a bit, and we found Timidity worked better, at least in ALSA.
+    However, Timidity also has a lag in playback, noticeable when using MIDI
+    Thru to play from a MIDI controller.
+
+Parts of the tune and their breakdown:
+
+    Track 0:
+
+        MIDI port events, Time Sig, Key Sig, and Tempo, Volume, Program Changes
+
+    Track 1 (Background Arpeggiation): Ch 1
+
+        Arp 1  -  0:  1 M @ 2     M 2     (1)  D4 to B4  1 oct
+        Arp 2  -  0:  1 M @ 3/4   M 3-4   (2)  D4 to B5  1.5 oct
+        Arp 3  -  0:  1 M @ 5     M 5-12  (8)  D4 to B5  2 oct
+        Arp 3  + 12:  1 M @ 13/14 M 13-18 (6)  D5 to B6  2 oct
+        Arp 3  -  0:  1 M         M 19-28 (10) D4 to B5  2 oct
+        Arp 3  - 12:  1 M         M 29-32 (4)  D3 to B4  2 oct
+        Arp 3  -  0:  1 M         M 33-64 (32) D4 to B5  2 oct
+        Arp 3  +  4:  1 M         M 65-80 (D becomes F#)
+        Arp 3  -  0:  1 M         M 81-88
+        Arp 1  -  0:  1 M         M 89-96
+        Arp 1  +  4:  1 M         M 97-112 (G becomes B)
+        Arp 1  +  0:, 1 M         M 113-152
+        Arp 1  +  4:  1 M         M 153-76 (G becomes B)
+        Arp 1  +  0:  1 M         M 177-192
+        Arp 1  +  4:  1 M         M 193-208 (G becomes B)
+        Arp 1  +  0:  1 M         M 209-258 (END)
+
+    Track 2 (Strings): Ch 2
+
+        Note 1: G2 at M 11 + 1/8, for 1M 
+        Note 2: G2 at M 33 + 1/2, for 8M 
+
+    Track 3 (Chorus): Ch 3
+
+        Chorus 1 - 0: 8 M @ 33    M 33-40 (8) D4 to C5
+        Chorus 1 - 0:             M 41-48
+        Chorus 1 - 8:             M 65-72 F#3 (minus 8)
+        Chorus 1 - 8:             M 97-104 F#3
+        Chorus 1 - 8:             M 153-160 F#3
+        Chorus 1 - 8:             M 193-200 F#3
+
+    Track 4 (Simple Bass): Ch 4
+
+        Bass 1 - 0:   1 M @ 40     M 40 only; Two-note intro
+        Bass 2 - 0:   1 M @ 41     M 41-64   (24) Simple pattern, G1 and G2
+        Bass 2 + 4:                M 65-80   (16) B1 and B2 (can we improve?)
+        Bass 2 - 0:                M 81-96   (16) G1 and G2
+        Bass 2 + 4:                M 97-112  (16) B1 and B2
+        Bass 2 - 1:                M 113-152 (16) F#1 and F#2
+        Bass 2 + 4:                M 153-176 (16) B1 and B2
+        Bass 2 - 0:                M 177-192 (16) G1 and G2
+        Bass 2 + 4:                M 193-208 (16) B1 and B2
+        Bass 2 - 1:                M 209-258 (16) F#1 and F#2
+
+    Track 5 (Melody): Ch 5
+
+        Melody 1 - 0: 4 M @ 49     M 49-52 - 53-56 Descending melody D4
+        Melody 1 - 0:              M 53-56
+        Melody 1 - 0:              M 81-84
+        Melody 1 - 0:              M 85-88
+        Melody 2 - 0: 40 M @ 113   M 113-152 Melody A
+        Melody 3 - 0: 4 M @ 177    M 177-180 Melody B
+        Melody 3 - 0:              M 181-184 Melody B
+        Melody 2 - 0:              M 209-248 Melody A
+
+    Track 6 (Voice): Ch 6
+
+        Voice 1 - 0:  3 M @ 56    M 56-58 "Europe ... Endless" D4
+        Voice 1 - 0:              M 60-62
+        Voice 2 - 0:  2 M @ 73    M 73-74 "...post-card views" F#4
+        Voice 2 - 0:              M 77-78
+        Voice 1 - 0:              M 88-90
+        Voice 1 - 0:              M 92-94
+        Voice 2 - 0:              M 105-106
+        Voice 2 - 0:              M 109-110
+        Voice 2 - 0:              M 161-162
+        Voice 2 - 0:              M 165-166
+        Voice 2 - 0:              M 169-170
+        Voice 2 - 0:              M 173-174
+        Voice 1 - 0:              M 184-186
+        Voice 1 - 0:              M 188-190
+        Voice 2 - 0:              M 201-202
+        Voice 2 - 0:              M 205-206
+
+    Track 7 (Endless): Ch 7
+
+        Endless 1 - 0: 2 M @ 59   M 59-60 G4 "Endless" 4 times
+        Endless 1 - 0:            M 63-64
+        Endless 2 - 0: 2 M @ 74   M 74-75 "It's Europe endless" B3
+        Endless 2 - 0:            M 78-79
+        Endless 1 - 0:            M 91-92
+        Endless 1 - 0:            M 95-96
+        Endless 2 - 0:            M 106-107
+        Endless 2 - 0:            M 110-111
+        Endless 3 - 0: 40 M @ 113 M 113-152 Chords at F#3
+        Endless 2 - 0:            M 162-163
+        Endless 2 - 0:            M 166-167
+        Endless 2 - 0:            M 170-171
+        Endless 2 - 0:            M 174-175
+        Endless 1 - 0:            M 187-188
+        Endless 1 - 0:            M 191-192
+        Endless 2 - 0:            M 202-203
+        Endless 2 - 0:            M 206-207
+        Endless 4 - 0: 50 M @ 209 M 209-258 Repetitive Chords at F#3
+
+        As an exercise, one could further break Endless 4 into short patterns
+        and lay them out in the song editor.
+
+    Track 8 (Drums): Ch 10
+
+        Drums 1 -     1 M @ 48     M 48 only; Intro part, plays once
+        Drums 2 -     1 M @ 49     M 49-258   Plays for the rest of the song
+
+        We could insert the introduction in one or two other places, perhaps.
+        Drums 2 layed out in multiple triggers for convenience/flexibility.
+
+Also of interest:
+
+    https://www.youtube.com/watch?v=xXnDMCRT7uU
+    How to Play Kraftwerk Europe Endless
+
+# vim: sw=4 ts=4 wm=2 et ft=markdown

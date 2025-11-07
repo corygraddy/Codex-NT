@@ -1,5 +1,7 @@
-# VLoop - MIDI Looper for Disting NT
-# Build configuration
+TARGET = VLoop
+BUILD_DIR = build
+SRC_DIR = src
+## VLoop - I2C→Virtual faders→14-bit MIDI CC pairs
 
 PLUGIN_NAME := 1VLoop.o
 SRC_DIR := src
@@ -41,6 +43,8 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 clean:
 	@echo "Cleaning build directory..."
-	rm -rf $(BUILD_DIR)/*
+	rm -f $(BUILD_DIR)/*
+
+-include $(DEPS)
 
 -include $(DEPS)

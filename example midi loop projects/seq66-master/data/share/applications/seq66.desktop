@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Seq66
+Version=1.0
+GenericName=Live Grid Sequencer
+Comment=MIDI Loop Sequencer derived from seq24
+Comment[fr]=Séquenceur de boucle MIDI dérivé de seq24
+Exec=qseq66
+Type=Application
+Terminal=false
+Icon=qseq66
+Categories=Qt;AudioVideo;Audio;Midi;Music;Sequencer;X-Alsa;X-Jack;X-MIDI;
+X-NSM-Capable=true
+X-NSM-Exec=qseq66

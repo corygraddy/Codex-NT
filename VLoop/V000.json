@@ -1,0 +1,21 @@
+{
+"kind": "disting NT preset",
+ "author": "Cory Graddy          ",
+ "saved-from": ["v1.11.0","Oct 20 2025 12:26:47"]
+ ,
+ "engine": {
+ "sampleRate": 44100,
+  "blockSize": 16}
+ ,
+ "name": "V000                ",
+ "version": 2,
+ "slots": []
+ ,
+ "ui": {
+ "currentSlot": 1,
+  "displayMode": "algorithm",
+  "perfPage": {
+  "display": "params",
+   "item": 0}
+  }
+ }

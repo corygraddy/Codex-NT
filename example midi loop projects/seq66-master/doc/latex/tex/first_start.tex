@@ -1,0 +1,218 @@
+%-------------------------------------------------------------------------------
+% first_start
+%-------------------------------------------------------------------------------
+%
+% \file        first_start.tex
+% \library     Documents
+% \author      Chris Ahlstrom
+% \date        2015-11-01
+% \update      2025-06-18
+% \version     $Revision$
+% \license     $XPC_GPL_LICENSE$
+%
+%     This document provides LaTeX documentation for Seq66.
+%
+%-------------------------------------------------------------------------------
+
+\section{Let's Go!}
+\label{sec:introduction_lets_go}
+
+   \textsl{Seq66} requires ALSA or JACK on Linux;
+   it does not support
+   \index{pipewire}
+   Pipewire.
+   It might work with a Pipewire-JACK setup, but that usage has not been
+   tested.
+   Another aspect to look into is interactions with
+   PulseAudio-pw.
+   On Windows, \textsl{Seq66} uses the \textsl{MultiMedia API} with a wrapper
+   that is our modified version of \textsl{PortMIDI} \cite{portmidi}.
+   Theoretically that library should support
+   \textsl{Mac OSX}, but we have no Mac to build and test with.
+   This manual assumes that one is running \textsl{Seq66} on Linux, for the
+   most part.
+   But see \sectionref{sec:windows}.
+
+   For the first run, make sure all desired MIDI devices are plugged in and
+   that all desired software synthesizers are running.
+   Only ports present at startup will appear; this version of
+   \textsl{Seq66} does not
+   support automatic handling of port changes at run-time.
+   In addition, port-mapping (see \sectionref{sec:port_mapping}) is
+   enabled by default; this makes the port setup more flexible.
+   However, sometimes exiting, editing the port map manually in the 'rc' file,
+   and restarting is necessary.
+
+   Start \textsl{Seq66}, verify that it comes up, and then exit it
+   immediately.
+   This first start creates the configuration files and a log file in
+
+   \begin{verbatim}
+      /home/your\_user\_name/.config/seq66/              (Linux)
+      C:/Users/your\_user\_name/AppData/Local/seq66      (Windows)
+   \end{verbatim}
+
+   Note: we will refer to this directory as the "home" directory
+   for \textsl{Seq66}.
+   Thus, a log file, for example, might be referred to by
+   \texttt{\$home/qseq66.log}.
+
+   If a session manager (e.g. \textsl{NSM})
+   is used, the configuration directory is determined by
+   the session manager, and is also called a "session" directory.
+   The main configuration file is
+   \texttt{qseq66.rc} (Linux) or
+   \texttt{qpseq66.rc} (Windows).
+   The '.rc' file contains ports and port-mapping for the devices
+   initially on the system.
+   It also specifies the names and active-status
+   of a number of other configuration files.
+
+   Now start \textsl{Seq66} to use JACK or ALSA for MIDI.
+   For USB MIDI devices on JACK, the \texttt{a2jmidid} program might
+   need to be running
+   (see \sectionref{sec:jack}, for details.)
+   On \textsl{Windows}, just run \texttt{qpseq66.exe};
+   see \sectionref{sec:windows}.
+
+   For better trouble-shooting, run it via command-line in
+   a terminal window, at first, and provide a MIDI file, to
+   see what messages might appear.
+   Also note that a log file (e.g. \texttt{qseq66.log} is created;
+   by default most messages will be written to it.
+   The port settings will depend on your system.
+   On our system, the synthesizer (\textsl{Yoshimi}) comes up on MIDI buss 5.
+   (On \textsl{Windows}, buss 0 is the "MIDI Mapper", while buss 1 is the
+   built-in wavetable synthesizer, which is normally under control of buss 0.)
+   The \texttt{-{}-buss} option remaps all events to the desired buss for
+   the current run:
+
+   \begin{verbatim}
+      $ qseq66 --alsa --buss 5 \
+         /usr/local/share/seq66-0.99/midi/b4uacuse-gm-patchless.midi
+      $ qseq66 --jack --buss 5 \
+         /usr/local/share/seq66-0.99/midi/b4uacuse-gm-patchless.midi
+   \end{verbatim}
+
+   Note that \texttt{/usr/} or \texttt{/usr/local/}
+   is where the program and its data files
+   are stored, and \texttt{-0.99} is the main version number.
+
+   The buss-override setting can also be made via the port drop-down control
+   in the main window.
+   It \textsl{will modify} the MIDI file.
+   The "midi" directory is a directory created in the installation area,
+   along with other directories such as "samples", "win", "wrk", etc.:
+
+   \begin{verbatim}
+      /usr/share/seq66-0.99/                             (Linux)
+      C:/Program Files/Seq66/data/                       (Windows)
+   \end{verbatim}
+
+   It contains sample MIDI files and configuration files.
+   Some of the files in those directories apply to both operating systems, so
+   be sure to look at them.
+   The user configration files are stored in the user's
+   \textsl{Seq66} "home" area:
+
+   \begin{verbatim}
+      /home/username/.config/seq66/qseq66.*              (Linux)
+      C:/Users/username/AppData/Local/seq66              (Windows)
+      ~/NSM Sessions/sessioname/seq66.nXXXX/config       (NSM, legacy)
+      ~/.local/share/nsm/sessioname/seq66.nXXXX/config   (NSM, new)
+   \end{verbatim}
+
+   The configuration files in the "home" directory
+   are created after the first run of \textsl{Seq66}.
+   If all is well, the "play" button will start playback and the tune sounds.
+   If not, look into \textbf{Edit / Preferences} or the configuration files.
+   Don't edit the configuration files while \textsl{Seq66} is running, as
+   they might be re-saved at application exit.
+
+   \textbf{Bug?}
+      The first-start change of input port settings might not get saved
+      to the 'rc' file. The workaround is to exit and rerun
+      \textsl{Seq66}, and make the setting again.
+      Mysterious.
+
+\subsection{Device Changes}
+\label{subsec:introduction_device_changes}
+
+   After running \textsl{Seq66} and getting it to work, one might
+   either add new MIDI devices and software synthesizers, or remove
+   them.
+   If port-mapping is enabled (the default, and recommended), then
+   one can go to
+   \textbf{Edit / Preferences / MIDI Clock} and
+   click the \textbf{Make Maps} button.
+   This action stores (again) the current set of MIDI devices.
+   Restart \textsl{Seq66} and the new set of devices should appear.
+   Sometimes one must completely exit and the start \textsl{Seq66}.
+   If devices have been added or removed (disabled), the user
+   might need to edit the port maps directly in the 'rc' file.
+
+   \textsl{Seq66} will also detect, at startup, if there are unavailable
+   ports or if there are now more real MIDI ports than mapped ports.
+   It will prompt for a potential remapping and restart.
+   Click that button if feeling lucky, otherwise
+   exit and fix the 'rc' file with a text editor.
+   Also see \sectionref{sec:port_mapping}.
+
+   \textbf{Warning}:
+   If one has hand-tailored the port maps to represent all possible devices one
+   has, the remap or restart buttons might \textbf{remove}
+   some of those devices.
+   Always keep a \textbf{backup}
+   of a known-good 'rc' file in a safe place.
+
+   In version 2 of \textsl{Seq66}, a year or two from now, we hope to make
+   the adjustments automatic.
+
+\subsection{Ports in Seq66 MIDI Files}
+\label{subsec:introduction_ports}
+
+   When opening a pre-existing \textsl{Seq66} which contains patterns with
+   output port numbers that don't exist on the current system, a prompt
+   will appear with option to remap-and-restart \textsl{Seq66}.
+   Sometimes the best thing to do is change the
+   port numbers to the numbers of existing ports, and then save the MIDI file.
+   One way to do this is to use the "buss-override" feature
+   (see \sectionref{subsubsec:introduction_sets_buss_override}),
+   which affects all patterns shown on the Live grid.
+   Another way is to use port-mapping;
+   \sectionref{sec:port_mapping}.
+
+\subsection{Windows}
+\label{subsec:introduction_windows}
+
+% TODO: talk about LoopMIDI
+
+   Details about \textsl{Windows} are in the file
+   \texttt{C:/Program Files/Seq66/data/midi/readme.windows}
+   and in \sectionref{sec:windows}.
+   The first-start depends on if it is a bare \textsl{Windows}
+   install, or if supplemental MIDI support such as 
+   the 
+   \textsl{CoolSoft MIDIMapper} and 
+   \textsl{VirtualMIDISynth} have been installed.
+   If they haven't, the default MIDI setup will contain no MIDI inputs,
+   and two MIDI outputs, the \textsl{MIDI Mapper} and the
+   \textsl{Microsoft GS Wavetable} synthesizer.
+   The former grabs control of the latter, making it unavailable!
+   \textsl{Seq66} detects this situation and enables only the MIDI Mapper.
+
+   Therefore, run \textsl{Seq66} for the first time, then exit it and
+   restart it. One should then be able to play MIDI files to the MIDI Mapper,
+   if nothing else.
+   We hope to get some input from
+   \textsl{Windows} users, as our main usage is \textsl{Linux}
+   and we run \textsl{Windows} only when we absolutely must, for building
+   and testing.
+
+   As for virtual ports in \textsl{Windows}, a useful tool
+   is \textsl{LoopMIDI} (\cite{loopmidi}), as noted in the section
+   on \textsl{Windows}.
+
+%-------------------------------------------------------------------------------
+% vim: ts=3 sw=3 et ft=tex
+%-------------------------------------------------------------------------------

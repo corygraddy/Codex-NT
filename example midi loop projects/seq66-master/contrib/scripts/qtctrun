@@ -1,0 +1,20 @@
+#!/bin/bash
+#
+# Run an application using Qt coloring as configured in qt5ct.
+
+QTXCT="none"
+type qt6ct &> /dev/null
+if [ $? == 0 ] ; then
+    QTXCT="qt6ct"
+else
+    type qt5ct &> /dev/null
+    if [ $? == 0 ] ; then
+        QTXCT="qt5ct"
+    fi
+fi
+if [ "$QTXCT" != "none" ] ; then
+    QT_QPA_PLATFORMTHEME=$QTXCT $* &
+else
+    echo "No qt6ct or qt5ct application is installed."
+    exit 1
+fi

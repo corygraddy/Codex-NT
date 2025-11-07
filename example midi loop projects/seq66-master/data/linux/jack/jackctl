@@ -1,0 +1,315 @@
+#!/bin/bash
+#
+#******************************************************************************
+# jackctl
+#------------------------------------------------------------------------------
+##
+# \file           jackctl
+# \library        Any project
+# \author         Chris Ahlstrom
+# \date           2022-09-25
+# \update         2025-09-27
+# \version        $Revision$
+# \license        $XPC_SUITE_GPL_LICENSE$
+#
+#     The above is modified by the following to remove even the mild GPL
+#     restrictions:
+#
+#     Use this script in any manner whatsoever.  You don't even need to give
+#     me any credit.  However, keep in mind the value of the GPL in keeping
+#     software and its descendant modifications available to the community
+#     for all time.
+#
+#     See "jack_control --help" for a list of options.
+#
+# ALSA parameters partial list:
+#
+#     device:        ALSA device name (type:isset:default:value).
+#     capture:       Optionally set port (str:notset:none:none).
+#     playback:      Optionally set port (str:notset:none:none).
+#     rate:          Set the sample rate (48000).
+#     period:        Frames per period (the "cycle", time between process
+#                    callback calls (1024).
+#     nperiod:       Number of periods (cycles) of latency (2).
+#     midi-driver:   ALSA MIDI driver.
+#
+# /proc/asound/cards (on our system):
+#
+#     0: CODEC       USB audio box.
+#     1: nanoKEY2    Korg keyboard.
+#     2: HDMI        Onboard HDMI.
+#     3: PCH         Intel on-board sound.
+#     4: NVidia      Onboard NVidia card.
+#     5: Midi        A generic USB MIDI cable.
+#     6: Mini        LaunchPad Mini.
+#
+# Configuration file:
+#
+#     The configuration file affected by jack_control is:
+#
+#        ~/.config/jack/conf.xml
+#
+# a2jmidid:
+#
+#     We ran into an issue on one of our test systems, where Seq66
+#     would show the MIDI ports with "[0]" prepended to every port
+#     name. Royally screws up port-mapping. We had to add the "-u"
+#     option to force generation of non-unique port names, which
+#     removes the ALSA client ID.
+#
+# Session managers:
+#
+#     Support for raysession and agordejo is provided. We currently
+#     prefer the way agordejo works.
+#
+#        JCTL_SESSMGR="raysession"
+#        JCTL_SESSOPT="--session-root /home/$USER/.local/share/ray"
+#
+#------------------------------------------------------------------------------
+
+JCTL_A2JMIDID="no"
+JCTL_ALL="no"
+JCTL_DEVICE="hw:CODEC"  # see "cat /proc/asound/cards"
+JCTL_DRIVER="alsa"
+JCTL_LATENCY="2"
+JCTL_OPERATION="list"
+JCTL_PERIOD="128"
+JCTL_RATE="48000"
+JCTL_SESSION="no"
+JCTL_SESSMGR="agordejo"
+JCTL_SESSOPT="--session-root /home/$USER/.local/share/nsm"
+JCTL_SYNTH="no"
+JCTL_SYNTHESIZER="qsynth"
+JCTL_SYNTHOPT="--midi-driver jack"
+
+if [ "$1" == "--help" ] || [ "$1" == "help" ] ; then
+
+   cat << E_O_F
+Usage v. 2025-01-24
+
+   jackctl [ --start ] [ options ] Start jack/apps with the usual parameters
+
+Options:
+
+   --list      List the drivers and the ALSA/JACK parameters. [Default]
+   --start     Start the JACK server.
+   --stop      Stop the JACK server. Does not apply to --session.
+   --kill      Stop the JACK server and exit jackdbus.
+   --session   Also start the $JCTL_SESSMGR session manager with options
+               $JCTL_SESSOPT.
+               The --start option is assumed.
+   --agordejo  Run the agordejo session manager. --start is assumed.
+   --ray       Run the raysession session manager. --start is assumed.
+   --set       Set the default values, shown here.  Stops, then restarts
+               jackdbus. Edit this script to change the defaults:
+
+               Driver:       $JCTL_DRIVER
+               Device:       $JCTL_DEVICE
+               Frame rate:   $JCTL_RATE
+               Nperiods:     $JCTL_LATENCY
+               Frame period: $JCTL_PERIOD frames
+               A2jmidid:     $JCTL_A2JMIDID
+
+   --period F  Change the period of the JACK server, and restart it.
+   --nperiod P Change ALSA period (playback latency, 2 or 3).
+   --rate R    Change the "sample rate".
+   --a2j       Also start/stop a2jmidid. Options used are --export-hw and
+               -u. The latter is needed to avoid "[0]" in port names on some
+               systems.
+   --synth     Start the software synthesizer $JCTL_SYNTHESIZER with options
+               $JCTL_SYNTHOPT. This is useful for testing without a session
+               manager.
+   --all       Combines --a2j --synth. Use with --start, --stop, but not
+               --session.
+   --help      Show this message.
+
+Note that some of these settings can be permanently modified by editing this
+script to one's setup.
+E_O_F
+
+exit 0
+
+else
+
+   while [ "$1" != "" ] ; do
+
+      case "$1" in
+
+         --list | list)
+            JCTL_OPERATION="list"
+            ;;
+
+         --set | set)
+            JCTL_OPERATION="setdefaults"
+            ;;
+
+         --start | start)
+            JCTL_OPERATION="start"
+            ;;
+
+         --stop | stop)
+            JCTL_OPERATION="stop"
+            ;;
+
+         --kill | kill)
+            JCTL_OPERATION="kill"
+            ;;
+
+         --session | session)
+            JCTL_OPERATION="start"
+            JCTL_SESSION="yes"
+            ;;
+
+         --ray | ray)
+            JCTL_OPERATION="start"
+            JCTL_SESSION="yes"
+            JCTL_SESSMGR="raysession"
+            JCTL_SESSOPT="--session-root /home/$USER/.local/share/ray"
+            ;;
+
+         --agor | agor | --agordejo)
+            JCTL_OPERATION="start"
+            JCTL_SESSION="yes"
+            JCTL_SESSMGR="agordejo"
+            JCTL_SESSOPT="--session-root /home/$USER/.local/share/nsm"
+            ;;
+
+         --session | session)
+            JCTL_SESSION="yes"
+            ;;
+
+         --synth | synth)
+            JCTL_SYNTH="yes"
+            ;;
+
+         --rate | rate)
+            shift
+            JCTL_RATE="$1"
+            JCTL_OPERATION="setrate"
+            ;;
+
+         --period | period)
+            shift
+            JCTL_PERIOD="$1"
+            JCTL_OPERATION="setperiod"
+            ;;
+
+         --nperiod | nperiod)
+            shift
+            JCTL_LATENCY="$1"
+            ;;
+
+         --a2j | a2j)
+
+            JCTL_A2JMIDID="yes"
+            ;;
+
+         --all | all)
+
+            JCTL_ALL="yes"
+            JCTL_A2JMIDID="yes"
+            JCTL_SYNTH="yes"
+            ;;
+
+         *)
+            echo "? Unsupported option; --help for more information"
+            exit 1
+            ;;
+
+      esac
+      shift
+
+   done
+
+fi
+
+if [ "$JCTL_OPERATION" == "list" ] ; then
+
+   echo "Available sound sinks:"
+   cat /proc/asound/cards | grep "^[ 0-9][0-9]"
+   echo "Selecting ALSA (seq). Available parameters:"
+   jack_control ds $JCTL_DRIVER
+   jack_control dp | grep "ALSA\|rate:\|period:\|nperiods:"
+   jack_lsp --aliases
+
+elif [ "$JCTL_OPERATION" == "stop" ] ; then
+
+   if [ "$JCTL_SYNTH" == "yes" ] ; then
+      echo "STOPPING $JCTL_SYNTHESIZER"
+      killall $JCTL_SYNTHESIZER
+   fi
+   if [ "$JCTL_A2JMIDID" == "yes" ] ; then
+      echo "STOPPING a2jmidid"
+      killall a2jmidid
+      sleep 1
+   fi
+   echo "STOPPING JACK"
+   jack_control stop
+
+elif [ "$JCTL_OPERATION" == "kill" ] ; then
+
+   if [ "$JCTL_SYNTH" == "yes" ] ; then
+      killall -9 $JCTL_SYNTHESIZER
+   fi
+   if [ "$JCTL_A2JMIDID" == "yes" ] ; then
+      killall -9 a2jmidid
+      sleep 1
+   fi
+   jack_control stop
+   jack_control exit
+
+elif [ "$JCTL_OPERATION" == "start" ] ; then
+
+   echo "STARTING JACK, setting period to $JCTL_PERIOD"
+   jack_control start
+   sleep 2
+   jack_control dps period $JCTL_PERIOD
+   if [ "$JCTL_SYNTH" == "yes" ] ; then
+      echo "STARTING $JCTL_SYNTHESIZER $JCTL_SYNTHOPT"
+      $JCTL_SYNTHESIZER $JCTL_SYNTHOPT &
+   fi
+   sleep 2
+   if [ "$JCTL_A2JMIDID" == "yes" ] ; then
+      echo "STARTING a2jmidid --export-hw -u"
+      a2jmidid --export-hw -u &
+   fi
+   if [ "$JCTL_SESSION" == "yes" ] ; then
+      echo "STARTING $JCTL_SESSMGR $JCTL_SESSOPT"
+      $JCTL_SESSMGR $JCTL_SESSOPT &       # redirect output to /dev/null?
+   fi
+   jack_lsp --aliases
+
+elif [ "$JCTL_OPERATION" == "setperiod" ] ; then
+
+   echo "Setting JACK frame count to $JCTL_PERIOD"
+   jack_control stop
+   jack_control dps period $JCTL_PERIOD
+   jack_control start
+   jack_control dp | grep "ALSA\|rate:\|period:\|nperiods:"
+
+elif [ "$JCTL_OPERATION" == "setrate" ] ; then
+
+   echo "Setting JACK frame rate to $JCTL_RATE"
+   jack_control stop
+   jack_control dps rate $JCTL_RATE
+   jack_control start
+   jack_control dp | grep "ALSA\|rate:\|period:\|nperiods:"
+
+elif [ "$JCTL_OPERATION" == "setdefaults" ] ; then
+
+   jack_control stop
+   jack_control ds $JCTL_DRIVER
+   jack_control dps device $JCTL_DEVICE
+   jack_control dps rate $JCTL_RATE
+   jack_control dps nperiods $JCTL_LATENCY
+   jack_control dps period $JCTL_PERIOD
+   jack_control start
+   jack_control dp | grep "ALSA\|rate:\|period:\|nperiods:"
+
+fi
+
+#******************************************************************************
+# jackctl
+#------------------------------------------------------------------------------
+# vim: ts=3 sw=3 et ft=sh
+#------------------------------------------------------------------------------

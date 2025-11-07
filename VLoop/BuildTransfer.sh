@@ -3,9 +3,11 @@
 
 PLUGIN_BINARY="1VLoop.o"
 SOURCE_DIR="$(pwd)/build"
-VOLUME_NAME="Untitled"
+VOLUME_NAME="DISTDEV NT"
 VOLUME_PATH="/Volumes/${VOLUME_NAME}"
 DEST_DIR="${VOLUME_PATH}/programs/plug-ins"
+PRESET_FILE="${VOLUME_PATH}/presets/vltest.json"
+CLEAN_PRESET="vltest_clean.json"
 
 set -e
 
@@ -24,7 +26,14 @@ if [ ! -f "$SOURCE_DIR/$PLUGIN_BINARY" ]; then
   exit 1
 fi
 
+# Copy plugin
 cp -v "$SOURCE_DIR/$PLUGIN_BINARY" "$DEST_DIR/"
+
+# Copy clean preset template to SD card (overwrites dirty one with debug data)
+if [ -f "$CLEAN_PRESET" ]; then
+  echo "Copying clean preset to SD card..."
+  cp -v "$CLEAN_PRESET" "$PRESET_FILE"
+fi
 
 diskutil eject "$VOLUME_PATH"
 echo "Deployment complete."
