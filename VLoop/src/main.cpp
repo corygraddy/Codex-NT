@@ -5,6 +5,9 @@
 // Debug mode - set to true to enable debug counters and logging
 #define VLOOP_DEBUG true
 
+// Test mode - set to true to enable test sequence generation
+#define VLOOP_TEST_SEQUENCE true
+
 struct MidiEvent {
     uint8_t data[3];
     
@@ -113,6 +116,7 @@ enum {
     kParamClear,
     kParamQuantize,
     kParamAutoStop,
+    kParamMidiOutChannel,
     kNumParams
 };
 
@@ -122,10 +126,11 @@ static const _NT_parameter parameters[] = {
     { .name = "Play", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
     { .name = "Clear", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
     { .name = "Quantize", .min = 0, .max = 2, .def = 0, .scaling = kNT_scalingNone },  // 0=1/32, 1=1/16, 2=1/8
-    { .name = "Auto Stop", .min = 0, .max = 16, .def = 0, .scaling = kNT_scalingNone } // 0=off, 1-16=beats
+    { .name = "Auto Stop", .min = 0, .max = 16, .def = 0, .scaling = kNT_scalingNone }, // 0=off, 1-16=beats
+    { .name = "MIDI Out Ch", .min = 1, .max = 16, .def = 2, .scaling = kNT_scalingNone } // Output channel (default ch 2)
 };
 
-static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamQuantize, kParamAutoStop };
+static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamQuantize, kParamAutoStop, kParamMidiOutChannel };
 static const _NT_parameterPage pages[] = {
     { .name = "VLoop", .numParams = ARRAY_SIZE(page1), .params = page1 }
 };
@@ -148,6 +153,58 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
     loop->parameterPages = &parameterPages;
     return loop;
 }
+
+#if VLOOP_TEST_SEQUENCE
+// Generate a test chromatic scale sequence for debugging
+// This creates a 2-bar loop with 13 notes (C3 to C4 chromatic)
+void generateTestSequence(VLoop* loop) {
+    // Clear existing loop
+    for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
+        loop->eventBuckets[i].clear();
+    }
+    
+    // Chromatic scale: C3(48) to C4(60)
+    const uint8_t notes[] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60};
+    const int numNotes = 13;
+    const int pulsesPerBeat = 8;
+    const int pulsesPerNote = 4;  // 1/8 note duration (4 * 1/32 pulses)
+    const uint8_t velocity = 100;
+    const uint8_t channel = 0;  // MIDI channel 1 (0-indexed)
+    
+    // Place notes starting at pulse 0
+    for (int i = 0; i < numNotes; i++) {
+        uint16_t startPulse = i * pulsesPerNote;
+        uint16_t endPulse = startPulse + (pulsesPerNote - 1);  // Note off 1 pulse before next note
+        
+        // Note On
+        MidiEvent noteOn;
+        noteOn.data[0] = 0x90 | channel;  // Note On, channel 1
+        noteOn.data[1] = notes[i];
+        noteOn.data[2] = velocity;
+        loop->eventBuckets[startPulse].add(noteOn);
+        
+        // Note Off
+        MidiEvent noteOff;
+        noteOff.data[0] = 0x80 | channel;  // Note Off, channel 1
+        noteOff.data[1] = notes[i];
+        noteOff.data[2] = 0;
+        loop->eventBuckets[endPulse].add(noteOff);
+    }
+    
+    // Set loop length to end of last note (quantized to beat boundary)
+    loop->lastPulseWithEvent = (numNotes * pulsesPerNote) - 1;
+    loop->loopLength = ((loop->lastPulseWithEvent + pulsesPerBeat) / pulsesPerBeat) * pulsesPerBeat;
+    loop->currentPulse = 0;
+    loop->isPlaying = true;
+    loop->isRecording = false;
+    
+#if VLOOP_DEBUG
+    // Count the notes
+    loop->noteOnRecorded = numNotes;
+    loop->noteOffRecorded = numNotes;
+#endif
+}
+#endif
 
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     VLoop* loop = (VLoop*)self;
@@ -228,11 +285,16 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     // Handle Play knob changes
     if (playActive && !loop->lastPlay) {
         // Knob turned up - start playback
-        // Don't allow playback while recording
+#if VLOOP_TEST_SEQUENCE
+        // In test mode, generate a test sequence instead of requiring recording
+        generateTestSequence(loop);
+#else
+        // Normal mode: Don't allow playback while recording
         if (loop->loopLength > 0 && !loop->isRecording) {
             loop->isPlaying = true;
             loop->currentPulse = 0;
         }
+#endif
     } else if (!playActive && loop->lastPlay) {
         // Knob turned down - stop playback
         loop->isPlaying = false;
@@ -305,10 +367,18 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                         }
 #endif
                         
+                        // Get output channel parameter (1-16, convert to 0-15)
+                        uint8_t outputChannel = ((int)loop->v[kParamMidiOutChannel] - 1) & 0x0F;
+                        
+                        // Remap to output channel (preserve original message type, replace channel)
+                        uint8_t statusByte = bucket.events[i].data[0];
+                        uint8_t messageType = statusByte & 0xF0;  // Extract message type
+                        uint8_t remappedStatus = messageType | outputChannel;  // Apply output channel
+                        
                         // Send only to Internal (for routing to other slots)
                         NT_sendMidi3ByteMessage(
                             kNT_destinationInternal,
-                            bucket.events[i].data[0],
+                            remappedStatus,  // Use remapped channel
                             bucket.events[i].data[1],
                             bucket.events[i].data[2]
                         );
@@ -319,14 +389,14 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 loop->currentPulse++;
                 if (loop->currentPulse >= loop->loopLength) {
                     // Loop wrap - send all-notes-off to prevent stuck notes
-                    for (uint8_t channel = 0; channel < 16; channel++) {
-                        NT_sendMidi3ByteMessage(
-                            kNT_destinationInternal,
-                            0xB0 | channel,  // CC on this channel
-                            123,              // All Notes Off
-                            0
-                        );
-                    }
+                    // Send on output channel only
+                    uint8_t outputChannel = ((int)loop->v[kParamMidiOutChannel] - 1) & 0x0F;
+                    NT_sendMidi3ByteMessage(
+                        kNT_destinationInternal,
+                        0xB0 | outputChannel,  // CC on output channel
+                        123,                    // All Notes Off
+                        0
+                    );
                     loop->currentPulse = 0; // Loop wrap
                 }
             }
@@ -337,11 +407,26 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
 void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte2) {
     VLoop* loop = (VLoop*)self;
     
-    // PASSTHROUGH: Immediately echo MIDI to all other destinations
-    // This allows other algorithms/outputs to receive the MIDI that VLoop intercepts
-    // Don't send to Internal to avoid infinite recursion
-    const uint8_t otherDestinations = kNT_destinationUSB | kNT_destinationBreakout | kNT_destinationSelectBus;
-    NT_sendMidi3ByteMessage(otherDestinations, byte0, byte1, byte2);
+    // Extract channel from incoming MIDI
+    uint8_t inputChannel = byte0 & 0x0F;
+    uint8_t messageType = byte0 & 0xF0;
+    
+    // ONLY process Channel 1 (0 in 0-indexed) - ignore everything else
+    if (inputChannel != 0) {
+        return;  // Not channel 1, ignore completely
+    }
+    
+    // Get output channel parameter (1-16, convert to 0-15)
+    uint8_t outputChannel = ((int)loop->v[kParamMidiOutChannel] - 1) & 0x0F;
+    
+    // ALWAYS pass Channel 1 through to output channel (so you hear what you play)
+    uint8_t remappedStatus = messageType | outputChannel;
+    NT_sendMidi3ByteMessage(
+        kNT_destinationInternal,
+        remappedStatus,
+        byte1,
+        byte2
+    );
     
 #if VLOOP_DEBUG
     loop->totalMidiReceived++;
