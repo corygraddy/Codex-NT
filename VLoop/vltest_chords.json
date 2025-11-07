@@ -1,0 +1,430 @@
+{
+"kind": "disting NT preset",
+ "author": "Cory Graddy          ",
+ "saved-from": ["v1.11.0","Oct 20 2025 12:26:47"]
+ ,
+ "engine": {
+ "sampleRate": 44100,
+  "blockSize": 16}
+ ,
+ "name": "vltest              ",
+ "version": 2,
+ "slots": [{
+  "guid": "clck",
+   "specs": [2,0,0]
+   ,
+   "name": "Clock                  ",
+   "parameters": [[0,0,1200,1,4,2,1,2,0,0,0,0]
+    ,[1,1,1,0,2,0,50,1,0,10,0,1]
+    ,[{
+     "v": 0,
+      "i2c": {
+      "controller": 4,
+       "enabled": 1,
+       "symmetric": 0,
+       "min": 0,
+       "max": 1}
+      }
+     ,16,1,0,9,0,50,1,0,10,0,1]
+    ]
+   ,
+   "ui": {
+   "page": 2,
+    "items": [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "params"}
+   }
+  ,{
+  "guid": "VLOP",
+   "specs": [0,0,0]
+   ,
+   "loopLength": 56,
+   "currentPulse": 36,
+   "isRecording": false,
+   "recordArmed": false,
+   "isPlaying": false,
+   "debug": {
+   "totalClockEdges": 3389,
+    "totalMidiSent": 284,
+    "totalMidiReceived": 0,
+    "noteOnReceived": 0,
+    "noteOffReceived": 0,
+    "noteOnRecorded": 30,
+    "noteOffRecorded": 30,
+    "noteOnSent": 150,
+    "noteOffSent": 134,
+    "midiSkippedNotRecording": 0,
+    "midiSkippedQuantization": 0,
+    "bucketOverflows": 0,
+    "stepCallCount": 583811,
+    "lastPulseWithMidi": 34,
+    "lastMidiSent": {
+    "status": 128,
+     "data1": 69,
+     "data2": 0}
+    }
+   ,
+   "buckets": [{
+    "pulse": 0,
+     "events": [{
+      "status": 144,
+       "data1": 48,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 52,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 55,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 59,
+       "data2": 100}
+      ]
+     }
+    ,{
+    "pulse": 8,
+     "events": [{
+      "status": 144,
+       "data1": 50,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 53,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 57,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 60,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 64,
+       "data2": 100}
+      ]
+     }
+    ,{
+    "pulse": 10,
+     "events": [{
+      "status": 128,
+       "data1": 48,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 52,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 55,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 59,
+       "data2": 0}
+      ]
+     }
+    ,{
+    "pulse": 16,
+     "events": [{
+      "status": 144,
+       "data1": 43,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 47,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 50,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 54,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 57,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 61,
+       "data2": 100}
+      ]
+     }
+    ,{
+    "pulse": 18,
+     "events": [{
+      "status": 128,
+       "data1": 50,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 53,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 57,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 60,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 64,
+       "data2": 0}
+      ]
+     }
+    ,{
+    "pulse": 24,
+     "events": [{
+      "status": 144,
+       "data1": 48,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 52,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 55,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 59,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 62,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 64,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 69,
+       "data2": 100}
+      ]
+     }
+    ,{
+    "pulse": 26,
+     "events": [{
+      "status": 128,
+       "data1": 43,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 47,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 50,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 54,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 57,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 61,
+       "data2": 0}
+      ]
+     }
+    ,{
+    "pulse": 32,
+     "events": [{
+      "status": 144,
+       "data1": 36,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 40,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 43,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 47,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 50,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 54,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 57,
+       "data2": 100}
+      ,{
+      "status": 144,
+       "data1": 60,
+       "data2": 100}
+      ]
+     }
+    ,{
+    "pulse": 34,
+     "events": [{
+      "status": 128,
+       "data1": 48,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 52,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 55,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 59,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 62,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 64,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 69,
+       "data2": 0}
+      ]
+     }
+    ,{
+    "pulse": 42,
+     "events": [{
+      "status": 128,
+       "data1": 36,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 40,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 43,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 47,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 50,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 54,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 57,
+       "data2": 0}
+      ,{
+      "status": 128,
+       "data1": 60,
+       "data2": 0}
+      ]
+     }
+    ]
+   ,
+   "name": "VLoop                  ",
+   "parameters": [0,1,{
+    "v": 0,
+     "i2c": {
+     "controller": 7,
+      "enabled": 1,
+      "symmetric": 0,
+      "min": 0,
+      "max": 1}
+     }
+    ,{
+    "v": 0,
+     "i2c": {
+     "controller": 6,
+      "enabled": 1,
+      "symmetric": 0,
+      "min": 0,
+      "max": 1}
+     }
+    ,{
+    "v": 0,
+     "i2c": {
+     "controller": 5,
+      "enabled": 1,
+      "symmetric": 0,
+      "min": 0,
+      "max": 1}
+     }
+    ,1,0,2]
+   ,
+   "ui": {
+   "page": 0,
+    "items": [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "params"}
+   }
+  ,{
+  "guid": "pymu",
+   "specs": [4,0,0]
+   ,
+   "folder": "!LABS Soft Pno - PedOn",
+   "saveFolder": "untitled",
+   "saveFilename": "sample",
+   "name": "Poly Multisample       ",
+   "parameters": [0,2,0,0,0,-1,0,48,13081,0,0,0,0,0,0,0,0,0,0,0,0,1,13,14,0,0,2,1,0,0,60,100,77,100,0,0,0,0,0,0,1,1,1,1,1,1,1,2,0,0,1,1,0,0,1,0,3,0,0,1,0,0,0,0,-1,0,0,0,1000,0,0,0,0,500,0,-200]
+   ,
+   "ui": {
+   "page": 6,
+    "items": [0,1,0,0,0,2,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "params"}
+   }
+  ,{
+  "guid": "samp",
+   "specs": [1,0,0]
+   ,
+   "triggers": [{
+    "folder": "Free_Pipe_Pack",
+     "sample": "HH_SPipe1.wav"}
+    ]
+   ,
+   "name": "Sample Player          ",
+   "parameters": [[0,-5,0]
+    ,[0,0,3,70,13,14,0,0,1,48,16,100,0,0,0,60,100,77,0,127,0,1]
+    ]
+   ,
+   "ui": {
+   "page": 0,
+    "items": [0,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    ,
+    "display": "gui"}
+   }
+  ]
+ ,
+ "ui": {
+ "currentSlot": 1,
+  "displayMode": "algorithm",
+  "perfPage": {
+  "display": "params",
+   "item": 0}
+  }
+ }

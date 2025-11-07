@@ -155,53 +155,87 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
 }
 
 #if VLOOP_TEST_SEQUENCE
-// Generate a test chromatic scale sequence for debugging
-// This creates a 2-bar loop with 13 notes (C3 to C4 chromatic)
+// Generate a dense chord sequence to stress-test MIDI handling
+// Multiple simultaneous notes, chord progressions, overlapping events
 void generateTestSequence(VLoop* loop) {
     // Clear existing loop
     for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
         loop->eventBuckets[i].clear();
     }
     
-    // Chromatic scale: C3(48) to C4(60)
-    const uint8_t notes[] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60};
-    const int numNotes = 13;
     const int pulsesPerBeat = 8;
-    const int pulsesPerNote = 4;  // 1/8 note duration (4 * 1/32 pulses)
     const uint8_t velocity = 100;
     const uint8_t channel = 0;  // MIDI channel 1 (0-indexed)
     
-    // Place notes starting at pulse 0
-    for (int i = 0; i < numNotes; i++) {
-        uint16_t startPulse = i * pulsesPerNote;
-        uint16_t endPulse = startPulse + (pulsesPerNote - 1);  // Note off 1 pulse before next note
+    // Chord progression with varying sizes (3-8 note chords)
+    // C Major 7 (4 notes) → D minor 9 (5 notes) → G7#9 (6 notes) → C Major 13 (7 notes) → Dense cluster (8 notes)
+    const uint8_t chords[][8] = {
+        {48, 52, 55, 59, 0, 0, 0, 0},      // C Major 7 (C, E, G, B) - 4 notes
+        {50, 53, 57, 60, 64, 0, 0, 0},     // D minor 9 (D, F, A, C, E) - 5 notes
+        {43, 47, 50, 54, 57, 61, 0, 0},    // G7#9 (G, B, D, F, A, C#) - 6 notes
+        {48, 52, 55, 59, 62, 64, 69, 0},   // C Major 13 (C, E, G, B, D, E, A) - 7 notes
+        {36, 40, 43, 47, 50, 54, 57, 60}   // Dense cluster - 8 notes simultaneously
+    };
+    const uint8_t chordSizes[] = {4, 5, 6, 7, 8};
+    const int numChords = 5;
+    
+    const int pulsesPerChord = 8;  // Quarter note per chord
+    int totalNoteOns = 0;
+    int totalNoteOffs = 0;
+    
+    // Place chords with overlapping notes (hold previous chord while starting next)
+    for (int c = 0; c < numChords; c++) {
+        uint16_t startPulse = c * pulsesPerChord;
+        uint16_t endPulse = startPulse + pulsesPerChord + 2;  // Overlap by 2 pulses
         
-        // Note On
-        MidiEvent noteOn;
-        noteOn.data[0] = 0x90 | channel;  // Note On, channel 1
-        noteOn.data[1] = notes[i];
-        noteOn.data[2] = velocity;
-        loop->eventBuckets[startPulse].add(noteOn);
+        // Add all note-ons for this chord at the same pulse
+        for (int n = 0; n < chordSizes[c]; n++) {
+            MidiEvent noteOn;
+            noteOn.data[0] = 0x90 | channel;
+            noteOn.data[1] = chords[c][n];
+            noteOn.data[2] = velocity;
+            if (loop->eventBuckets[startPulse].add(noteOn)) {
+                totalNoteOns++;
+            } else {
+                // Bucket overflow! Try next pulse
+                if (startPulse + 1 < MAX_LOOP_LENGTH) {
+                    loop->eventBuckets[startPulse + 1].add(noteOn);
+                    totalNoteOns++;
+                }
+            }
+        }
         
-        // Note Off
-        MidiEvent noteOff;
-        noteOff.data[0] = 0x80 | channel;  // Note Off, channel 1
-        noteOff.data[1] = notes[i];
-        noteOff.data[2] = 0;
-        loop->eventBuckets[endPulse].add(noteOff);
+        // Add all note-offs for this chord at the same pulse
+        if (endPulse < MAX_LOOP_LENGTH) {
+            for (int n = 0; n < chordSizes[c]; n++) {
+                MidiEvent noteOff;
+                noteOff.data[0] = 0x80 | channel;
+                noteOff.data[1] = chords[c][n];
+                noteOff.data[2] = 0;
+                if (loop->eventBuckets[endPulse].add(noteOff)) {
+                    totalNoteOffs++;
+                } else {
+                    // Bucket overflow! Try next pulse
+                    if (endPulse + 1 < MAX_LOOP_LENGTH) {
+                        loop->eventBuckets[endPulse + 1].add(noteOff);
+                        totalNoteOffs++;
+                    }
+                }
+            }
+        }
     }
     
-    // Set loop length to end of last note (quantized to beat boundary)
-    loop->lastPulseWithEvent = (numNotes * pulsesPerNote) - 1;
+    // Set loop length
+    loop->lastPulseWithEvent = (numChords * pulsesPerChord) + pulsesPerChord + 2;
     loop->loopLength = ((loop->lastPulseWithEvent + pulsesPerBeat) / pulsesPerBeat) * pulsesPerBeat;
     loop->currentPulse = 0;
     loop->isPlaying = true;
     loop->isRecording = false;
     
 #if VLOOP_DEBUG
-    // Count the notes
-    loop->noteOnRecorded = numNotes;
-    loop->noteOffRecorded = numNotes;
+    // Count the notes we actually added
+    loop->noteOnRecorded = totalNoteOns;
+    loop->noteOffRecorded = totalNoteOffs;
 #endif
 }
 #endif
