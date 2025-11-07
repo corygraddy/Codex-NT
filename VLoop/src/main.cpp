@@ -18,6 +18,7 @@ struct MidiEvent {
 
 #define MAX_EVENTS_PER_PULSE 16
 #define MAX_LOOP_LENGTH 512
+#define PPQN 32  // Pulses Per Quarter Note (internal resolution: 32 ticks per 1/4 note clock)
 
 // Simple fixed-size vector for events at each pulse
 struct EventBucket {
@@ -44,18 +45,18 @@ struct VLoop : public _NT_algorithm {
     EventBucket eventBuckets[MAX_LOOP_LENGTH];      // Main "safe" loop buffer
     EventBucket committedOverdub[MAX_LOOP_LENGTH];  // Last committed overdub (can be undone)
     EventBucket activeOverdub[MAX_LOOP_LENGTH];     // Current overdub in progress
-    uint16_t currentPulse;
-    uint16_t loopLength;
+    uint16_t currentPulse;      // Current pulse (in PPQN resolution, so 32 ticks = 1 beat)
+    uint16_t loopLength;        // Loop length (in PPQN resolution)
     bool isRecording;
     bool isPlaying;
-    bool recordArmed;         // Record mode armed, waiting for first MIDI
+    bool recordArmed;         // Record mode armed, waiting for first MIDI or clock
     uint16_t recordStartPulse; // Pulse where recording actually started
     float lastClockCV;
     bool lastRecord;
     bool lastPlay;
     bool lastClear;
     bool lastUndo;
-    uint16_t lastPulseWithEvent;  // Track last pulse that had MIDI recorded
+    uint16_t lastPulseWithEvent;  // Track last pulse that had MIDI recorded (in PPQN)
     
 #if VLOOP_DEBUG
     // Debug counters (only when VLOOP_DEBUG is true)
@@ -347,13 +348,24 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             // Was doing initial recording (not overdub)
             // Get loop end quantization setting (separate from note quantization)
             int loopEndQuant = (int)loop->v[kParamLoopEndQuant];
-            int quantizePulses = (loopEndQuant == 0) ? 1 : (1 << (loopEndQuant - 1));
+            int quantizeTicks;
+            if (loopEndQuant == 0) {
+                quantizeTicks = 1;  // No quantization
+            } else if (loopEndQuant == 1) {
+                quantizeTicks = PPQN / 8;  // 1/32 note
+            } else if (loopEndQuant == 2) {
+                quantizeTicks = PPQN / 4;  // 1/16 note
+            } else if (loopEndQuant == 3) {
+                quantizeTicks = PPQN / 2;  // 1/8 note
+            } else {  // loopEndQuant == 4
+                quantizeTicks = PPQN;  // 1/4 note
+            }
             
-            // Quantize loop length - ROUND UP to next quantized pulse to avoid cutting short
+            // Quantize loop length - ROUND UP to next quantized tick to avoid cutting short
             uint16_t rawLength = loop->lastPulseWithEvent + 1;
             if (loopEndQuant > 0) {
-                // Round UP to next quantized pulse (ceiling division)
-                loop->loopLength = ((rawLength + quantizePulses - 1) / quantizePulses) * quantizePulses;
+                // Round UP to next quantized tick (ceiling division)
+                loop->loopLength = ((rawLength + quantizeTicks - 1) / quantizeTicks) * quantizeTicks;
             } else {
                 loop->loopLength = rawLength;
             }
@@ -467,8 +479,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     }
                 }
                 
-                // Advance to next pulse
-                loop->currentPulse++;
+                // Advance by 1 PPQN tick per clock pulse (1/4 note = PPQN ticks)
+                loop->currentPulse += PPQN;
                 if (loop->currentPulse >= loop->loopLength) {
                     // Loop wrap!
                     
@@ -501,10 +513,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             }
             // Handle recording (initial recording only, not overdub)
             else if (loop->isRecording && !loop->isPlaying) {
-                // Initial recording - increment pulse counter
-                loop->currentPulse++;
-                if (loop->currentPulse >= MAX_LOOP_LENGTH) {
-                    loop->currentPulse = MAX_LOOP_LENGTH - 1;
+                // Initial recording - increment by PPQN per clock pulse
+                loop->currentPulse += PPQN;
+                if (loop->currentPulse >= MAX_LOOP_LENGTH * PPQN) {
+                    loop->currentPulse = (MAX_LOOP_LENGTH * PPQN) - 1;
                 }
             }
             // Record armed - waiting for first MIDI
@@ -572,23 +584,33 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
     }
     
     // Get quantization setting: 0=off, 1=1/32, 2=1/16, 3=1/8, 4=1/4
-    // In terms of clock pulses (assuming clock is at highest resolution you need):
-    // 0=no quantize, 1=1 pulse, 2=2 pulses, 3=4 pulses, 4=8 pulses
+    // Convert to PPQN ticks (PPQN=32, so 1/4=32, 1/8=16, 1/16=8, 1/32=4)
     int quantize = (int)loop->v[kParamQuantize];
-    int quantizePulses = (quantize == 0) ? 1 : (1 << (quantize - 1));  // 0→1, 1→1, 2→2, 3→4, 4→8
+    int quantizeTicks;
+    if (quantize == 0) {
+        quantizeTicks = 1;  // No quantization
+    } else if (quantize == 1) {
+        quantizeTicks = PPQN / 8;  // 1/32 note = PPQN/8 ticks
+    } else if (quantize == 2) {
+        quantizeTicks = PPQN / 4;  // 1/16 note = PPQN/4 ticks
+    } else if (quantize == 3) {
+        quantizeTicks = PPQN / 2;  // 1/8 note = PPQN/2 ticks
+    } else {  // quantize == 4
+        quantizeTicks = PPQN;  // 1/4 note = PPQN ticks
+    }
     
-    // Quantize current pulse to nearest quantized pulse
+    // Quantize current pulse to nearest quantized tick
     uint16_t recordPulse = loop->currentPulse;
     if (quantize > 0) {
-        // Round to nearest quantized pulse
-        recordPulse = ((recordPulse + (quantizePulses / 2)) / quantizePulses) * quantizePulses;
+        // Round to nearest quantized tick
+        recordPulse = ((recordPulse + (quantizeTicks / 2)) / quantizeTicks) * quantizeTicks;
     }
     
     // Ensure we don't go past max length (or loop length during overdub)
     if (loop->isPlaying && recordPulse >= loop->loopLength) {
         recordPulse = recordPulse % loop->loopLength;  // Wrap to loop length during overdub
-    } else if (recordPulse >= MAX_LOOP_LENGTH) {
-        recordPulse = MAX_LOOP_LENGTH - 1;
+    } else if (recordPulse >= MAX_LOOP_LENGTH * PPQN) {
+        recordPulse = (MAX_LOOP_LENGTH * PPQN) - 1;
     }
     
     // Choose buffer: active overdub if playing (overdub mode), main buffer if not (initial recording)
@@ -602,7 +624,7 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
     }
     
     // Add event to target bucket
-    if (recordPulse < MAX_LOOP_LENGTH) {
+    if (recordPulse < MAX_LOOP_LENGTH * PPQN) {
         MidiEvent event;
         event.data[0] = byte0;
         event.data[1] = byte1;
