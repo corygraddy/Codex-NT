@@ -62,6 +62,9 @@ struct VLoop : public _NT_algorithm {
     uint32_t totalMidiReceived;
     uint32_t totalMidiPassthrough;
     uint32_t totalMidiDropped;
+    uint32_t droppedWhileRecording;
+    uint32_t droppedWhilePlaying;
+    uint32_t droppedWhileIdle;
     uint32_t stepCallCount;
     uint16_t lastPulseWithMidi;
     uint8_t lastMidiStatus;
@@ -87,6 +90,9 @@ struct VLoop : public _NT_algorithm {
         totalMidiReceived = 0;
         totalMidiPassthrough = 0;
         totalMidiDropped = 0;
+        droppedWhileRecording = 0;
+        droppedWhilePlaying = 0;
+        droppedWhileIdle = 0;
         stepCallCount = 0;
         lastPulseWithMidi = 0;
         lastMidiStatus = 0;
@@ -318,6 +324,14 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
 #if VLOOP_DEBUG
     else {
         loop->totalMidiDropped++;
+        // Track what state we were in when dropping
+        if (loop->isRecording) {
+            loop->droppedWhileRecording++;
+        } else if (loop->isPlaying) {
+            loop->droppedWhilePlaying++;
+        } else {
+            loop->droppedWhileIdle++;
+        }
     }
 #endif
     
@@ -388,6 +402,12 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
     stream.addNumber((int)loop->totalMidiPassthrough);
     stream.addMemberName("totalMidiDropped");
     stream.addNumber((int)loop->totalMidiDropped);
+    stream.addMemberName("droppedWhileRecording");
+    stream.addNumber((int)loop->droppedWhileRecording);
+    stream.addMemberName("droppedWhilePlaying");
+    stream.addNumber((int)loop->droppedWhilePlaying);
+    stream.addMemberName("droppedWhileIdle");
+    stream.addNumber((int)loop->droppedWhileIdle);
     stream.addMemberName("stepCallCount");
     stream.addNumber((int)loop->stepCallCount);
     stream.addMemberName("lastPulseWithMidi");
