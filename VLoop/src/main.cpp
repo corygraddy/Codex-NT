@@ -122,6 +122,13 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     // Handle Record knob changes
     if (recordActive && !loop->lastRecord) {
         // Knob turned up - enter record mode
+        // First stop playback and send panic
+        if (loop->isPlaying) {
+            loop->isPlaying = false;
+            for (uint8_t ch = 0; ch < 16; ch++) {
+                NT_sendMidi3ByteMessage(~0, 0xB0 | ch, 123, 0); // All Notes Off
+            }
+        }
         loop->isRecording = true;
         loop->currentPulse = 0;
         // Clear all buckets
@@ -139,7 +146,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     // Handle Play knob changes
     if (playActive && !loop->lastPlay) {
         // Knob turned up - start playback
-        if (loop->loopLength > 0) {
+        // Don't allow playback while recording
+        if (loop->loopLength > 0 && !loop->isRecording) {
             loop->isPlaying = true;
             loop->currentPulse = 0;
         }
