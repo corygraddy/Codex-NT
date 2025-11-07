@@ -3,7 +3,7 @@
 #include <new>
 
 // Debug mode - set to true to enable debug counters and logging
-#define VLOOP_DEBUG false
+#define VLOOP_DEBUG true
 
 struct MidiEvent {
     uint8_t data[3];
@@ -60,6 +60,8 @@ struct VLoop : public _NT_algorithm {
     uint32_t totalClockEdges;
     uint32_t totalMidiSent;
     uint32_t totalMidiReceived;
+    uint32_t totalMidiPassthrough;
+    uint32_t totalMidiDropped;
     uint32_t stepCallCount;
     uint16_t lastPulseWithMidi;
     uint8_t lastMidiStatus;
@@ -83,6 +85,8 @@ struct VLoop : public _NT_algorithm {
         totalClockEdges = 0;
         totalMidiSent = 0;
         totalMidiReceived = 0;
+        totalMidiPassthrough = 0;
+        totalMidiDropped = 0;
         stepCallCount = 0;
         lastPulseWithMidi = 0;
         lastMidiStatus = 0;
@@ -150,6 +154,9 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             loop->passthroughBuffer[i].data[1],
             loop->passthroughBuffer[i].data[2]
         );
+#if VLOOP_DEBUG
+        loop->totalMidiPassthrough++;
+#endif
     }
     loop->passthroughCount = 0;  // Clear buffer
     
@@ -308,6 +315,11 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
         loop->passthroughBuffer[loop->passthroughCount].data[2] = byte2;
         loop->passthroughCount++;
     }
+#if VLOOP_DEBUG
+    else {
+        loop->totalMidiDropped++;
+    }
+#endif
     
     // Don't record system messages
     if ((byte0 & 0xF0) == 0xF0) return;
@@ -372,6 +384,10 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
     stream.addNumber((int)loop->totalMidiSent);
     stream.addMemberName("totalMidiReceived");
     stream.addNumber((int)loop->totalMidiReceived);
+    stream.addMemberName("totalMidiPassthrough");
+    stream.addNumber((int)loop->totalMidiPassthrough);
+    stream.addMemberName("totalMidiDropped");
+    stream.addNumber((int)loop->totalMidiDropped);
     stream.addMemberName("stepCallCount");
     stream.addNumber((int)loop->stepCallCount);
     stream.addMemberName("lastPulseWithMidi");
