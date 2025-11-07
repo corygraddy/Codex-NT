@@ -15,6 +15,7 @@ struct MidiEvent {
 
 #define MAX_EVENTS_PER_PULSE 16
 #define MAX_LOOP_LENGTH 512
+#define MAX_PASSTHROUGH_BUFFER 32  // Buffer for MIDI passthrough
 
 // Simple fixed-size vector for events at each pulse
 struct EventBucket {
@@ -50,6 +51,10 @@ struct VLoop : public _NT_algorithm {
     bool lastPlay;
     bool lastClear;
     
+    // MIDI passthrough buffer (to avoid sending from midiMessage callback)
+    MidiEvent passthroughBuffer[MAX_PASSTHROUGH_BUFFER];
+    uint8_t passthroughCount;
+    
 #if VLOOP_DEBUG
     // Debug counters (only when VLOOP_DEBUG is true)
     uint32_t totalClockEdges;
@@ -73,6 +78,7 @@ struct VLoop : public _NT_algorithm {
         lastRecord = false;
         lastPlay = false;
         lastClear = false;
+        passthroughCount = 0;
 #if VLOOP_DEBUG
         totalClockEdges = 0;
         totalMidiSent = 0;
@@ -135,6 +141,17 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
 #if VLOOP_DEBUG
     loop->stepCallCount++;
 #endif
+    
+    // Send buffered MIDI passthrough first
+    for (uint8_t i = 0; i < loop->passthroughCount; i++) {
+        NT_sendMidi3ByteMessage(
+            kNT_destinationInternal,
+            loop->passthroughBuffer[i].data[0],
+            loop->passthroughBuffer[i].data[1],
+            loop->passthroughBuffer[i].data[2]
+        );
+    }
+    loop->passthroughCount = 0;  // Clear buffer
     
     // Get parameter values
     int clockBusIndex = (int)loop->v[kParamClockInput] - 1;
@@ -283,6 +300,14 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
 #if VLOOP_DEBUG
     loop->totalMidiReceived++;
 #endif
+    
+    // Buffer MIDI for passthrough (send from step() to avoid reentrancy issues)
+    if (loop->passthroughCount < MAX_PASSTHROUGH_BUFFER) {
+        loop->passthroughBuffer[loop->passthroughCount].data[0] = byte0;
+        loop->passthroughBuffer[loop->passthroughCount].data[1] = byte1;
+        loop->passthroughBuffer[loop->passthroughCount].data[2] = byte2;
+        loop->passthroughCount++;
+    }
     
     // Don't record system messages
     if ((byte0 & 0xF0) == 0xF0) return;
