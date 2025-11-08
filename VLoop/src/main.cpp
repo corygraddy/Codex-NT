@@ -76,7 +76,7 @@ struct VLoop : public _NT_algorithm {
     // Time tracking for sub-pulse interpolation
     uint32_t samplesSinceLastClock;   // Samples elapsed since last clock edge
     uint32_t samplesPerClock;         // Measured clock period in samples
-
+    uint16_t lastSubPulse;            // Track last sub-pulse to detect when we cross event thresholds
     
 #if VLOOP_DEBUG
     // Debug counters (only when VLOOP_DEBUG is true)
@@ -93,6 +93,8 @@ struct VLoop : public _NT_algorithm {
     uint32_t midiSkippedQuantization;
     uint32_t bucketOverflows;
     uint32_t stepCallCount;
+    uint32_t continuousPlaybackChecks;  // How many times we check for events to play
+    uint32_t continuousPlaybackEvents;  // How many events actually played
     uint16_t lastPulseWithMidi;
     uint8_t lastMidiStatus;
     uint8_t lastMidiData1;
@@ -115,6 +117,7 @@ struct VLoop : public _NT_algorithm {
         lastBeatWithEvent = 0;
         samplesSinceLastClock = 0;
         samplesPerClock = NT_globals.sampleRate / 2; // Default to 120 BPM (0.5 sec per beat)
+        lastSubPulse = 0;
 #if VLOOP_DEBUG
         totalClockEdges = 0;
         totalMidiSent = 0;
@@ -423,6 +426,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             loop->isPlaying = true;
             loop->currentBeat = 0;
             loop->subPulse = 0;
+            loop->lastSubPulse = 0;
+            loop->samplesSinceLastClock = 0;
         }
 #endif
     } else if (!playActive && loop->lastPlay) {
@@ -448,79 +453,18 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             loop->totalClockEdges++;
 #endif
             
-            // Handle playback FIRST (if playing, send MIDI)
+            // Measure clock period for sub-pulse interpolation
+            if (loop->samplesSinceLastClock > 0) {
+                // Use exponential moving average to smooth clock period measurement
+                // This helps with clock jitter
+                loop->samplesPerClock = (loop->samplesPerClock * 7 + loop->samplesSinceLastClock) / 8;
+            }
+            
+            // Handle playback - advance beat and manage loop wrap
             if (loop->isPlaying && loop->loopLengthBeats > 0) {
-                // Send events from BOTH main buffer AND committed overdub buffer
-                if (loop->currentBeat < loop->loopLengthBeats && loop->currentBeat < MAX_LOOP_LENGTH) {
-                    // Get output channel
-                    uint8_t outputChannel = ((int)loop->v[kParamMidiOutChannel] - 1) & 0x0F;
-                    
-                    // Play main buffer events
-                    // Note: All events in this beat bucket play at the beat boundary.
-                    // The subPulseOffset is used for quantization accuracy during recording,
-                    // but playback happens at clock edges for hardware simplicity.
-                    EventBucket& mainBucket = loop->eventBuckets[loop->currentBeat];
-                    for (uint8_t i = 0; i < mainBucket.count; i++) {
-#if VLOOP_DEBUG
-                        loop->lastPulseWithMidi = loop->currentBeat;
-                        loop->lastMidiStatus = mainBucket.events[i].data[0];
-                        loop->lastMidiData1 = mainBucket.events[i].data[1];
-                        loop->lastMidiData2 = mainBucket.events[i].data[2];
-                        loop->totalMidiSent++;
-                        
-                        uint8_t msgType = mainBucket.events[i].data[0] & 0xF0;
-                        if (msgType == 0x90 && mainBucket.events[i].data[2] > 0) {
-                            loop->noteOnSent++;
-                        } else if (msgType == 0x80 || (msgType == 0x90 && mainBucket.events[i].data[2] == 0)) {
-                            loop->noteOffSent++;
-                        }
-#endif
-                        uint8_t statusByte = mainBucket.events[i].data[0];
-                        uint8_t messageType = statusByte & 0xF0;
-                        uint8_t remappedStatus = messageType | outputChannel;
-                        
-                        NT_sendMidi3ByteMessage(
-                            kNT_destinationInternal,
-                            remappedStatus,
-                            mainBucket.events[i].data[1],
-                            mainBucket.events[i].data[2]
-                        );
-                    }
-                    
-                    // Play committed overdub events
-                    EventBucket& committedBucket = loop->committedOverdub[loop->currentBeat];
-                    for (uint8_t i = 0; i < committedBucket.count; i++) {
-#if VLOOP_DEBUG
-                        loop->totalMidiSent++;
-                        uint8_t msgType = committedBucket.events[i].data[0] & 0xF0;
-                        if (msgType == 0x90 && committedBucket.events[i].data[2] > 0) {
-                            loop->noteOnSent++;
-                        } else if (msgType == 0x80 || (msgType == 0x90 && committedBucket.events[i].data[2] == 0)) {
-                            loop->noteOffSent++;
-                        }
-#endif
-                        uint8_t statusByte = committedBucket.events[i].data[0];
-                        uint8_t messageType = statusByte & 0xF0;
-                        uint8_t remappedStatus = messageType | outputChannel;
-                        
-                        NT_sendMidi3ByteMessage(
-                            kNT_destinationInternal,
-                            remappedStatus,
-                            committedBucket.events[i].data[1],
-                            committedBucket.events[i].data[2]
-                        );
-                    }
-                }
-                
-                // Measure clock period for sub-pulse interpolation
-                if (loop->samplesSinceLastClock > 0) {
-                    // Use exponential moving average to smooth clock period measurement
-                    // This helps with clock jitter
-                    loop->samplesPerClock = (loop->samplesPerClock * 7 + loop->samplesSinceLastClock) / 8;
-                }
-                
                 // Advance by 1 beat per clock pulse (clock = quarter note)
                 loop->currentBeat++;
+                
                 if (loop->currentBeat >= loop->loopLengthBeats) {
                     // Loop wrap!
                     
@@ -554,6 +498,46 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 // Reset sub-pulse and time tracking for new beat
                 loop->subPulse = 0;
                 loop->samplesSinceLastClock = 0;
+                loop->lastSubPulse = 0;
+                
+                // Play any events at position 0 immediately on the beat
+                if (loop->currentBeat < loop->loopLengthBeats && loop->currentBeat < MAX_LOOP_LENGTH) {
+                    uint8_t outputChannel = ((int)loop->v[kParamMidiOutChannel] - 1) & 0x0F;
+                    
+                    // Play main buffer events at position 0
+                    EventBucket& mainBucket = loop->eventBuckets[loop->currentBeat];
+                    for (uint8_t i = 0; i < mainBucket.count; i++) {
+                        if (mainBucket.events[i].subPulseOffset == 0) {
+                            uint8_t statusByte = mainBucket.events[i].data[0];
+                            uint8_t messageType = statusByte & 0xF0;
+                            uint8_t remappedStatus = messageType | outputChannel;
+                            
+                            NT_sendMidi3ByteMessage(
+                                kNT_destinationInternal,
+                                remappedStatus,
+                                mainBucket.events[i].data[1],
+                                mainBucket.events[i].data[2]
+                            );
+                        }
+                    }
+                    
+                    // Play committed overdub events at position 0
+                    EventBucket& committedBucket = loop->committedOverdub[loop->currentBeat];
+                    for (uint8_t i = 0; i < committedBucket.count; i++) {
+                        if (committedBucket.events[i].subPulseOffset == 0) {
+                            uint8_t statusByte = committedBucket.events[i].data[0];
+                            uint8_t messageType = statusByte & 0xF0;
+                            uint8_t remappedStatus = messageType | outputChannel;
+                            
+                            NT_sendMidi3ByteMessage(
+                                kNT_destinationInternal,
+                                remappedStatus,
+                                committedBucket.events[i].data[1],
+                                committedBucket.events[i].data[2]
+                            );
+                        }
+                    }
+                }
             }
             // Handle recording (initial recording only, not overdub)
             else if (loop->isRecording && !loop->isPlaying) {
@@ -599,6 +583,79 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 loop->subPulse = PPQN - 1; // Cap at max sub-pulse
             }
         }
+        
+        // CONTINUOUS PLAYBACK: Check if we've crossed any event sub-pulse thresholds
+        // This allows events to play at their precise quantized timing within the beat
+        if (loop->isPlaying && loop->loopLengthBeats > 0 && loop->subPulse != loop->lastSubPulse) {
+            if (loop->currentBeat < loop->loopLengthBeats && loop->currentBeat < MAX_LOOP_LENGTH) {
+                uint8_t outputChannel = ((int)loop->v[kParamMidiOutChannel] - 1) & 0x0F;
+                
+                // Check main buffer events
+                EventBucket& mainBucket = loop->eventBuckets[loop->currentBeat];
+                for (uint8_t i = 0; i < mainBucket.count; i++) {
+                    // Play event if we just crossed its sub-pulse threshold
+                    // Handle wraparound: if lastSubPulse > subPulse, we crossed beat boundary
+                    bool crossed = false;
+                    if (loop->lastSubPulse < loop->subPulse) {
+                        // Normal case: moving forward in time
+                        crossed = (mainBucket.events[i].subPulseOffset > loop->lastSubPulse && 
+                                   mainBucket.events[i].subPulseOffset <= loop->subPulse);
+                    } else {
+                        // Beat wraparound case: play events from lastSubPulse to end, or 0 to subPulse
+                        crossed = (mainBucket.events[i].subPulseOffset > loop->lastSubPulse || 
+                                   mainBucket.events[i].subPulseOffset <= loop->subPulse);
+                    }
+                    
+                    if (crossed) {
+                        
+                        uint8_t statusByte = mainBucket.events[i].data[0];
+                        uint8_t messageType = statusByte & 0xF0;
+                        uint8_t remappedStatus = messageType | outputChannel;
+                        
+                        NT_sendMidi3ByteMessage(
+                            kNT_destinationInternal,
+                            remappedStatus,
+                            mainBucket.events[i].data[1],
+                            mainBucket.events[i].data[2]
+                        );
+                    }
+                }
+                
+                // Check committed overdub events
+                EventBucket& committedBucket = loop->committedOverdub[loop->currentBeat];
+                for (uint8_t i = 0; i < committedBucket.count; i++) {
+                    // Play event if we just crossed its sub-pulse threshold
+                    // Handle wraparound: if lastSubPulse > subPulse, we crossed beat boundary
+                    bool crossed = false;
+                    if (loop->lastSubPulse < loop->subPulse) {
+                        // Normal case: moving forward in time
+                        crossed = (committedBucket.events[i].subPulseOffset > loop->lastSubPulse && 
+                                   committedBucket.events[i].subPulseOffset <= loop->subPulse);
+                    } else {
+                        // Beat wraparound case: play events from lastSubPulse to end, or 0 to subPulse
+                        crossed = (committedBucket.events[i].subPulseOffset > loop->lastSubPulse || 
+                                   committedBucket.events[i].subPulseOffset <= loop->subPulse);
+                    }
+                    
+                    if (crossed) {
+                        
+                        uint8_t statusByte = committedBucket.events[i].data[0];
+                        uint8_t messageType = statusByte & 0xF0;
+                        uint8_t remappedStatus = messageType | outputChannel;
+                        
+                        NT_sendMidi3ByteMessage(
+                            kNT_destinationInternal,
+                            remappedStatus,
+                            committedBucket.events[i].data[1],
+                            committedBucket.events[i].data[2]
+                        );
+                    }
+                }
+            }
+        }
+        
+        // Update last sub-pulse for next iteration
+        loop->lastSubPulse = loop->subPulse;
     }
 }
 
@@ -798,6 +855,22 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
     stream.addMemberName("data2");
     stream.addNumber((int)loop->lastMidiData2);
     stream.closeObject();
+    
+    // Timing debug info for continuous playback
+    stream.addMemberName("timing");
+    stream.openObject();
+    stream.addMemberName("currentBeat");
+    stream.addNumber((int)loop->currentBeat);
+    stream.addMemberName("subPulse");
+    stream.addNumber((int)loop->subPulse);
+    stream.addMemberName("lastSubPulse");
+    stream.addNumber((int)loop->lastSubPulse);
+    stream.addMemberName("samplesPerClock");
+    stream.addNumber((int)loop->samplesPerClock);
+    stream.addMemberName("samplesSinceLastClock");
+    stream.addNumber((int)loop->samplesSinceLastClock);
+    stream.closeObject();
+    
     stream.closeObject();
 #endif
     
@@ -819,6 +892,8 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
                 stream.addNumber((int)loop->eventBuckets[pulse].events[i].data[1]);
                 stream.addMemberName("data2");
                 stream.addNumber((int)loop->eventBuckets[pulse].events[i].data[2]);
+                stream.addMemberName("subPulseOffset");
+                stream.addNumber((int)loop->eventBuckets[pulse].events[i].subPulseOffset);
                 stream.closeObject();
             }
             stream.closeArray();

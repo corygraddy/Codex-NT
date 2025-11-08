@@ -15,22 +15,13 @@
    ,
    "name": "Clock                  ",
    "parameters": [[0,0,1200,1,4,2,1,2,0,0,0,0]
-    ,[1,1,1,0,2,0,50,1,0,10,0,1]
-    ,[{
-     "v": 0,
-      "i2c": {
-      "controller": 4,
-       "enabled": 1,
-       "symmetric": 0,
-       "min": 0,
-       "max": 1}
-      }
-     ,16,1,0,9,0,50,1,0,10,0,1]
+    ,[1,1,1,0,9,0,50,1,0,10,0,1]
+    ,[1,16,1,0,9,0,50,1,0,10,0,1]
     ]
    ,
    "ui": {
-   "page": 2,
-    "items": [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+   "page": 1,
+    "items": [2,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0]
     ,
     "display": "params"}
    }
@@ -38,26 +29,38 @@
   "guid": "VLOP",
    "specs": [0,0,0]
    ,
-   "loopLength": 64,
-   "currentPulse": 55,
-   "isRecording": false,
+   "loopLengthBeats": 15,
+   "currentBeat": 3,
+   "subPulse": 19,
+   "isRecording": true,
    "recordArmed": false,
-   "isPlaying": false,
+   "isPlaying": true,
    "debug": {
-   "totalClockEdges": 7028,
-    "totalMidiSent": 259,
-    "totalMidiReceived": 2082,
-    "totalMidiPassthrough": 0,
-    "totalMidiDropped": 0,
-    "droppedWhileRecording": 0,
-    "droppedWhilePlaying": 0,
-    "droppedWhileIdle": 0,
-    "stepCallCount": 1210564,
-    "lastPulseWithMidi": 40,
+   "totalClockEdges": 59,
+    "totalMidiSent": 0,
+    "totalMidiReceived": 64,
+    "noteOnReceived": 32,
+    "noteOffReceived": 32,
+    "noteOnRecorded": 32,
+    "noteOffRecorded": 31,
+    "noteOnSent": 0,
+    "noteOffSent": 0,
+    "midiSkippedNotRecording": 1,
+    "midiSkippedQuantization": 0,
+    "bucketOverflows": 0,
+    "stepCallCount": 81371,
+    "lastPulseWithMidi": 0,
     "lastMidiSent": {
-    "status": 128,
-     "data1": 69,
-     "data2": 64}
+    "status": 0,
+     "data1": 0,
+     "data2": 0}
+    ,
+    "timing": {
+    "currentBeat": 3,
+     "subPulse": 19,
+     "lastSubPulse": 19,
+     "samplesPerClock": 22023,
+     "samplesSinceLastClock": 13552}
     }
    ,
    "buckets": [{
@@ -65,140 +68,384 @@
      "events": [{
       "status": 144,
        "data1": 60,
-       "data2": 79}
+       "data2": 95,
+       "subPulseOffset": 0}
+      ,{
+      "status": 128,
+       "data1": 60,
+       "data2": 64,
+       "subPulseOffset": 31}
+      ,{
+      "status": 144,
+       "data1": 62,
+       "data2": 92,
+       "subPulseOffset": 31}
+      ]
+     }
+    ,{
+    "pulse": 1,
+     "events": [{
+      "status": 128,
+       "data1": 62,
+       "data2": 64,
+       "subPulseOffset": 24}
+      ,{
+      "status": 144,
+       "data1": 64,
+       "data2": 98,
+       "subPulseOffset": 24}
+      ,{
+      "status": 128,
+       "data1": 64,
+       "data2": 64,
+       "subPulseOffset": 31}
+      ,{
+      "status": 144,
+       "data1": 65,
+       "data2": 83,
+       "subPulseOffset": 31}
+      ]
+     }
+    ,{
+    "pulse": 2,
+     "events": [{
+      "status": 128,
+       "data1": 65,
+       "data2": 64,
+       "subPulseOffset": 14}
+      ,{
+      "status": 144,
+       "data1": 67,
+       "data2": 83,
+       "subPulseOffset": 14}
+      ,{
+      "status": 144,
+       "data1": 65,
+       "data2": 92,
+       "subPulseOffset": 31}
+      ,{
+      "status": 128,
+       "data1": 67,
+       "data2": 64,
+       "subPulseOffset": 31}
+      ]
+     }
+    ,{
+    "pulse": 3,
+     "events": [{
+      "status": 144,
+       "data1": 64,
+       "data2": 99,
+       "subPulseOffset": 12}
+      ,{
+      "status": 128,
+       "data1": 65,
+       "data2": 64,
+       "subPulseOffset": 18}
+      ,{
+      "status": 144,
+       "data1": 62,
+       "data2": 87,
+       "subPulseOffset": 31}
+      ,{
+      "status": 128,
+       "data1": 64,
+       "data2": 64,
+       "subPulseOffset": 31}
       ]
      }
     ,{
     "pulse": 4,
      "events": [{
       "status": 144,
-       "data1": 64,
-       "data2": 75}
+       "data1": 60,
+       "data2": 93,
+       "subPulseOffset": 6}
+      ,{
+      "status": 128,
+       "data1": 62,
+       "data2": 64,
+       "subPulseOffset": 11}
       ,{
       "status": 128,
        "data1": 60,
-       "data2": 64}
+       "data2": 64,
+       "subPulseOffset": 31}
+      ,{
+      "status": 144,
+       "data1": 62,
+       "data2": 91,
+       "subPulseOffset": 31}
+      ]
+     }
+    ,{
+    "pulse": 5,
+     "events": [{
+      "status": 144,
+       "data1": 64,
+       "data2": 89,
+       "subPulseOffset": 0}
+      ,{
+      "status": 128,
+       "data1": 62,
+       "data2": 64,
+       "subPulseOffset": 5}
+      ,{
+      "status": 144,
+       "data1": 65,
+       "data2": 91,
+       "subPulseOffset": 25}
+      ,{
+      "status": 128,
+       "data1": 64,
+       "data2": 64,
+       "subPulseOffset": 30}
+      ,{
+      "status": 144,
+       "data1": 67,
+       "data2": 78,
+       "subPulseOffset": 31}
+      ]
+     }
+    ,{
+    "pulse": 6,
+     "events": [{
+      "status": 128,
+       "data1": 65,
+       "data2": 64,
+       "subPulseOffset": 0}
+      ,{
+      "status": 144,
+       "data1": 65,
+       "data2": 89,
+       "subPulseOffset": 19}
+      ,{
+      "status": 128,
+       "data1": 67,
+       "data2": 64,
+       "subPulseOffset": 23}
+      ,{
+      "status": 144,
+       "data1": 64,
+       "data2": 99,
+       "subPulseOffset": 31}
+      ]
+     }
+    ,{
+    "pulse": 7,
+     "events": [{
+      "status": 128,
+       "data1": 65,
+       "data2": 64,
+       "subPulseOffset": 0}
+      ,{
+      "status": 144,
+       "data1": 62,
+       "data2": 90,
+       "subPulseOffset": 13}
+      ,{
+      "status": 128,
+       "data1": 64,
+       "data2": 64,
+       "subPulseOffset": 22}
+      ,{
+      "status": 144,
+       "data1": 60,
+       "data2": 96,
+       "subPulseOffset": 31}
+      ,{
+      "status": 128,
+       "data1": 62,
+       "data2": 64,
+       "subPulseOffset": 31}
       ]
      }
     ,{
     "pulse": 8,
      "events": [{
+      "status": 128,
+       "data1": 60,
+       "data2": 64,
+       "subPulseOffset": 13}
+      ,{
       "status": 144,
-       "data1": 69,
-       "data2": 65}
+       "data1": 62,
+       "data2": 97,
+       "subPulseOffset": 13}
+      ,{
+      "status": 144,
+       "data1": 64,
+       "data2": 87,
+       "subPulseOffset": 29}
+      ,{
+      "status": 128,
+       "data1": 62,
+       "data2": 64,
+       "subPulseOffset": 31}
+      ]
+     }
+    ,{
+    "pulse": 9,
+     "events": [{
+      "status": 144,
+       "data1": 65,
+       "data2": 79,
+       "subPulseOffset": 8}
       ,{
       "status": 128,
        "data1": 64,
-       "data2": 64}
+       "data2": 64,
+       "subPulseOffset": 8}
+      ,{
+      "status": 144,
+       "data1": 64,
+       "data2": 88,
+       "subPulseOffset": 24}
+      ,{
+      "status": 128,
+       "data1": 65,
+       "data2": 64,
+       "subPulseOffset": 28}
+      ]
+     }
+    ,{
+    "pulse": 10,
+     "events": [{
+      "status": 144,
+       "data1": 62,
+       "data2": 79,
+       "subPulseOffset": 4}
+      ,{
+      "status": 128,
+       "data1": 64,
+       "data2": 64,
+       "subPulseOffset": 8}
+      ,{
+      "status": 144,
+       "data1": 65,
+       "data2": 91,
+       "subPulseOffset": 24}
+      ,{
+      "status": 128,
+       "data1": 62,
+       "data2": 64,
+       "subPulseOffset": 27}
+      ]
+     }
+    ,{
+    "pulse": 11,
+     "events": [{
+      "status": 144,
+       "data1": 64,
+       "data2": 92,
+       "subPulseOffset": 0}
+      ,{
+      "status": 128,
+       "data1": 65,
+       "data2": 64,
+       "subPulseOffset": 4}
+      ,{
+      "status": 144,
+       "data1": 67,
+       "data2": 92,
+       "subPulseOffset": 19}
+      ,{
+      "status": 128,
+       "data1": 64,
+       "data2": 64,
+       "subPulseOffset": 23}
       ]
      }
     ,{
     "pulse": 12,
      "events": [{
       "status": 144,
-       "data1": 60,
-       "data2": 90}
+       "data1": 65,
+       "data2": 90,
+       "subPulseOffset": 0}
       ,{
       "status": 128,
-       "data1": 69,
-       "data2": 64}
-      ]
-     }
-    ,{
-    "pulse": 16,
-     "events": [{
-      "status": 128,
-       "data1": 60,
-       "data2": 64}
+       "data1": 67,
+       "data2": 64,
+       "subPulseOffset": 4}
       ,{
       "status": 144,
        "data1": 64,
-       "data2": 34}
+       "data2": 93,
+       "subPulseOffset": 19}
+      ,{
+      "status": 128,
+       "data1": 65,
+       "data2": 64,
+       "subPulseOffset": 26}
       ]
      }
     ,{
-    "pulse": 20,
+    "pulse": 13,
      "events": [{
       "status": 144,
-       "data1": 69,
-       "data2": 80}
+       "data1": 62,
+       "data2": 99,
+       "subPulseOffset": 0}
       ,{
       "status": 128,
        "data1": 64,
-       "data2": 64}
-      ]
-     }
-    ,{
-    "pulse": 24,
-     "events": [{
+       "data2": 64,
+       "subPulseOffset": 0}
+      ,{
       "status": 144,
        "data1": 64,
-       "data2": 81}
+       "data2": 92,
+       "subPulseOffset": 18}
       ,{
       "status": 128,
-       "data1": 69,
-       "data2": 64}
+       "data1": 62,
+       "data2": 64,
+       "subPulseOffset": 22}
       ]
      }
     ,{
-    "pulse": 28,
+    "pulse": 14,
      "events": [{
       "status": 144,
-       "data1": 69,
-       "data2": 74}
-      ]
-     }
-    ,{
-    "pulse": 36,
-     "events": [{
+       "data1": 65,
+       "data2": 98,
+       "subPulseOffset": 0}
+      ,{
       "status": 128,
-       "data1": 60,
-       "data2": 64}
-      ]
-     }
-    ,{
-    "pulse": 40,
-     "events": [{
+       "data1": 64,
+       "data2": 64,
+       "subPulseOffset": 0}
+      ,{
+      "status": 144,
+       "data1": 64,
+       "data2": 95,
+       "subPulseOffset": 18}
+      ,{
       "status": 128,
-       "data1": 69,
-       "data2": 64}
+       "data1": 65,
+       "data2": 64,
+       "subPulseOffset": 22}
+      ,{
+      "status": 144,
+       "data1": 62,
+       "data2": 103,
+       "subPulseOffset": 29}
+      ,{
+      "status": 128,
+       "data1": 64,
+       "data2": 64,
+       "subPulseOffset": 31}
       ]
      }
     ]
    ,
    "name": "VLoop                  ",
-   "parameters": [0,1,{
-    "v": 0,
-     "i2c": {
-     "controller": 7,
-      "enabled": 1,
-      "symmetric": 0,
-      "min": 0,
-      "max": 1}
-     }
-    ,{
-    "v": 0,
-     "i2c": {
-     "controller": 6,
-      "enabled": 1,
-      "symmetric": 0,
-      "min": 0,
-      "max": 1}
-     }
-    ,{
-    "v": 0,
-     "i2c": {
-     "controller": 5,
-      "enabled": 1,
-      "symmetric": 0,
-      "min": 0,
-      "max": 1}
-     }
-    ,2,0]
+   "parameters": [0,1,1,1,0,0,0,0,0,2]
    ,
    "ui": {
    "page": 0,
-    "items": [4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    "items": [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     ,
     "display": "params"}
    }
@@ -210,33 +457,13 @@
    "saveFolder": "untitled",
    "saveFilename": "sample",
    "name": "Poly Multisample       ",
-   "parameters": [0,2,0,0,0,-1,0,48,13081,0,0,0,0,0,0,0,0,0,0,0,0,1,13,14,0,0,1,1,0,0,60,100,77,100,0,0,0,0,0,0,1,1,1,1,1,1,1,2,0,0,1,1,0,0,1,0,3,0,0,1,0,0,0,0,-1,0,0,0,1000,0,0,0,0,500,0,-200]
+   "parameters": [0,2,0,0,0,-1,0,48,13081,0,0,0,0,0,0,0,0,0,0,0,0,1,13,14,0,0,2,1,0,0,60,100,77,100,0,0,0,0,0,0,1,1,1,1,1,1,1,2,0,0,1,1,0,0,1,0,3,0,0,1,0,0,0,0,-1,0,0,0,1000,0,0,0,0,500,0,-200]
    ,
    "ui": {
-   "page": 3,
-    "items": [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+   "page": 6,
+    "items": [2,2,0,0,0,2,0,0,0,0,0,0,0,0,0,0]
     ,
     "display": "params"}
-   }
-  ,{
-  "guid": "samp",
-   "specs": [1,0,0]
-   ,
-   "triggers": [{
-    "folder": "Free_Pipe_Pack",
-     "sample": "HH_SPipe1.wav"}
-    ]
-   ,
-   "name": "Sample Player          ",
-   "parameters": [[0,-5,0]
-    ,[0,0,3,70,13,14,0,0,1,48,16,100,0,0,0,60,100,77,0,127,0,1]
-    ]
-   ,
-   "ui": {
-   "page": 0,
-    "items": [0,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0]
-    ,
-    "display": "gui"}
    }
   ]
  ,
