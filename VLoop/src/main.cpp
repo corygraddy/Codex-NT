@@ -10,9 +10,11 @@
 
 struct MidiEvent {
     uint8_t data[3];
+    uint8_t subPulseOffset;  // Position within the beat (0-31 for PPQN=32)
     
     MidiEvent() {
         data[0] = data[1] = data[2] = 0;
+        subPulseOffset = 0;
     }
 };
 
@@ -39,14 +41,27 @@ struct EventBucket {
         }
         return false;
     }
+    
+    bool add(const uint8_t* data, uint8_t subPulseOffset) {
+        if (count < MAX_EVENTS_PER_PULSE) {
+            events[count].data[0] = data[0];
+            events[count].data[1] = data[1];
+            events[count].data[2] = data[2];
+            events[count].subPulseOffset = subPulseOffset;
+            count++;
+            return true;
+        }
+        return false;
+    }
 };
 
 struct VLoop : public _NT_algorithm {
-    EventBucket eventBuckets[MAX_LOOP_LENGTH];      // Main "safe" loop buffer
+    EventBucket eventBuckets[MAX_LOOP_LENGTH];      // Main "safe" loop buffer (indexed by beat)
     EventBucket committedOverdub[MAX_LOOP_LENGTH];  // Last committed overdub (can be undone)
     EventBucket activeOverdub[MAX_LOOP_LENGTH];     // Current overdub in progress
-    uint16_t currentPulse;      // Current pulse (in PPQN resolution, so 32 ticks = 1 beat)
-    uint16_t loopLength;        // Loop length (in PPQN resolution)
+    uint16_t currentBeat;       // Current beat number (quarter note count)
+    uint16_t subPulse;          // Sub-pulse within current beat (0-31, for PPQN=32)
+    uint16_t loopLengthBeats;   // Loop length in beats (quarter notes)
     bool isRecording;
     bool isPlaying;
     bool recordArmed;         // Record mode armed, waiting for first MIDI or clock
@@ -56,7 +71,12 @@ struct VLoop : public _NT_algorithm {
     bool lastPlay;
     bool lastClear;
     bool lastUndo;
-    uint16_t lastPulseWithEvent;  // Track last pulse that had MIDI recorded (in PPQN)
+    uint16_t lastBeatWithEvent;  // Track last beat that had MIDI recorded
+    
+    // Time tracking for sub-pulse interpolation
+    uint32_t samplesSinceLastClock;   // Samples elapsed since last clock edge
+    uint32_t samplesPerClock;         // Measured clock period in samples
+
     
 #if VLOOP_DEBUG
     // Debug counters (only when VLOOP_DEBUG is true)
@@ -80,8 +100,9 @@ struct VLoop : public _NT_algorithm {
 #endif
     
     VLoop() {
-        currentPulse = 0;
-        loopLength = 0;
+        currentBeat = 0;
+        subPulse = 0;
+        loopLengthBeats = 0;
         isRecording = false;
         isPlaying = false;
         recordArmed = false;
@@ -91,7 +112,9 @@ struct VLoop : public _NT_algorithm {
         lastPlay = false;
         lastClear = false;
         lastUndo = false;
-        lastPulseWithEvent = 0;
+        lastBeatWithEvent = 0;
+        samplesSinceLastClock = 0;
+        samplesPerClock = NT_globals.sampleRate / 2; // Default to 120 BPM (0.5 sec per beat)
 #if VLOOP_DEBUG
         totalClockEdges = 0;
         totalMidiSent = 0;
@@ -122,8 +145,17 @@ enum {
     kParamUndo,
     kParamQuantize,
     kParamLoopEndQuant,
+    kParamLoopPreset,        // Pre-set loop length: 0=Off, 1=1bar, 2=2bars, 3=4bars, 4=8bars
     kParamMidiOutChannel,
     kNumParams
+};
+
+static const char* const loopPresetStrings[] = {
+    "Off",
+    "1 bar",
+    "2 bars",
+    "4 bars",
+    "8 bars"
 };
 
 static const _NT_parameter parameters[] = {
@@ -134,10 +166,11 @@ static const _NT_parameter parameters[] = {
     { .name = "Undo", .min = 0, .max = 1, .def = 0, .scaling = kNT_scalingNone },
     { .name = "Note Quant", .min = 0, .max = 4, .def = 0, .scaling = kNT_scalingNone },  // 0=off, 1=1/32, 2=1/16, 3=1/8, 4=1/4
     { .name = "Loop End Quant", .min = 0, .max = 4, .def = 4, .scaling = kNT_scalingNone },  // Default to 1/4 note
+    { .name = "Loop Preset", .min = 0, .max = 4, .def = 0, .unit = kNT_unitEnum, .scaling = kNT_scalingNone, .enumStrings = loopPresetStrings },  // Pre-set loop length
     { .name = "MIDI Out Ch", .min = 1, .max = 16, .def = 2, .scaling = kNT_scalingNone } // Output channel (default ch 2)
 };
 
-static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamUndo, kParamQuantize, kParamLoopEndQuant, kParamMidiOutChannel };
+static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamUndo, kParamQuantize, kParamLoopEndQuant, kParamLoopPreset, kParamMidiOutChannel };
 static const _NT_parameterPage pages[] = {
     { .name = "VLoop", .numParams = ARRAY_SIZE(page1), .params = page1 }
 };
@@ -269,11 +302,13 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             loop->committedOverdub[i].clear();
             loop->activeOverdub[i].clear();
         }
-        loop->loopLength = 0;
-        loop->currentPulse = 0;
+        loop->loopLengthBeats = 0;
+        loop->currentBeat = 0;
+        loop->subPulse = 0;
         loop->isRecording = false;
         loop->isPlaying = false;
-        loop->lastPulseWithEvent = 0;
+        loop->lastBeatWithEvent = 0;
+        loop->samplesSinceLastClock = 0;
         
 #if VLOOP_DEBUG
         // Reset debug counters on clear
@@ -308,10 +343,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     // Handle Record knob changes
     if (recordActive && !loop->lastRecord) {
         // Record turned ON
-        if (loop->loopLength > 0 && loop->isPlaying) {
+        if (loop->loopLengthBeats > 0 && loop->isPlaying) {
             // OVERDUB MODE: Loop exists and is playing
             // First, commit any previous overdub by merging committed into main
-            for (int i = 0; i < loop->loopLength && i < MAX_LOOP_LENGTH; i++) {
+            for (int i = 0; i < loop->loopLengthBeats && i < MAX_LOOP_LENGTH; i++) {
                 EventBucket& committed = loop->committedOverdub[i];
                 EventBucket& main = loop->eventBuckets[i];
                 
@@ -332,48 +367,42 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             loop->isPlaying = false;
             loop->isRecording = false;
             loop->recordArmed = true;
-            loop->currentPulse = 0;
-            loop->lastPulseWithEvent = 0;
+            loop->currentBeat = 0;
+            loop->subPulse = 0;
+            loop->lastBeatWithEvent = 0;
+            loop->samplesSinceLastClock = 0;
             // Clear all buffers for fresh recording
             for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
                 loop->eventBuckets[i].clear();
                 loop->committedOverdub[i].clear();
                 loop->activeOverdub[i].clear();
             }
-            loop->loopLength = 0;
+            
+            // Check for loop preset (pre-populate loop length)
+            int loopPreset = (int)loop->v[kParamLoopPreset];
+            if (loopPreset > 0) {
+                // Calculate loop length in beats: 1bar=4, 2bars=8, 4bars=16, 8bars=32
+                int bars = (loopPreset == 1) ? 1 : (1 << (loopPreset - 1)); // 1, 2, 4, 8
+                loop->loopLengthBeats = bars * 4;  // Convert bars to beats (assuming 4/4 time)
+            } else {
+                loop->loopLengthBeats = 0;  // Will be set when recording stops
+            }
         }
     } else if (!recordActive && loop->lastRecord) {
         // Record turned OFF - stop recording
         if (loop->isRecording && !loop->isPlaying) {
             // Was doing initial recording (not overdub)
-            // Get loop end quantization setting (separate from note quantization)
-            int loopEndQuant = (int)loop->v[kParamLoopEndQuant];
-            int quantizeTicks;
-            if (loopEndQuant == 0) {
-                quantizeTicks = 1;  // No quantization
-            } else if (loopEndQuant == 1) {
-                quantizeTicks = PPQN / 8;  // 1/32 note
-            } else if (loopEndQuant == 2) {
-                quantizeTicks = PPQN / 4;  // 1/16 note
-            } else if (loopEndQuant == 3) {
-                quantizeTicks = PPQN / 2;  // 1/8 note
-            } else {  // loopEndQuant == 4
-                quantizeTicks = PPQN;  // 1/4 note
+            // If loop wasn't pre-set, use the last beat that had events + 1
+            if (loop->loopLengthBeats == 0 || loop->v[kParamLoopPreset] == 0) {
+                loop->loopLengthBeats = loop->lastBeatWithEvent + 1;
             }
-            
-            // Quantize loop length - ROUND UP to next quantized tick to avoid cutting short
-            uint16_t rawLength = loop->lastPulseWithEvent + 1;
-            if (loopEndQuant > 0) {
-                // Round UP to next quantized tick (ceiling division)
-                loop->loopLength = ((rawLength + quantizeTicks - 1) / quantizeTicks) * quantizeTicks;
-            } else {
-                loop->loopLength = rawLength;
-            }
+            // else: keep the pre-set loop length
             
             // If Play is ON, auto-start playback
-            if (playActive && loop->loopLength > 0) {
+            if (playActive && loop->loopLengthBeats > 0) {
                 loop->isPlaying = true;
-                loop->currentPulse = 0;
+                loop->currentBeat = 0;
+                loop->subPulse = 0;
             }
         }
         // If overdubbing, loop length stays the same
@@ -390,9 +419,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         generateTestSequence(loop);
 #else
         // Normal mode: Don't allow playback while recording
-        if (loop->loopLength > 0 && !loop->isRecording) {
+        if (loop->loopLengthBeats > 0 && !loop->isRecording) {
             loop->isPlaying = true;
-            loop->currentPulse = 0;
+            loop->currentBeat = 0;
+            loop->subPulse = 0;
         }
 #endif
     } else if (!playActive && loop->lastPlay) {
@@ -419,17 +449,20 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
 #endif
             
             // Handle playback FIRST (if playing, send MIDI)
-            if (loop->isPlaying && loop->loopLength > 0) {
+            if (loop->isPlaying && loop->loopLengthBeats > 0) {
                 // Send events from BOTH main buffer AND committed overdub buffer
-                if (loop->currentPulse < loop->loopLength && loop->currentPulse < MAX_LOOP_LENGTH) {
+                if (loop->currentBeat < loop->loopLengthBeats && loop->currentBeat < MAX_LOOP_LENGTH) {
                     // Get output channel
                     uint8_t outputChannel = ((int)loop->v[kParamMidiOutChannel] - 1) & 0x0F;
                     
                     // Play main buffer events
-                    EventBucket& mainBucket = loop->eventBuckets[loop->currentPulse];
+                    // Note: All events in this beat bucket play at the beat boundary.
+                    // The subPulseOffset is used for quantization accuracy during recording,
+                    // but playback happens at clock edges for hardware simplicity.
+                    EventBucket& mainBucket = loop->eventBuckets[loop->currentBeat];
                     for (uint8_t i = 0; i < mainBucket.count; i++) {
 #if VLOOP_DEBUG
-                        loop->lastPulseWithMidi = loop->currentPulse;
+                        loop->lastPulseWithMidi = loop->currentBeat;
                         loop->lastMidiStatus = mainBucket.events[i].data[0];
                         loop->lastMidiData1 = mainBucket.events[i].data[1];
                         loop->lastMidiData2 = mainBucket.events[i].data[2];
@@ -455,7 +488,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     }
                     
                     // Play committed overdub events
-                    EventBucket& committedBucket = loop->committedOverdub[loop->currentPulse];
+                    EventBucket& committedBucket = loop->committedOverdub[loop->currentBeat];
                     for (uint8_t i = 0; i < committedBucket.count; i++) {
 #if VLOOP_DEBUG
                         loop->totalMidiSent++;
@@ -479,16 +512,23 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     }
                 }
                 
-                // Advance by 1 PPQN tick per clock pulse (1/4 note = PPQN ticks)
-                loop->currentPulse += PPQN;
-                if (loop->currentPulse >= loop->loopLength) {
+                // Measure clock period for sub-pulse interpolation
+                if (loop->samplesSinceLastClock > 0) {
+                    // Use exponential moving average to smooth clock period measurement
+                    // This helps with clock jitter
+                    loop->samplesPerClock = (loop->samplesPerClock * 7 + loop->samplesSinceLastClock) / 8;
+                }
+                
+                // Advance by 1 beat per clock pulse (clock = quarter note)
+                loop->currentBeat++;
+                if (loop->currentBeat >= loop->loopLengthBeats) {
                     // Loop wrap!
                     
                     // If overdubbing, commit active overdub to committed buffer
                     if (loop->isRecording) {
-                        for (int pulse = 0; pulse < loop->loopLength && pulse < MAX_LOOP_LENGTH; pulse++) {
-                            EventBucket& active = loop->activeOverdub[pulse];
-                            EventBucket& committed = loop->committedOverdub[pulse];
+                        for (int beat = 0; beat < loop->loopLengthBeats && beat < MAX_LOOP_LENGTH; beat++) {
+                            EventBucket& active = loop->activeOverdub[beat];
+                            EventBucket& committed = loop->committedOverdub[beat];
                             
                             // Add all active overdub events to committed buffer
                             for (uint8_t i = 0; i < active.count; i++) {
@@ -508,21 +548,55 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                         123,                    // All Notes Off
                         0
                     );
-                    loop->currentPulse = 0; // Loop wrap
+                    loop->currentBeat = 0; // Loop wrap
                 }
+                
+                // Reset sub-pulse and time tracking for new beat
+                loop->subPulse = 0;
+                loop->samplesSinceLastClock = 0;
             }
             // Handle recording (initial recording only, not overdub)
             else if (loop->isRecording && !loop->isPlaying) {
-                // Initial recording - increment by PPQN per clock pulse
-                loop->currentPulse += PPQN;
-                if (loop->currentPulse >= MAX_LOOP_LENGTH * PPQN) {
-                    loop->currentPulse = (MAX_LOOP_LENGTH * PPQN) - 1;
+                // Initial recording - increment by 1 beat per clock pulse
+                loop->currentBeat++;
+                
+                // Auto-stop if we've reached a pre-set loop length
+                if (loop->loopLengthBeats > 0 && loop->currentBeat >= loop->loopLengthBeats) {
+                    loop->isRecording = false;
+                    loop->currentBeat = 0;
+                    // Optionally auto-start playback if Play knob is on
+                    bool playActive = loop->v[kParamPlay] > 0.5f;
+                    if (playActive) {
+                        loop->isPlaying = true;
+                    }
                 }
+                else if (loop->currentBeat >= MAX_LOOP_LENGTH) {
+                    loop->currentBeat = MAX_LOOP_LENGTH - 1;
+                }
+                
+                // Reset sub-pulse and time tracking
+                loop->subPulse = 0;
+                loop->samplesSinceLastClock = 0;
             }
             // Record armed - waiting for first MIDI
             else if (loop->recordArmed) {
-                // Armed but not recording - stay at pulse 0, waiting for first MIDI
+                // Armed but not recording - stay at beat 0, waiting for first MIDI
                 // Do nothing, let midiMessage() start the recording
+            }
+        }
+    }
+    
+    // Track samples for sub-pulse interpolation (only when playing or recording)
+    if (loop->isPlaying || loop->isRecording) {
+        loop->samplesSinceLastClock += totalFrames;
+        
+        // Calculate current sub-pulse position (interpolate between clocks)
+        if (loop->samplesPerClock > 0) {
+            uint32_t estimatedSubPulse = (loop->samplesSinceLastClock * PPQN) / loop->samplesPerClock;
+            if (estimatedSubPulse < PPQN) {
+                loop->subPulse = (uint16_t)estimatedSubPulse;
+            } else {
+                loop->subPulse = PPQN - 1; // Cap at max sub-pulse
             }
         }
     }
@@ -570,9 +644,11 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
     if (loop->recordArmed && !loop->isRecording) {
         loop->isRecording = true;
         loop->recordArmed = false;
-        loop->currentPulse = 0;
+        loop->currentBeat = 0;
+        loop->subPulse = 0;
         loop->recordStartPulse = 0;
-        // First event goes to pulse 0
+        loop->samplesSinceLastClock = 0;
+        // First event goes to beat 0
     }
     
     // Only record when in recording mode
@@ -584,57 +660,60 @@ void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8_t byte
     }
     
     // Get quantization setting: 0=off, 1=1/32, 2=1/16, 3=1/8, 4=1/4
-    // Convert to PPQN ticks (PPQN=32, so 1/4=32, 1/8=16, 1/16=8, 1/32=4)
+    // Convert to sub-pulse ticks (PPQN=32, so 1/4=32, 1/8=16, 1/16=8, 1/32=4)
     int quantize = (int)loop->v[kParamQuantize];
     int quantizeTicks;
     if (quantize == 0) {
         quantizeTicks = 1;  // No quantization
     } else if (quantize == 1) {
-        quantizeTicks = PPQN / 8;  // 1/32 note = PPQN/8 ticks
+        quantizeTicks = PPQN / 8;  // 1/32 note = 4 ticks
     } else if (quantize == 2) {
-        quantizeTicks = PPQN / 4;  // 1/16 note = PPQN/4 ticks
+        quantizeTicks = PPQN / 4;  // 1/16 note = 8 ticks
     } else if (quantize == 3) {
-        quantizeTicks = PPQN / 2;  // 1/8 note = PPQN/2 ticks
+        quantizeTicks = PPQN / 2;  // 1/8 note = 16 ticks
     } else {  // quantize == 4
-        quantizeTicks = PPQN;  // 1/4 note = PPQN ticks
+        quantizeTicks = PPQN;  // 1/4 note = 32 ticks
     }
     
-    // Quantize current pulse to nearest quantized tick
-    uint16_t recordPulse = loop->currentPulse;
+    // Quantize current sub-pulse to nearest quantized tick
+    uint16_t quantizedSubPulse = loop->subPulse;
     if (quantize > 0) {
         // Round to nearest quantized tick
-        recordPulse = ((recordPulse + (quantizeTicks / 2)) / quantizeTicks) * quantizeTicks;
+        quantizedSubPulse = ((loop->subPulse + (quantizeTicks / 2)) / quantizeTicks) * quantizeTicks;
+        if (quantizedSubPulse >= PPQN) {
+            quantizedSubPulse = PPQN - 1; // Cap at max sub-pulse
+        }
     }
     
+    // Current beat for recording
+    uint16_t recordBeat = loop->currentBeat;
+    
     // Ensure we don't go past max length (or loop length during overdub)
-    if (loop->isPlaying && recordPulse >= loop->loopLength) {
-        recordPulse = recordPulse % loop->loopLength;  // Wrap to loop length during overdub
-    } else if (recordPulse >= MAX_LOOP_LENGTH * PPQN) {
-        recordPulse = (MAX_LOOP_LENGTH * PPQN) - 1;
+    if (loop->isPlaying && recordBeat >= loop->loopLengthBeats) {
+        recordBeat = recordBeat % loop->loopLengthBeats;  // Wrap to loop length during overdub
+    } else if (recordBeat >= MAX_LOOP_LENGTH) {
+        recordBeat = MAX_LOOP_LENGTH - 1;
     }
     
     // Choose buffer: active overdub if playing (overdub mode), main buffer if not (initial recording)
     EventBucket* targetBucket;
     if (loop->isPlaying) {
         // OVERDUB MODE: Record to active overdub buffer (will be committed at loop wrap)
-        targetBucket = &loop->activeOverdub[recordPulse];
+        targetBucket = &loop->activeOverdub[recordBeat];
     } else {
         // INITIAL RECORDING: Record directly to main buffer
-        targetBucket = &loop->eventBuckets[recordPulse];
+        targetBucket = &loop->eventBuckets[recordBeat];
     }
     
-    // Add event to target bucket
-    if (recordPulse < MAX_LOOP_LENGTH * PPQN) {
-        MidiEvent event;
-        event.data[0] = byte0;
-        event.data[1] = byte1;
-        event.data[2] = byte2;
-        bool added = targetBucket->add(event);
+    // Add event to target bucket with quantized sub-pulse offset
+    if (recordBeat < MAX_LOOP_LENGTH) {
+        uint8_t midiData[3] = {byte0, byte1, byte2};
+        bool added = targetBucket->add(midiData, (uint8_t)quantizedSubPulse);
         
         if (added) {
-            // Track last pulse with recorded event (for initial recording only)
+            // Track last beat with recorded event (for initial recording only)
             if (!loop->isPlaying) {
-                loop->lastPulseWithEvent = recordPulse;
+                loop->lastBeatWithEvent = recordBeat;
             }
             
 #if VLOOP_DEBUG
@@ -660,11 +739,14 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
     VLoop* loop = (VLoop*)self;
     
     // Write loop metadata
-    stream.addMemberName("loopLength");
-    stream.addNumber((int)loop->loopLength);
+    stream.addMemberName("loopLengthBeats");
+    stream.addNumber((int)loop->loopLengthBeats);
     
-    stream.addMemberName("currentPulse");
-    stream.addNumber((int)loop->currentPulse);
+    stream.addMemberName("currentBeat");
+    stream.addNumber((int)loop->currentBeat);
+    
+    stream.addMemberName("subPulse");
+    stream.addNumber((int)loop->subPulse);
     
     stream.addMemberName("isRecording");
     stream.addBoolean(loop->isRecording);
@@ -753,16 +835,22 @@ bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
     for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
         loop->eventBuckets[i].clear();
     }
-    loop->loopLength = 0;
-    loop->currentPulse = 0;
+    loop->loopLengthBeats = 0;
+    loop->currentBeat = 0;
+    loop->subPulse = 0;
     loop->isRecording = false;
     loop->isPlaying = false;
     
     // Load the data
     int num;
+    if (parse.matchName("loopLengthBeats")) {
+        parse.number(num);
+        loop->loopLengthBeats = num;
+    }
+    // Also support old "loopLength" name for compatibility
     if (parse.matchName("loopLength")) {
         parse.number(num);
-        loop->loopLength = num;
+        loop->loopLengthBeats = num;
     }
     
     // Load event buckets array
