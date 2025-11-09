@@ -55,6 +55,21 @@ struct EventBucket {
     }
 };
 
+// Loop snapshot for saving/loading loop slots (stored in DRAM)
+struct LoopSnapshot {
+    EventBucket eventBuckets[MAX_LOOP_LENGTH];
+    EventBucket committedOverdub[MAX_LOOP_LENGTH];
+    uint16_t loopLengthBeats;
+    bool isEmpty;
+    
+    LoopSnapshot() : loopLengthBeats(0), isEmpty(true) {}
+};
+
+// DRAM storage structure (10 loop slots)
+struct LoopSlotStorage {
+    LoopSnapshot slots[10];
+};
+
 struct VLoop : public _NT_algorithm {
     EventBucket eventBuckets[MAX_LOOP_LENGTH];      // Main "safe" loop buffer (indexed by beat)
     EventBucket committedOverdub[MAX_LOOP_LENGTH];  // Last committed overdub (can be undone)
@@ -72,6 +87,11 @@ struct VLoop : public _NT_algorithm {
     bool lastClear;
     bool lastUndo;
     uint16_t lastBeatWithEvent;  // Track last beat that had MIDI recorded
+    
+    // Loop slot management
+    LoopSlotStorage* slotStorage;  // Pointer to DRAM storage
+    int lastSaveSlot;
+    int lastLoadSlot;
     
     // Time tracking for sub-pulse interpolation
     uint32_t samplesSinceLastClock;   // Samples elapsed since last clock edge
@@ -115,6 +135,9 @@ struct VLoop : public _NT_algorithm {
         lastClear = false;
         lastUndo = false;
         lastBeatWithEvent = 0;
+        slotStorage = nullptr;
+        lastSaveSlot = 0;
+        lastLoadSlot = 0;
         samplesSinceLastClock = 0;
         samplesPerClock = NT_globals.sampleRate / 2; // Default to 120 BPM (0.5 sec per beat)
         lastSubPulse = 0;
@@ -150,6 +173,8 @@ enum {
     kParamLoopEndQuant,
     kParamLoopPreset,        // Pre-set loop length: 0=Off, 1=1bar, 2=2bars, 3=4bars, 4=8bars
     kParamMidiOutChannel,
+    kParamSaveSlot,          // Save current loop to slot 0-9
+    kParamLoadSlot,          // Load loop from slot 0-9
     kNumParams
 };
 
@@ -170,10 +195,12 @@ static const _NT_parameter parameters[] = {
     { .name = "Note Quant", .min = 0, .max = 4, .def = 0, .scaling = kNT_scalingNone },  // 0=off, 1=1/32, 2=1/16, 3=1/8, 4=1/4
     { .name = "Loop End Quant", .min = 0, .max = 4, .def = 4, .scaling = kNT_scalingNone },  // Default to 1/4 note
     { .name = "Loop Preset", .min = 0, .max = 4, .def = 0, .unit = kNT_unitEnum, .scaling = kNT_scalingNone, .enumStrings = loopPresetStrings },  // Pre-set loop length
-    { .name = "MIDI Out Ch", .min = 1, .max = 16, .def = 2, .scaling = kNT_scalingNone } // Output channel (default ch 2)
+    { .name = "MIDI Out Ch", .min = 1, .max = 16, .def = 2, .scaling = kNT_scalingNone }, // Output channel (default ch 2)
+    { .name = "Save Slot", .min = 0, .max = 9, .def = 0, .scaling = kNT_scalingNone },  // Save to slot 0-9
+    { .name = "Load Slot", .min = 0, .max = 9, .def = 0, .scaling = kNT_scalingNone }   // Load from slot 0-9
 };
 
-static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamUndo, kParamQuantize, kParamLoopEndQuant, kParamLoopPreset, kParamMidiOutChannel };
+static const uint8_t page1[] = { kParamClockInput, kParamRecord, kParamPlay, kParamClear, kParamUndo, kParamQuantize, kParamLoopEndQuant, kParamLoopPreset, kParamMidiOutChannel, kParamSaveSlot, kParamLoadSlot };
 static const _NT_parameterPage pages[] = {
     { .name = "VLoop", .numParams = ARRAY_SIZE(page1), .params = page1 }
 };
@@ -185,7 +212,7 @@ static const _NT_parameterPages parameterPages = {
 void calculateRequirements(_NT_algorithmRequirements& req, const int32_t*) {
     req.numParameters = kNumParams;
     req.sram = sizeof(VLoop);
-    req.dram = 0;
+    req.dram = sizeof(LoopSlotStorage);  // 10 loop slots in DRAM
     req.dtc = 0;
     req.itc = 0;
 }
@@ -194,6 +221,10 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
     VLoop* loop = new (ptrs.sram) VLoop();
     loop->parameters = parameters;
     loop->parameterPages = &parameterPages;
+    
+    // Initialize DRAM slot storage
+    loop->slotStorage = new (ptrs.dram) LoopSlotStorage();
+    
     return loop;
 }
 
@@ -283,6 +314,44 @@ void generateTestSequence(VLoop* loop) {
 }
 #endif
 
+// Save current loop to a DRAM slot
+void saveLoopToSlot(VLoop* loop, int slotIndex) {
+    if (slotIndex < 0 || slotIndex >= 10 || !loop->slotStorage) return;
+    
+    LoopSnapshot& slot = loop->slotStorage->slots[slotIndex];
+    
+    // Copy main event buckets to DRAM
+    for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
+        slot.eventBuckets[i] = loop->eventBuckets[i];
+        slot.committedOverdub[i] = loop->committedOverdub[i];
+    }
+    
+    slot.loopLengthBeats = loop->loopLengthBeats;
+    slot.isEmpty = (loop->loopLengthBeats == 0);
+}
+
+// Load loop from a DRAM slot (can be done without stopping playback!)
+void loadLoopFromSlot(VLoop* loop, int slotIndex) {
+    if (slotIndex < 0 || slotIndex >= 10 || !loop->slotStorage) return;
+    
+    LoopSnapshot& slot = loop->slotStorage->slots[slotIndex];
+    
+    // Don't load empty slots
+    if (slot.isEmpty) return;
+    
+    // Copy event buckets from DRAM (fast enough to do without stopping)
+    for (int i = 0; i < MAX_LOOP_LENGTH; i++) {
+        loop->eventBuckets[i] = slot.eventBuckets[i];
+        loop->committedOverdub[i] = slot.committedOverdub[i];
+        loop->activeOverdub[i].clear();  // Clear active overdub
+    }
+    
+    loop->loopLengthBeats = slot.loopLengthBeats;
+    loop->currentBeat = 0;
+    loop->subPulse = 0;
+    loop->lastSubPulse = 0;
+}
+
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     VLoop* loop = (VLoop*)self;
     
@@ -342,6 +411,20 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         // Keep playing the main loop
     }
     loop->lastUndo = undoActive;
+    
+    // Handle Save Slot parameter - trigger on value change
+    int saveSlot = (int)loop->v[kParamSaveSlot];
+    if (saveSlot != loop->lastSaveSlot) {
+        saveLoopToSlot(loop, saveSlot);
+        loop->lastSaveSlot = saveSlot;
+    }
+    
+    // Handle Load Slot parameter - trigger on value change
+    int loadSlot = (int)loop->v[kParamLoadSlot];
+    if (loadSlot != loop->lastLoadSlot) {
+        loadLoopFromSlot(loop, loadSlot);
+        loop->lastLoadSlot = loadSlot;
+    }
     
     // Handle Record knob changes
     if (recordActive && !loop->lastRecord) {
