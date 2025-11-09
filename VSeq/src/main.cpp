@@ -425,6 +425,8 @@ enum {
     kParamSeq3Midi1,
     kParamSeq3Midi2,
     kParamSeq3Midi3,
+    // MIDI channel for trigger sequencer (shared by all 6 tracks)
+    kParamTriggerMidiChannel,
     // Per-sequencer parameters
     kParamSeq1ClockDiv,
     kParamSeq1Direction,
@@ -560,6 +562,9 @@ static char seq3Midi1Name[] = "Seq 3 MIDI 1";
 static char seq3Midi2Name[] = "Seq 3 MIDI 2";
 static char seq3Midi3Name[] = "Seq 3 MIDI 3";
 
+// Trigger sequencer MIDI channel
+static char triggerMidiChannelName[] = "Trigger MIDI Ch";
+
 // Gate track parameter names
 static char gate1OutName[] = "Gate 1 Out";
 static char gate1CCName[] = "Gate 1 CC";
@@ -688,6 +693,14 @@ static void initParameters() {
         parameters[paramIdx].unit = kNT_unitNone;
         parameters[paramIdx].scaling = kNT_scalingNone;
     }
+    
+    // Trigger sequencer MIDI channel
+    parameters[kParamTriggerMidiChannel].name = triggerMidiChannelName;
+    parameters[kParamTriggerMidiChannel].min = 0;  // 0 = Off
+    parameters[kParamTriggerMidiChannel].max = 16; // 1-16 = MIDI channels
+    parameters[kParamTriggerMidiChannel].def = 0;  // Off by default
+    parameters[kParamTriggerMidiChannel].unit = kNT_unitNone;
+    parameters[kParamTriggerMidiChannel].scaling = kNT_scalingNone;
     
     // Sequencer configuration parameters (seq 1-3 only now)
     const char* divNames[] = {seq1DivName, seq2DivName, seq3DivName};
@@ -876,7 +889,7 @@ static uint8_t paramPageSeq3Out[] = { kParamSeq3Out1, kParamSeq3Midi1, kParamSeq
 static uint8_t paramPageSeq1Params[] = { kParamSeq1ClockDiv, kParamSeq1Direction, kParamSeq1StepCount, kParamSeq1SplitPoint, kParamSeq1Section1Reps, kParamSeq1Section2Reps, 0 };
 static uint8_t paramPageSeq2Params[] = { kParamSeq2ClockDiv, kParamSeq2Direction, kParamSeq2StepCount, kParamSeq2SplitPoint, kParamSeq2Section1Reps, kParamSeq2Section2Reps, 0 };
 static uint8_t paramPageSeq3Params[] = { kParamSeq3ClockDiv, kParamSeq3Direction, kParamSeq3StepCount, kParamSeq3SplitPoint, kParamSeq3Section1Reps, kParamSeq3Section2Reps, 0 };
-static uint8_t paramPageGateOuts[] = { kParamGate1Out, kParamGate1CC, kParamGate2Out, kParamGate2CC, kParamGate3Out, kParamGate3CC, kParamGate4Out, kParamGate4CC, kParamGate5Out, kParamGate5CC, kParamGate6Out, kParamGate6CC, 0 };
+static uint8_t paramPageGateOuts[] = { kParamTriggerMidiChannel, kParamGate1Out, kParamGate1CC, kParamGate2Out, kParamGate2CC, kParamGate3Out, kParamGate3CC, kParamGate4Out, kParamGate4CC, kParamGate5Out, kParamGate5CC, kParamGate6Out, kParamGate6CC, 0 };
 static uint8_t paramPageGate1[] = { kParamGate1Run, kParamGate1Length, kParamGate1Direction, kParamGate1ClockDiv, kParamGate1Swing, kParamGate1SplitPoint, kParamGate1Section1Reps, kParamGate1Section2Reps, kParamGate1FillStart, 0 };
 static uint8_t paramPageGate2[] = { kParamGate2Run, kParamGate2Length, kParamGate2Direction, kParamGate2ClockDiv, kParamGate2Swing, kParamGate2SplitPoint, kParamGate2Section1Reps, kParamGate2Section2Reps, kParamGate2FillStart, 0 };
 static uint8_t paramPageGate3[] = { kParamGate3Run, kParamGate3Length, kParamGate3Direction, kParamGate3ClockDiv, kParamGate3Swing, kParamGate3SplitPoint, kParamGate3Section1Reps, kParamGate3Section2Reps, kParamGate3FillStart, 0 };
@@ -892,7 +905,7 @@ static _NT_parameterPage pageArray[] = {
     { .name = "Seq 1 Params", .numParams = 6, .params = paramPageSeq1Params },
     { .name = "Seq 2 Params", .numParams = 6, .params = paramPageSeq2Params },
     { .name = "Seq 3 Params", .numParams = 6, .params = paramPageSeq3Params },
-    { .name = "Gate Outs", .numParams = 12, .params = paramPageGateOuts },
+    { .name = "Gate Outs", .numParams = 13, .params = paramPageGateOuts },
     { .name = "Trig Track 1", .numParams = 9, .params = paramPageGate1 },
     { .name = "Trig Track 2", .numParams = 9, .params = paramPageGate2 },
     { .name = "Trig Track 3", .numParams = 9, .params = paramPageGate3 },
@@ -1068,16 +1081,22 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
                 
                 // Send MIDI CC if configured
-                int ccParam = kParamGate1CC + (track * 2);
-                int ccNumber = self->v[ccParam];  // 0-127
+                int triggerMidiChannel = self->v[kParamTriggerMidiChannel];  // 0 = off, 1-16 = MIDI channels
                 
-                // Send CC value 127 when trigger fires
-                NT_sendMidi3ByteMessage(
-                    kNT_destinationInternal,
-                    0xB0,           // CC message (channel is always 0 for triggers for now)
-                    ccNumber,       // CC number
-                    127             // CC value (full on)
-                );
+                if (triggerMidiChannel > 0 && triggerMidiChannel <= 16) {
+                    int ccParam = kParamGate1CC + (track * 2);
+                    int ccNumber = self->v[ccParam];  // 0-127
+                    
+                    uint8_t channel = (triggerMidiChannel - 1) & 0x0F;
+                    
+                    // Send CC value 127 when trigger fires
+                    NT_sendMidi3ByteMessage(
+                        kNT_destinationInternal,
+                        0xB0 | channel, // CC message on configured channel
+                        ccNumber,       // CC number
+                        127             // CC value (full on)
+                    );
+                }
             }
         }
         
