@@ -722,7 +722,7 @@ static void initParameters() {
         parameters[divParam].name = divNames[seq];
         parameters[divParam].min = 0;
         parameters[divParam].max = 8;  // /16, /8, /4, /2, x1, x2, x4, x8, x16
-        parameters[divParam].def = 4;  // x1
+        parameters[divParam].def = 0;  // Default to /16 (lowest)
         parameters[divParam].unit = kNT_unitEnum;
         parameters[divParam].scaling = kNT_scalingNone;
         parameters[divParam].enumStrings = divisionStrings;
@@ -740,7 +740,7 @@ static void initParameters() {
         parameters[stepParam].name = stepNames[seq];
         parameters[stepParam].min = 1;
         parameters[stepParam].max = 32;
-        parameters[stepParam].def = 32;
+        parameters[stepParam].def = 16;  // Default to 16 steps
         parameters[stepParam].unit = kNT_unitNone;
         parameters[stepParam].scaling = kNT_scalingNone;
         
@@ -748,7 +748,7 @@ static void initParameters() {
         parameters[splitParam].name = splitNames[seq];
         parameters[splitParam].min = 1;
         parameters[splitParam].max = 31;
-        parameters[splitParam].def = 16;
+        parameters[splitParam].def = 8;  // Default to middle of 16 steps
         parameters[splitParam].unit = kNT_unitNone;
         parameters[splitParam].scaling = kNT_scalingNone;
         
@@ -787,7 +787,7 @@ static void initParameters() {
         parameters[ccParam].name = gateCCNames[track];
         parameters[ccParam].min = 0;  // 0-127
         parameters[ccParam].max = 127;
-        parameters[ccParam].def = 0 + track;  // Default to CC 0, 1, 2, 3, 4, 5
+        parameters[ccParam].def = 0;  // Default to CC 0 for all
         parameters[ccParam].unit = kNT_unitNone;
         parameters[ccParam].scaling = kNT_scalingNone;
     }
@@ -817,14 +817,14 @@ static void initParameters() {
         parameters[runParam].name = gateRunNames[track];
         parameters[runParam].min = 0;
         parameters[runParam].max = 1;
-        parameters[runParam].def = 1;
+        parameters[runParam].def = 0;  // Default to stopped
         parameters[runParam].unit = kNT_unitNone;
         parameters[runParam].scaling = kNT_scalingNone;
         
         parameters[lenParam].name = gateLenNames[track];
         parameters[lenParam].min = 1;
         parameters[lenParam].max = 32;
-        parameters[lenParam].def = 32;
+        parameters[lenParam].def = 16;  // Default to 16 steps
         parameters[lenParam].unit = kNT_unitNone;
         parameters[lenParam].scaling = kNT_scalingNone;
         
@@ -839,7 +839,7 @@ static void initParameters() {
         parameters[divParam].name = gateDivNames[track];
         parameters[divParam].min = 0;
         parameters[divParam].max = 8;
-        parameters[divParam].def = 4;
+        parameters[divParam].def = 0;  // Default to /16
         parameters[divParam].unit = kNT_unitEnum;
         parameters[divParam].scaling = kNT_scalingNone;
         parameters[divParam].enumStrings = divisionStrings;
@@ -875,7 +875,7 @@ static void initParameters() {
         parameters[fillParam].name = gateFillNames[track];
         parameters[fillParam].min = 1;
         parameters[fillParam].max = 32;
-        parameters[fillParam].def = 32;  // Default: no fill (starts at last step)
+        parameters[fillParam].def = 1;  // Default to lowest value
         parameters[fillParam].unit = kNT_unitNone;
         parameters[fillParam].scaling = kNT_scalingNone;
     }
@@ -1163,9 +1163,9 @@ bool draw(_NT_algorithm* self) {
         for (int track = 0; track < 6; track++) {
             int y = startY + (track * trackHeight);
             
-            // Get track parameters
-            int lenParam = kParamGate1Length + (track * 10);
-            int splitParam = kParamGate1SplitPoint + (track * 10);
+            // Get track parameters (now 9 params per track, not 10)
+            int lenParam = kParamGate1Length + (track * 9);
+            int splitParam = kParamGate1SplitPoint + (track * 9);
             int trackLength = self->v[lenParam];
             int splitPoint = self->v[splitParam];
             int currentStep = a->gateCurrentStep[track];
