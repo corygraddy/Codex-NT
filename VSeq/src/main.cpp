@@ -415,10 +415,16 @@ enum {
     kParamSeq3Out1,
     kParamSeq3Out2,
     kParamSeq3Out3,
-    // Sequencer 4 outputs (now gate sequencer - reuse for gate outputs)
-    kParamSeq4Out1,
-    kParamSeq4Out2,
-    kParamSeq4Out3,
+    // MIDI channels for CV sequencer outputs (9 total)
+    kParamSeq1Midi1,
+    kParamSeq1Midi2,
+    kParamSeq1Midi3,
+    kParamSeq2Midi1,
+    kParamSeq2Midi2,
+    kParamSeq2Midi3,
+    kParamSeq3Midi1,
+    kParamSeq3Midi2,
+    kParamSeq3Midi3,
     // Per-sequencer parameters
     kParamSeq1ClockDiv,
     kParamSeq1Direction,
@@ -438,8 +444,20 @@ enum {
     kParamSeq3SplitPoint,
     kParamSeq3Section1Reps,
     kParamSeq3Section2Reps,
-    // Gate Track 1 parameters
+    // Gate outputs and MIDI CCs (6 tracks)
     kParamGate1Out,
+    kParamGate1CC,
+    kParamGate2Out,
+    kParamGate2CC,
+    kParamGate3Out,
+    kParamGate3CC,
+    kParamGate4Out,
+    kParamGate4CC,
+    kParamGate5Out,
+    kParamGate5CC,
+    kParamGate6Out,
+    kParamGate6CC,
+    // Gate Track 1 parameters (no longer includes Out param)
     kParamGate1Run,
     kParamGate1Length,
     kParamGate1Direction,
@@ -449,8 +467,7 @@ enum {
     kParamGate1Section1Reps,
     kParamGate1Section2Reps,
     kParamGate1FillStart,
-    // Gate Track 2 parameters
-    kParamGate2Out,
+    // Gate Track 2 parameters (no longer includes Out param)
     kParamGate2Run,
     kParamGate2Length,
     kParamGate2Direction,
@@ -460,8 +477,7 @@ enum {
     kParamGate2Section1Reps,
     kParamGate2Section2Reps,
     kParamGate2FillStart,
-    // Gate Track 3 parameters
-    kParamGate3Out,
+    // Gate Track 3 parameters (no longer includes Out param)
     kParamGate3Run,
     kParamGate3Length,
     kParamGate3Direction,
@@ -471,8 +487,7 @@ enum {
     kParamGate3Section1Reps,
     kParamGate3Section2Reps,
     kParamGate3FillStart,
-    // Gate Track 4 parameters
-    kParamGate4Out,
+    // Gate Track 4 parameters (no longer includes Out param)
     kParamGate4Run,
     kParamGate4Length,
     kParamGate4Direction,
@@ -482,8 +497,7 @@ enum {
     kParamGate4Section1Reps,
     kParamGate4Section2Reps,
     kParamGate4FillStart,
-    // Gate Track 5 parameters
-    kParamGate5Out,
+    // Gate Track 5 parameters (no longer includes Out param)
     kParamGate5Run,
     kParamGate5Length,
     kParamGate5Direction,
@@ -493,8 +507,7 @@ enum {
     kParamGate5Section1Reps,
     kParamGate5Section2Reps,
     kParamGate5FillStart,
-    // Gate Track 6 parameters
-    kParamGate6Out,
+    // Gate Track 6 parameters (no longer includes Out param)
     kParamGate6Run,
     kParamGate6Length,
     kParamGate6Direction,
@@ -536,8 +549,31 @@ static char seq3SplitName[] = "Seq 3 Split Point";
 static char seq3Sec1Name[] = "Seq 3 Sec1 Reps";
 static char seq3Sec2Name[] = "Seq 3 Sec2 Reps";
 
+// MIDI channel parameter names
+static char seq1Midi1Name[] = "Seq 1 MIDI 1";
+static char seq1Midi2Name[] = "Seq 1 MIDI 2";
+static char seq1Midi3Name[] = "Seq 1 MIDI 3";
+static char seq2Midi1Name[] = "Seq 2 MIDI 1";
+static char seq2Midi2Name[] = "Seq 2 MIDI 2";
+static char seq2Midi3Name[] = "Seq 2 MIDI 3";
+static char seq3Midi1Name[] = "Seq 3 MIDI 1";
+static char seq3Midi2Name[] = "Seq 3 MIDI 2";
+static char seq3Midi3Name[] = "Seq 3 MIDI 3";
+
 // Gate track parameter names
 static char gate1OutName[] = "Gate 1 Out";
+static char gate1CCName[] = "Gate 1 CC";
+static char gate2OutName[] = "Gate 2 Out";
+static char gate2CCName[] = "Gate 2 CC";
+static char gate3OutName[] = "Gate 3 Out";
+static char gate3CCName[] = "Gate 3 CC";
+static char gate4OutName[] = "Gate 4 Out";
+static char gate4CCName[] = "Gate 4 CC";
+static char gate5OutName[] = "Gate 5 Out";
+static char gate5CCName[] = "Gate 5 CC";
+static char gate6OutName[] = "Gate 6 Out";
+static char gate6CCName[] = "Gate 6 CC";
+
 static char gate1RunName[] = "Gate 1 Run";
 static char gate1LenName[] = "Gate 1 Length";
 static char gate1DirName[] = "Gate 1 Direction";
@@ -548,7 +584,6 @@ static char gate1Sec1Name[] = "Gate 1 Sec1 Reps";
 static char gate1Sec2Name[] = "Gate 1 Sec2 Reps";
 static char gate1FillName[] = "Gate 1 Fill Start";
 
-static char gate2OutName[] = "Gate 2 Out";
 static char gate2RunName[] = "Gate 2 Run";
 static char gate2LenName[] = "Gate 2 Length";
 static char gate2DirName[] = "Gate 2 Direction";
@@ -559,7 +594,6 @@ static char gate2Sec1Name[] = "Gate 2 Sec1 Reps";
 static char gate2Sec2Name[] = "Gate 2 Sec2 Reps";
 static char gate2FillName[] = "Gate 2 Fill Start";
 
-static char gate3OutName[] = "Gate 3 Out";
 static char gate3RunName[] = "Gate 3 Run";
 static char gate3LenName[] = "Gate 3 Length";
 static char gate3DirName[] = "Gate 3 Direction";
@@ -570,7 +604,6 @@ static char gate3Sec1Name[] = "Gate 3 Sec1 Reps";
 static char gate3Sec2Name[] = "Gate 3 Sec2 Reps";
 static char gate3FillName[] = "Gate 3 Fill Start";
 
-static char gate4OutName[] = "Gate 4 Out";
 static char gate4RunName[] = "Gate 4 Run";
 static char gate4LenName[] = "Gate 4 Length";
 static char gate4DirName[] = "Gate 4 Direction";
@@ -581,7 +614,6 @@ static char gate4Sec1Name[] = "Gate 4 Sec1 Reps";
 static char gate4Sec2Name[] = "Gate 4 Sec2 Reps";
 static char gate4FillName[] = "Gate 4 Fill Start";
 
-static char gate5OutName[] = "Gate 5 Out";
 static char gate5RunName[] = "Gate 5 Run";
 static char gate5LenName[] = "Gate 5 Length";
 static char gate5DirName[] = "Gate 5 Direction";
@@ -592,7 +624,6 @@ static char gate5Sec1Name[] = "Gate 5 Sec1 Reps";
 static char gate5Sec2Name[] = "Gate 5 Sec2 Reps";
 static char gate5FillName[] = "Gate 5 Fill Start";
 
-static char gate6OutName[] = "Gate 6 Out";
 static char gate6RunName[] = "Gate 6 Run";
 static char gate6LenName[] = "Gate 6 Length";
 static char gate6DirName[] = "Gate 6 Direction";
@@ -638,6 +669,23 @@ static void initParameters() {
         parameters[paramIdx].max = 28;
         parameters[paramIdx].def = 0;
         parameters[paramIdx].unit = kNT_unitCvOutput;
+        parameters[paramIdx].scaling = kNT_scalingNone;
+    }
+    
+    // MIDI channel parameters (9 total: 3 sequencers × 3 outputs each)
+    const char* midiNames[] = {
+        seq1Midi1Name, seq1Midi2Name, seq1Midi3Name,
+        seq2Midi1Name, seq2Midi2Name, seq2Midi3Name,
+        seq3Midi1Name, seq3Midi2Name, seq3Midi3Name
+    };
+    
+    for (int i = 0; i < 9; i++) {
+        int paramIdx = kParamSeq1Midi1 + i;
+        parameters[paramIdx].name = midiNames[i];
+        parameters[paramIdx].min = 0;  // 0 = Off
+        parameters[paramIdx].max = 16; // 1-16 = MIDI channels
+        parameters[paramIdx].def = 0;  // Off by default
+        parameters[paramIdx].unit = kNT_unitNone;
         parameters[paramIdx].scaling = kNT_scalingNone;
     }
     
@@ -708,8 +756,30 @@ static void initParameters() {
         parameters[sec2Param].scaling = kNT_scalingNone;
     }
     
-    // Gate Track parameters (6 tracks, 10 parameters each)
+    // Gate outputs and MIDI CC parameters (6 tracks, 2 parameters each)
     const char* gateOutNames[] = {gate1OutName, gate2OutName, gate3OutName, gate4OutName, gate5OutName, gate6OutName};
+    const char* gateCCNames[] = {gate1CCName, gate2CCName, gate3CCName, gate4CCName, gate5CCName, gate6CCName};
+    
+    for (int track = 0; track < 6; track++) {
+        int outParam = kParamGate1Out + (track * 2);
+        int ccParam = kParamGate1CC + (track * 2);
+        
+        parameters[outParam].name = gateOutNames[track];
+        parameters[outParam].min = 0;
+        parameters[outParam].max = 28;
+        parameters[outParam].def = 0;
+        parameters[outParam].unit = kNT_unitCvOutput;
+        parameters[outParam].scaling = kNT_scalingNone;
+        
+        parameters[ccParam].name = gateCCNames[track];
+        parameters[ccParam].min = 0;  // 0-127
+        parameters[ccParam].max = 127;
+        parameters[ccParam].def = 0 + track;  // Default to CC 0, 1, 2, 3, 4, 5
+        parameters[ccParam].unit = kNT_unitNone;
+        parameters[ccParam].scaling = kNT_scalingNone;
+    }
+    
+    // Gate Track parameters (6 tracks, 10 parameters each - minus the Out param which is now separate)
     const char* gateRunNames[] = {gate1RunName, gate2RunName, gate3RunName, gate4RunName, gate5RunName, gate6RunName};
     const char* gateLenNames[] = {gate1LenName, gate2LenName, gate3LenName, gate4LenName, gate5LenName, gate6LenName};
     const char* gateDirNames[] = {gate1DirName, gate2DirName, gate3DirName, gate4DirName, gate5DirName, gate6DirName};
@@ -721,23 +791,15 @@ static void initParameters() {
     const char* gateFillNames[] = {gate1FillName, gate2FillName, gate3FillName, gate4FillName, gate5FillName, gate6FillName};
     
     for (int track = 0; track < 6; track++) {
-        int outParam = kParamGate1Out + (track * 10);
-        int runParam = kParamGate1Run + (track * 10);
-        int lenParam = kParamGate1Length + (track * 10);
-        int dirParam = kParamGate1Direction + (track * 10);
-        int divParam = kParamGate1ClockDiv + (track * 10);
-        int swingParam = kParamGate1Swing + (track * 10);
-        int splitParam = kParamGate1SplitPoint + (track * 10);
-        int sec1Param = kParamGate1Section1Reps + (track * 10);
-        int sec2Param = kParamGate1Section2Reps + (track * 10);
-        int fillParam = kParamGate1FillStart + (track * 10);
-        
-        parameters[outParam].name = gateOutNames[track];
-        parameters[outParam].min = 0;
-        parameters[outParam].max = 28;
-        parameters[outParam].def = 0;
-        parameters[outParam].unit = kNT_unitCvOutput;
-        parameters[outParam].scaling = kNT_scalingNone;
+        int runParam = kParamGate1Run + (track * 9);   // Now 9 params per track instead of 10
+        int lenParam = kParamGate1Length + (track * 9);
+        int dirParam = kParamGate1Direction + (track * 9);
+        int divParam = kParamGate1ClockDiv + (track * 9);
+        int swingParam = kParamGate1Swing + (track * 9);
+        int splitParam = kParamGate1SplitPoint + (track * 9);
+        int sec1Param = kParamGate1Section1Reps + (track * 9);
+        int sec2Param = kParamGate1Section2Reps + (track * 9);
+        int fillParam = kParamGate1FillStart + (track * 9);
         
         parameters[runParam].name = gateRunNames[track];
         parameters[runParam].min = 0;
@@ -808,37 +870,39 @@ static void initParameters() {
 
 // Parameter pages
 static uint8_t paramPageInputs[] = { kParamClockIn, kParamResetIn, 0 };
-static uint8_t paramPageSeq1Out[] = { kParamSeq1Out1, kParamSeq1Out2, kParamSeq1Out3, 0 };
-static uint8_t paramPageSeq2Out[] = { kParamSeq2Out1, kParamSeq2Out2, kParamSeq2Out3, 0 };
-static uint8_t paramPageSeq3Out[] = { kParamSeq3Out1, kParamSeq3Out2, kParamSeq3Out3, 0 };
+static uint8_t paramPageSeq1Out[] = { kParamSeq1Out1, kParamSeq1Midi1, kParamSeq1Out2, kParamSeq1Midi2, kParamSeq1Out3, kParamSeq1Midi3, 0 };
+static uint8_t paramPageSeq2Out[] = { kParamSeq2Out1, kParamSeq2Midi1, kParamSeq2Out2, kParamSeq2Midi2, kParamSeq2Out3, kParamSeq2Midi3, 0 };
+static uint8_t paramPageSeq3Out[] = { kParamSeq3Out1, kParamSeq3Midi1, kParamSeq3Out2, kParamSeq3Midi2, kParamSeq3Out3, kParamSeq3Midi3, 0 };
 static uint8_t paramPageSeq1Params[] = { kParamSeq1ClockDiv, kParamSeq1Direction, kParamSeq1StepCount, kParamSeq1SplitPoint, kParamSeq1Section1Reps, kParamSeq1Section2Reps, 0 };
 static uint8_t paramPageSeq2Params[] = { kParamSeq2ClockDiv, kParamSeq2Direction, kParamSeq2StepCount, kParamSeq2SplitPoint, kParamSeq2Section1Reps, kParamSeq2Section2Reps, 0 };
 static uint8_t paramPageSeq3Params[] = { kParamSeq3ClockDiv, kParamSeq3Direction, kParamSeq3StepCount, kParamSeq3SplitPoint, kParamSeq3Section1Reps, kParamSeq3Section2Reps, 0 };
-static uint8_t paramPageGate1[] = { kParamGate1Out, kParamGate1Run, kParamGate1Length, kParamGate1Direction, kParamGate1ClockDiv, kParamGate1Swing, kParamGate1SplitPoint, kParamGate1Section1Reps, kParamGate1Section2Reps, kParamGate1FillStart, 0 };
-static uint8_t paramPageGate2[] = { kParamGate2Out, kParamGate2Run, kParamGate2Length, kParamGate2Direction, kParamGate2ClockDiv, kParamGate2Swing, kParamGate2SplitPoint, kParamGate2Section1Reps, kParamGate2Section2Reps, kParamGate2FillStart, 0 };
-static uint8_t paramPageGate3[] = { kParamGate3Out, kParamGate3Run, kParamGate3Length, kParamGate3Direction, kParamGate3ClockDiv, kParamGate3Swing, kParamGate3SplitPoint, kParamGate3Section1Reps, kParamGate3Section2Reps, kParamGate3FillStart, 0 };
-static uint8_t paramPageGate4[] = { kParamGate4Out, kParamGate4Run, kParamGate4Length, kParamGate4Direction, kParamGate4ClockDiv, kParamGate4Swing, kParamGate4SplitPoint, kParamGate4Section1Reps, kParamGate4Section2Reps, kParamGate4FillStart, 0 };
-static uint8_t paramPageGate5[] = { kParamGate5Out, kParamGate5Run, kParamGate5Length, kParamGate5Direction, kParamGate5ClockDiv, kParamGate5Swing, kParamGate5SplitPoint, kParamGate5Section1Reps, kParamGate5Section2Reps, kParamGate5FillStart, 0 };
-static uint8_t paramPageGate6[] = { kParamGate6Out, kParamGate6Run, kParamGate6Length, kParamGate6Direction, kParamGate6ClockDiv, kParamGate6Swing, kParamGate6SplitPoint, kParamGate6Section1Reps, kParamGate6Section2Reps, kParamGate6FillStart, 0 };
+static uint8_t paramPageGateOuts[] = { kParamGate1Out, kParamGate1CC, kParamGate2Out, kParamGate2CC, kParamGate3Out, kParamGate3CC, kParamGate4Out, kParamGate4CC, kParamGate5Out, kParamGate5CC, kParamGate6Out, kParamGate6CC, 0 };
+static uint8_t paramPageGate1[] = { kParamGate1Run, kParamGate1Length, kParamGate1Direction, kParamGate1ClockDiv, kParamGate1Swing, kParamGate1SplitPoint, kParamGate1Section1Reps, kParamGate1Section2Reps, kParamGate1FillStart, 0 };
+static uint8_t paramPageGate2[] = { kParamGate2Run, kParamGate2Length, kParamGate2Direction, kParamGate2ClockDiv, kParamGate2Swing, kParamGate2SplitPoint, kParamGate2Section1Reps, kParamGate2Section2Reps, kParamGate2FillStart, 0 };
+static uint8_t paramPageGate3[] = { kParamGate3Run, kParamGate3Length, kParamGate3Direction, kParamGate3ClockDiv, kParamGate3Swing, kParamGate3SplitPoint, kParamGate3Section1Reps, kParamGate3Section2Reps, kParamGate3FillStart, 0 };
+static uint8_t paramPageGate4[] = { kParamGate4Run, kParamGate4Length, kParamGate4Direction, kParamGate4ClockDiv, kParamGate4Swing, kParamGate4SplitPoint, kParamGate4Section1Reps, kParamGate4Section2Reps, kParamGate4FillStart, 0 };
+static uint8_t paramPageGate5[] = { kParamGate5Run, kParamGate5Length, kParamGate5Direction, kParamGate5ClockDiv, kParamGate5Swing, kParamGate5SplitPoint, kParamGate5Section1Reps, kParamGate5Section2Reps, kParamGate5FillStart, 0 };
+static uint8_t paramPageGate6[] = { kParamGate6Run, kParamGate6Length, kParamGate6Direction, kParamGate6ClockDiv, kParamGate6Swing, kParamGate6SplitPoint, kParamGate6Section1Reps, kParamGate6Section2Reps, kParamGate6FillStart, 0 };
 
 static _NT_parameterPage pageArray[] = {
     { .name = "Inputs", .numParams = 2, .params = paramPageInputs },
-    { .name = "Seq 1 Outs", .numParams = 3, .params = paramPageSeq1Out },
-    { .name = "Seq 2 Outs", .numParams = 3, .params = paramPageSeq2Out },
-    { .name = "Seq 3 Outs", .numParams = 3, .params = paramPageSeq3Out },
+    { .name = "Seq 1 Outs", .numParams = 6, .params = paramPageSeq1Out },
+    { .name = "Seq 2 Outs", .numParams = 6, .params = paramPageSeq2Out },
+    { .name = "Seq 3 Outs", .numParams = 6, .params = paramPageSeq3Out },
     { .name = "Seq 1 Params", .numParams = 6, .params = paramPageSeq1Params },
     { .name = "Seq 2 Params", .numParams = 6, .params = paramPageSeq2Params },
     { .name = "Seq 3 Params", .numParams = 6, .params = paramPageSeq3Params },
-    { .name = "Trig Track 1", .numParams = 10, .params = paramPageGate1 },
-    { .name = "Trig Track 2", .numParams = 10, .params = paramPageGate2 },
-    { .name = "Trig Track 3", .numParams = 10, .params = paramPageGate3 },
-    { .name = "Trig Track 4", .numParams = 10, .params = paramPageGate4 },
-    { .name = "Trig Track 5", .numParams = 10, .params = paramPageGate5 },
-    { .name = "Trig Track 6", .numParams = 10, .params = paramPageGate6 }
+    { .name = "Gate Outs", .numParams = 12, .params = paramPageGateOuts },
+    { .name = "Trig Track 1", .numParams = 9, .params = paramPageGate1 },
+    { .name = "Trig Track 2", .numParams = 9, .params = paramPageGate2 },
+    { .name = "Trig Track 3", .numParams = 9, .params = paramPageGate3 },
+    { .name = "Trig Track 4", .numParams = 9, .params = paramPageGate4 },
+    { .name = "Trig Track 5", .numParams = 9, .params = paramPageGate5 },
+    { .name = "Trig Track 6", .numParams = 9, .params = paramPageGate6 }
 };
 
 static _NT_parameterPages pages = {
-    .numPages = 13,
+    .numPages = 14,
     .pages = pageArray
 };
 
@@ -932,19 +996,43 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     outBus[frame] = outputValue;
                 }
             }
+            
+            // Send MIDI note if channel is configured and clock just triggered
+            if (clockTrig) {
+                int midiParam = kParamSeq1Midi1 + (seq * 3) + out;
+                int midiChannel = self->v[midiParam];  // 0 = off, 1-16 = MIDI channels
+                
+                if (midiChannel > 0 && midiChannel <= 16) {
+                    // Convert CV value to MIDI note (0-127)
+                    int16_t value = a->stepValues[seq][step][out];
+                    float normalized = (value + 32768) / 65535.0f;  // 0.0-1.0
+                    uint8_t midiNote = (uint8_t)(normalized * 127.0f);
+                    if (midiNote > 127) midiNote = 127;
+                    
+                    uint8_t channel = (midiChannel - 1) & 0x0F;
+                    
+                    // Send note on
+                    NT_sendMidi3ByteMessage(
+                        kNT_destinationInternal,
+                        0x90 | channel,  // Note On
+                        midiNote,
+                        100              // Fixed velocity
+                    );
+                }
+            }
         }
     }
     
     // Process gate sequencer (6 tracks)
     for (int track = 0; track < 6; track++) {
-        int outParam = kParamGate1Out + (track * 10);
-        int runParam = kParamGate1Run + (track * 10);
-        int lenParam = kParamGate1Length + (track * 10);
-        int dirParam = kParamGate1Direction + (track * 10);
-        int splitParam = kParamGate1SplitPoint + (track * 10);
-        int sec1Param = kParamGate1Section1Reps + (track * 10);
-        int sec2Param = kParamGate1Section2Reps + (track * 10);
-        int fillParam = kParamGate1FillStart + (track * 10);
+        int outParam = kParamGate1Out + (track * 2);   // Gate outputs are now paired with CC params
+        int runParam = kParamGate1Run + (track * 9);   // 9 params per track now
+        int lenParam = kParamGate1Length + (track * 9);
+        int dirParam = kParamGate1Direction + (track * 9);
+        int splitParam = kParamGate1SplitPoint + (track * 9);
+        int sec1Param = kParamGate1Section1Reps + (track * 9);
+        int sec2Param = kParamGate1Section2Reps + (track * 9);
+        int fillParam = kParamGate1FillStart + (track * 9);
         
         int outputBus = self->v[outParam];     // 0 = none, 1-28 = bus 0-27
         int isRunning = self->v[runParam];     // 0 = stopped, 1 = running
@@ -978,6 +1066,18 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             if (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]) {
                 // Gate is active on this step - trigger!
                 a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
+                
+                // Send MIDI CC if configured
+                int ccParam = kParamGate1CC + (track * 2);
+                int ccNumber = self->v[ccParam];  // 0-127
+                
+                // Send CC value 127 when trigger fires
+                NT_sendMidi3ByteMessage(
+                    kNT_destinationInternal,
+                    0xB0,           // CC message (channel is always 0 for triggers for now)
+                    ccNumber,       // CC number
+                    127             // CC value (full on)
+                );
             }
         }
         
@@ -1453,7 +1553,7 @@ void parameterChanged(_NT_algorithm* self, int parameterIndex) {
     VSeq* a = (VSeq*)self;
     
     // Update debug output bus tracking when output parameters change
-    if (parameterIndex >= kParamSeq1Out1 && parameterIndex <= kParamSeq4Out3) {
+    if (parameterIndex >= kParamSeq1Out1 && parameterIndex <= kParamSeq3Out3) {
         int debugIdx = parameterIndex - kParamSeq1Out1;
         a->debugOutputBus[debugIdx] = self->v[parameterIndex];  // Store parameter value (1-28)
     }

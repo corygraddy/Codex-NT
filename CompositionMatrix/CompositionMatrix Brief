@@ -1,116 +1,191 @@
-Project Brief: Generative Harmony & Rhythm Engine (codename: compositionMatrix)
-This is a custom C++ plugin for the Expert Sleepers Disting NT Eurorack module.
+# CompositionMatrix - Generative Harmony Engine for Disting NT
 
-## I. Project Overview
+**Revised Brief** - Simplified, achievable design based on lessons from VFader, VSeq, and VLoop
 
-The goal is to create a powerful, 8-voice generative music engine for live performance. The user discovers and captures looping patterns ("seeds") from a chaotic, evolving source. These captured patterns, along with their associated performance settings, can then be arranged into a full song structure. The engine is built on a deterministic, seed-based system, making all generated music repeatable.
+## Project Vision
 
-## II. Core Workflow & UI
+A practical generative music engine for the Disting NT that creates harmonically-aware melodic and rhythmic patterns. The focus is on immediate playability and musical usefulness rather than complexity.
 
-The workflow is a multi-stage, non-destructive process for creating and managing patterns.
+## Lessons Learned from Previous Projects
 
-Explore Mode: On an empty slot, the engine automatically auditions a new, looping pattern every 4 bars. All performance parameters are live and editable. New sessions inherit settings from the previously played pattern.
+**From VLoop:**
+- Real-time operation requires careful memory management (24KB SRAM limit)
+- DRAM can store larger datasets (patterns, presets)
+- Continuous timing at sub-pulse resolution is critical
+- Simple, focused features are better than complex systems
 
-Refine Mode: The user pushes an encoder to freeze the current melodic/rhythmic pattern. The core notes and gates are locked, but all Performance Macro Parameters (Chaos, Density, Velocity, etc.) remain live for tweaking and sculpting the pattern's feel.
+**From VSeq:**
+- 32 steps is a practical limit for pattern length
+- Multiple sequencers sharing clock infrastructure works well
+- Section looping provides musical variation without complexity
+- Visual feedback is essential (step indicators, current position)
 
-Save Action: A second encoder push saves the frozen pattern seed and the current state of all performance parameters to one of 100 pattern slots.
+**From VFader:**
+- Parameter organization in pages keeps UI manageable
+- Trigger-on-change detection works better than continuous monitoring
+- Preset serialization should be simple and robust
 
-Duplicate Function: Allows a saved pattern and its settings to be copied to a new slot for creating variations (e.g., a verse and a chorus with different dynamics).
+## Revised Core Concept
 
-Cancel Action: A different encoder push discards changes and returns to the previous state.
+A **4-voice generative sequencer** with harmonic awareness:
+- **1 Lead voice** (melodic)
+- **1 Bass voice** (harmonic root)
+- **2 Chord voices** (harmonic support)
+- **32-step patterns** per voice
+- **Clock-synchronized** with external clock input
+- **Key/Scale aware** - all notes constrained to selected scale
+- **Pattern memory** - save/load patterns to DRAM slots
 
-## III. Musical Generation Engine
+## Simplified Architecture
 
-Voicing & Polyphony (Global Setting):
+### Generation Engine
+Instead of a complex shift register system:
+- **Deterministic random** using seed value
+- **Scale-constrained** note selection
+- **Rhythm patterns** based on euclidean distributions
+- **Per-voice parameters**: density, octave range, gate length
 
-A global parameter controls which voices are active: Lead Only, Lead+Bass, Lead+Support, All Voices, and Supporting Voices only (Headless Mode).
+### Memory Structure (SRAM)
+```
+struct Voice {
+    int16_t notes[32];      // 64 bytes per voice
+    bool gates[32];         // 32 bytes per voice
+    uint8_t velocities[32]; // 32 bytes per voice
+};
 
-The engine calculates all 8 voices in the background; this setting only affects the outputs.
+struct Pattern {
+    Voice voices[4];        // 512 bytes for 4 voices
+    uint32_t seed;          // Pattern seed
+    // ... configuration params
+};
+```
+Current pattern in SRAM (~1KB), saved patterns in DRAM
 
-Voice Roles: 1 Lead Voice, 1 Bass Voice (slower, lower octave), up to 3 Supporting Voices.
+### Outputs
+- **4 CV outputs** (pitch for each voice)
+- **4 Gate outputs** (gates for each voice)
+- **MIDI output** (optional, all 4 voices on channels 1-4)
 
-Harmony Engine:
+### UI Workflow
 
-Global Key, Scale, and Mode settings.
+**Mode 1: Explore (Generate)**
+- Algorithm generates new pattern every N bars
+- All parameters live and editable
+- Encoder selects voice to edit
+- Display shows current pattern and notes
 
-Chord Extension parameter adds harmonic complexity (Triad, 7th, 9th, etc.) to the note pool for supporting voices.
+**Mode 2: Refine (Edit)**
+- Press encoder to freeze current pattern
+- Edit individual steps per voice
+- Adjust per-voice density, range, etc.
+- Visual step editor similar to VSeq
 
-Supporting voices cycle through a shuffled but deterministic order of the available chord tones.
+**Mode 3: Save/Load**
+- Save current pattern to slot (0-9) in DRAM
+- Load pattern from slot
+- Duplicate pattern to new slot for variation
 
-Rhythm & Dynamics:
+## Parameters (Simplified)
 
-Gate Patterns: Generated from the seed and captured with the pattern.
+### Global
+- **Clock In** (CV input)
+- **Reset** (CV input)
+- **Key** (C, C#, D... B)
+- **Scale** (Major, Minor, Dorian, etc.)
+- **Tempo Division** (/4, /2, x1, x2, x4)
+- **Pattern Length** (8, 16, 24, 32 steps)
 
-Density: Separate probability controls for Lead, Bass, and Support voices.
+### Per Voice (4 voices × parameters)
+- **Active** (On/Off)
+- **Density** (0-100% - probability of note playing)
+- **Octave Min** (0-6)
+- **Octave Max** (0-6)
+- **Gate Length** (1-99ms)
+- **Velocity** (0-127)
 
-Probabilistic Gate Length: A macro that moves between uniform staccato, chaotic variation, and uniform legato.
+### Pattern Control
+- **Generate** (Trigger new pattern)
+- **Pattern Seed** (0-65535 for repeatability)
+- **Save Slot** (0-9)
+- **Load Slot** (0-9)
 
-Velocity Logic: A Base Velocity parameter sets the core dynamic level. A Velocity Dynamics macro controls the range of random deviation around that base value.
+## Development Phases
 
-Octave Control: Separate Spread and Offset parameters for the Lead, Bass, and Supporting voice groups.
+### Phase 1: Single Voice Generator (MVP)
+- Clock input and sync
+- Single voice with 32-step pattern
+- Scale-constrained note generation
+- CV pitch + gate output
+- Deterministic random from seed
+- **Goal**: Prove generative concept works
 
-Chaos Engine: Three separate parameters for Velocity Chaos, Gate Chaos, and Note Chaos introduce deterministic "accidents" (random overrides) that are saved with the pattern.
+### Phase 2: 4-Voice Polyphony
+- Add 3 more voices
+- Independent density/range per voice
+- 4 × CV + Gate outputs
+- UI for voice selection and editing
+- **Goal**: Multi-voice harmony generation
 
-## IV. Performance Song Mode
+### Phase 3: Pattern Memory
+- Save/load to DRAM slots (10 patterns)
+- Preset serialization
+- Pattern seed display and manual entry
+- **Goal**: Pattern library management
 
-A 50-slot arranger for sequencing captured patterns.
+### Phase 4: Performance Features
+- Pattern length variation (8/16/24/32)
+- Euclidean rhythm patterns option
+- Fill/variation trigger
+- Clock division/multiplication
+- **Goal**: Live performance tools
 
-Per-Step Settings: Each step in the song stores the Pattern ID, Repeat Count, and the desired voicing structure for that step.
+### Phase 5: Optional MIDI
+- MIDI output for all voices
+- Channels 1-4 for voices 1-4
+- Note on/off with velocity
+- **Goal**: Integration with MIDI gear
 
-Workflow: Features Insert and Delete functions and a "Live Audition Slot" at the end of the sequence that loops indefinitely for iterative jamming.
+## What Was Removed (and Why)
 
-UI: A unified screen shows the song list and a "What's Coming Next" performance view, displaying the current, next, and following patterns with their full harmonic context.
+❌ **Song mode / 50-slot arranger** - Too complex, use Disting's preset system instead
+❌ **8 voices** - 4 voices is plenty, saves memory and CPU
+❌ **Chaos parameters** - Complexity without clear musical benefit
+❌ **Multiple harmony engines** - One scale system is enough
+❌ **Shift register LFSR** - Simpler random works fine
+❌ **SD card logging** - Use preset files for debugging
+❌ **Duplicate function** - Just save to different slot
+❌ **Explore mode auto-advance** - User triggers new patterns
 
-## V. Output Architecture
+## What Makes This Achievable
 
-All generated voices must output their note and gate information on both CV and MIDI simultaneously.
+✅ **Fits in memory** - ~1KB SRAM + DRAM for pattern storage
+✅ **Simple UI** - Similar to VSeq step editing
+✅ **Clock-based** - Proven timing system from VSeq/VLoop
+✅ **Scale-constrained** - Musical by default
+✅ **Deterministic** - Seed-based generation is repeatable
+✅ **Incremental** - Each phase is testable
+✅ **Focused** - Does one thing well (generative harmony)
 
-VI. Development Plan & Testing Strategy
-Development will proceed in phases with integrated logging for verification.
+## Success Criteria
 
-## Logging Functionality
-A logMessage(string) function will be created in C++. It will append a timestamped message to an engine_log.txt file on the Disting NT's SD card for debugging and regression testing.
+**Phase 1 Complete When:**
+- Single voice generates scale-constrained notes
+- Clock input advances steps correctly
+- Seed changes produce different but repeatable patterns
+- CV pitch output is accurate (V/oct)
 
-## Base Prototype (MVP)
+**Final Product Success:**
+- 4 voices play harmonically-related melodies
+- Patterns are musically interesting and varied
+- Save/load works reliably across power cycles
+- Performance is stable with no audio glitches
+- UI is intuitive and responsive
 
-Features: Single Voice (Pitch/Gate) output. Basic generative engine (clocked shift register). Hard-coded scale. Simple freeze logic via CV input.
+## Technical Notes
 
-Goal: Validate the core generative loop before adding complexity.
-
-## Phased Rollout & Testing
-
-Phase 1: UI & Pattern Management
-
-Features: Implement the Explore -> Refine -> Save -> Duplicate workflow and data persistence (serialize()/deserialize()).
-
-Testing: Verify patterns can be captured, saved, and reloaded correctly after a power cycle by checking the log file.
-
-Phase 2: Polyphony & Harmonic Engine
-
-Features: Add all voices, global voicing controls, and harmonic parameters.
-
-Testing: Set a specific key/mode (e.g., C Major/Ionian). Verification: The log file must confirm that supporting voices only output CV/notes corresponding to the C Major triad. Test "Headless" mode.
-
-Phase 3: Rhythmic & Dynamic Control
-
-Features: Implement Density, Probabilistic Gate Length, and Velocity Dynamics macros.
-
-Testing: Use the log file. Verification: At 0% Gate Length, all gates must be short. At 0% Velocity Dynamics, all logged velocities must be identical to the Base Velocity.
-
-Phase 4: Song Mode
-
-Features: Implement the unified Song Page, arrangement functions, and the "Live Audition" workflow.
-
-Testing: Build a 3-step song. Verification: Does it play in order, respect repeat counts, and loop the final pattern correctly?
-
-## Technical Stack
-
-Language: C++
-
-Target: Expert Sleepers Disting NT (ARM processor)
-
-IDE: VS Code on macOS
-
-Compiler: arm-none-eabi-gcc toolchain via Homebrew.
-
-API: Official distingNT_API from GitHub.
+- Use `rand()` with `srand(seed)` for deterministic generation
+- Scale lookup table: `const int scales[7][7]` for common scales
+- Note generation: `rootNote + scales[scaleType][step % 7] + (octave * 12)`
+- Pattern stored as MIDI note numbers (0-127), converted to V/oct for CV
+- Gate timing: millisecond counter decremented each audio frame
+- DRAM usage: 512 bytes × 10 patterns = 5KB (plenty of space)
