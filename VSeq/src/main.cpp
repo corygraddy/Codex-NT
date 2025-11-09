@@ -1426,8 +1426,8 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                     a->selectedTrack = newTrack;
                     a->trackPotCaught = false;  // Must re-catch at new position
                     
-                    // Clamp selected step to new track's length
-                    int lenParam = kParamGate1Length + (a->selectedTrack * 10);
+                    // Clamp selected step to new track's length (9 params per track now)
+                    int lenParam = kParamGate1Length + (a->selectedTrack * 9);
                     if (a->selectedStep >= self->v[lenParam]) {
                         a->selectedStep = self->v[lenParam] - 1;
                     }
@@ -1435,8 +1435,8 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
             }
         }
         
-        // Get current track length for encoder bounds
-        int lenParam = kParamGate1Length + (a->selectedTrack * 10);
+        // Get current track length for encoder bounds (9 params per track now)
+        int lenParam = kParamGate1Length + (a->selectedTrack * 9);
         int trackLength = self->v[lenParam];  // 1-32
         
         // Right encoder: select step (0 to trackLength-1)
