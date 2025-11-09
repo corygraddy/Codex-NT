@@ -1370,8 +1370,8 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
             // Determine new sequencer's length
             int newLength;
             if (a->selectedSeq == 3) {
-                // Gate sequencer - get current track's length
-                int lenParam = kParamGate1Length + (a->selectedTrack * 10);
+                // Gate sequencer - get current track's length (9 params per track now)
+                int lenParam = kParamGate1Length + (a->selectedTrack * 9);
                 newLength = self->v[lenParam];
                 // Reset track pot catch when entering gate sequencer
                 a->trackPotCaught = false;
