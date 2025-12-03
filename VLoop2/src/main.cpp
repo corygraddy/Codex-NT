@@ -1,6 +1,6 @@
 /*
  * VLoop2 - Single track MIDI looper with 8 loop slots
- * Version: 0.4.0
+ * Version: 0.4.1
  * 
  * Features:
  * - 8 independent loop slots
@@ -10,7 +10,7 @@
  * - 128KB DRAM for ~16K MIDI events
  */
 
-#define VLOOP2_VERSION "0.4.0"
+#define VLOOP2_VERSION "0.4.1"
 
 #include <distingnt/api.h>
 #include <new>
@@ -51,6 +51,7 @@ struct VLoop2 : public _NT_algorithm {
     // State
     int currentLoop;           // Active loop slot (0-7)
     uint32_t playhead;         // Current playback position in samples
+    uint32_t playbackIndex;    // Index of next event to check for playback
     uint32_t recordStart;      // Sample count when recording started
     bool isRecording;
     bool isPlaying;
@@ -65,6 +66,7 @@ struct VLoop2 : public _NT_algorithm {
         canUndo(false),
         currentLoop(0),
         playhead(0),
+        playbackIndex(0),
         recordStart(0),
         isRecording(false),
         isPlaying(false)
@@ -201,34 +203,57 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     VLoop2* pThis = static_cast<VLoop2*>(self);
     
+    // Early return if nothing to do
+    if (!pThis->isPlaying && !pThis->isRecording) {
+        return;
+    }
+    
     Loop* currentLoop = &pThis->loops[pThis->currentLoop];
     
-    if (!currentLoop->isEmpty && currentLoop->loopLength > 0) {
+    // Only process playback if we have data and are playing
+    if (pThis->isPlaying && !currentLoop->isEmpty && currentLoop->loopLength > 0 && currentLoop->eventCount > 0) {
         int outputChannel = pThis->v[kParamMidiOut];
+        int numSamples = numFramesBy4 * 4;
         
-        // Process each sample
-        for (int i = 0; i < numFramesBy4 * 4; i++) {
-            // Phase 4: Playback - check for events at current playhead position
-            if (pThis->isPlaying) {
-                // Look through all events in current loop
-                for (uint32_t j = 0; j < currentLoop->eventCount; j++) {
-                    uint32_t poolIndex = currentLoop->startIndex + j;
-                    MidiEvent* event = &pThis->eventPool[poolIndex];
-                    
-                    // Check if this event should trigger now
-                    if (event->timestamp == pThis->playhead) {
-                        // Remap channel and send MIDI
-                        uint8_t remappedByte0 = (event->byte0 & 0xF0) | ((outputChannel - 1) & 0x0F);
-                        NT_sendMidi3ByteMessage(~0, remappedByte0, event->byte1, event->byte2);
-                    }
+        // Process this buffer of samples
+        for (int i = 0; i < numSamples; i++) {
+            // Check if the next event should fire at this playhead position
+            // Events are recorded in chronological order, so we only scan forward
+            while (pThis->playbackIndex < currentLoop->eventCount) {
+                uint32_t poolIndex = currentLoop->startIndex + pThis->playbackIndex;
+                MidiEvent* event = &pThis->eventPool[poolIndex];
+                
+                // If this event is at current playhead, send it
+                if (event->timestamp == pThis->playhead) {
+                    uint8_t remappedByte0 = (event->byte0 & 0xF0) | ((outputChannel - 1) & 0x0F);
+                    NT_sendMidi3ByteMessage(~0, remappedByte0, event->byte1, event->byte2);
+                    pThis->playbackIndex++;
+                }
+                // If this event is in the future, stop checking
+                else if (event->timestamp > pThis->playhead) {
+                    break;
+                }
+                // If this event is in the past (shouldn't happen), skip it
+                else {
+                    pThis->playbackIndex++;
                 }
             }
             
             // Increment playhead
             pThis->playhead++;
+            
+            // Loop wrap - reset both playhead and index
             if (pThis->playhead >= currentLoop->loopLength) {
-                pThis->playhead = 0;  // Wrap around
+                pThis->playhead = 0;
+                pThis->playbackIndex = 0;
             }
+        }
+    } else if (pThis->isPlaying) {
+        // Playing but no loop - just advance playhead for empty loops
+        int numSamples = numFramesBy4 * 4;
+        pThis->playhead += numSamples;
+        if (currentLoop->loopLength > 0 && pThis->playhead >= currentLoop->loopLength) {
+            pThis->playhead = pThis->playhead % currentLoop->loopLength;
         }
     }
 }
@@ -293,6 +318,7 @@ void parameterChanged(_NT_algorithm* self, int param) {
                     // Auto-play after first recording
                     pThis->isPlaying = true;
                     pThis->playhead = 0;  // Reset to start
+                    pThis->playbackIndex = 0;  // Reset playback position
                 }
             }
             break;
