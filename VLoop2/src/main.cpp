@@ -1,6 +1,6 @@
 /*
  * VLoop2 - Single track MIDI looper with 8 loop slots
- * Version: 0.3.0
+ * Version: 0.4.0
  * 
  * Features:
  * - 8 independent loop slots
@@ -10,7 +10,7 @@
  * - 128KB DRAM for ~16K MIDI events
  */
 
-#define VLOOP2_VERSION "0.3.0"
+#define VLOOP2_VERSION "0.4.0"
 
 #include <distingnt/api.h>
 #include <new>
@@ -145,7 +145,15 @@ bool draw(_NT_algorithm* self) {
     VLoop2* pThis = static_cast<VLoop2*>(self);
     
     // Draw version in bottom right corner
-    NT_drawText(118, 56, VLOOP2_VERSION, kNT_textTiny, kNT_textRight);
+    NT_drawText(250, 58, VLOOP2_VERSION, 8, kNT_textRight, kNT_textTiny);
+    
+    // Draw recording/playing status
+    if (pThis->isRecording) {
+        NT_drawText(10, 58, "REC", 15, kNT_textLeft, kNT_textTiny);
+    }
+    if (pThis->isPlaying) {
+        NT_drawText(30, 58, "PLAY", 15, kNT_textLeft, kNT_textTiny);
+    }
     
     return false;  // Don't suppress standard parameter display
 }
@@ -193,13 +201,30 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     VLoop2* pThis = static_cast<VLoop2*>(self);
     
-    // Phase 1: Just increment playhead for now
-    // Will add playback logic in Phase 4
-    
     Loop* currentLoop = &pThis->loops[pThis->currentLoop];
     
     if (!currentLoop->isEmpty && currentLoop->loopLength > 0) {
+        int outputChannel = pThis->v[kParamMidiOut];
+        
+        // Process each sample
         for (int i = 0; i < numFramesBy4 * 4; i++) {
+            // Phase 4: Playback - check for events at current playhead position
+            if (pThis->isPlaying) {
+                // Look through all events in current loop
+                for (uint32_t j = 0; j < currentLoop->eventCount; j++) {
+                    uint32_t poolIndex = currentLoop->startIndex + j;
+                    MidiEvent* event = &pThis->eventPool[poolIndex];
+                    
+                    // Check if this event should trigger now
+                    if (event->timestamp == pThis->playhead) {
+                        // Remap channel and send MIDI
+                        uint8_t remappedByte0 = (event->byte0 & 0xF0) | ((outputChannel - 1) & 0x0F);
+                        NT_sendMidi3ByteMessage(~0, remappedByte0, event->byte1, event->byte2);
+                    }
+                }
+            }
+            
+            // Increment playhead
             pThis->playhead++;
             if (pThis->playhead >= currentLoop->loopLength) {
                 pThis->playhead = 0;  // Wrap around

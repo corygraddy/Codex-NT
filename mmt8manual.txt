@@ -1,0 +1,805 @@
+ALESIS MMT-8
+Multi track MIDI recorder
+- Page i -
+Alesis MMT-8 Instruction Manual
+Alesis MMT-8 Instruction Manual......................................................................................i
+1 Introduction.............................................................................................................1
+2 PART Mode...............................................................................................................2
+2.1 Selecting and Playing a PART ...................................................................................2
+2.2 PART button...........................................................................................................2
+2.3 Selecting a PART ....................................................................................................2
+2.4 Selecting TRACKs for playback .................................................................................2
+2.5 FAST-FORWARD .....................................................................................................3
+2.6 REWIND ................................................................................................................3
+3 Recording a PART ....................................................................................................4
+3.1 Selecting the RECORD TRACK ..................................................................................4
+3.2 Entering RECORD....................................................................................................4
+4 LENGTH....................................................................................................................6
+5 ERASE.......................................................................................................................7
+5.1 Erasing a PART.......................................................................................................7
+5.2 Erasing a single TRACK............................................................................................7
+5.3 Erasing selected information (notes, pitchbend, individual MIDI channel, etc.)...............7
+5.4 Erasing a SONG......................................................................................................8
+6 COPY ........................................................................................................................9
+6.1 Copying a PART to itself ..........................................................................................9
+6.2 Copying a PART to another PART..............................................................................9
+6.3 Copying a TRACK to itself ........................................................................................9
+6.4 Copying a TRACK to another TRACK of the same PART ............................................. 10
+6.5 Copying a TRACK to another TRACK of a different PART............................................ 10
+6.6 Copying selected information (notes, pitchbend, individual MIDI channels, etc.) .......... 10
+6.7 Copying a SONG to itself........................................................................................ 11
+6.8 Copying a SONG to another SONG.......................................................................... 11
+7 EDIT ...................................................................................................................... 12
+7.1 Editing a PART...................................................................................................... 12
+7.2 Erasing an event................................................................................................... 14
+7.3 Adding an event ................................................................................................... 14
+8 Editing and Creating a SONG................................................................................ 15
+8.1 Automatic TRACK selection and muting at each step of a SONG................................. 15
+9 SONG Mode........................................................................................................... 16
+9.1 SONG button........................................................................................................ 16
+9.2 Selecting a SONG.................................................................................................. 16
+9.3 Manual TRACK selection and muting in SONG mode.................................................. 16
+- Page ii -
+10 LOOP ..................................................................................................................... 18
+11 MIDI ECHO............................................................................................................ 19
+12 NAME..................................................................................................................... 20
+13 MERGE .................................................................................................................. 21
+14 MIDI CHANNEL ..................................................................................................... 22
+15 QUANTIZE............................................................................................................. 23
+16 TRANSPOSE .......................................................................................................... 25
+17 TEMPO................................................................................................................... 26
+18 MIDI FILTER ......................................................................................................... 27
+19 CLOCK ................................................................................................................... 28
+20 CLICK .................................................................................................................... 30
+21 TAPE...................................................................................................................... 31
+22 Storing to disk using MIDI system exclusive data dump ..................................... 33
+23 Syncing the MMT-8 to tape................................................................................... 34
+23.1 Recording the sync tone ........................................................................................ 34
+23.2 To clock the MMT-8 from tape sync ........................................................................ 35
+24 START/STOP footswitch ....................................................................................... 36
+25 Memory................................................................................................................. 37
+25.1 Remaining memory ............................................................................................... 37
+25.2 Clearing memory .................................................................................................. 37
+26 Auto Locate........................................................................................................... 38
+26.1 Part Mode:........................................................................................................... 38
+26.2 Song Mode:.......................................................................................................... 38
+27 MIDI Implementation Chart................................................................................. 39
+28 Troubleshooting Chart .......................................................................................... 40
+- Page 1 -
+1 Introduction
+The Alesis MMT-8 Multi-Track MIDI Recorder is a user friendly, yet extremely powerful MIDI sequencer.
+It is able to record any information received at its MIDI INPUT jack (except poly-pressure and note off
+velocity), and store it into non-volatile memory for later retrieval. This information can include notes,
+controllers, pitch bend, after touch, program changes, and system exclusive data.
+The MMT-8 can play back 8 tracks simultaneously and it functions in many ways like an 8 track tape
+recorder. The MMT-8's memory capacity is approximately 9,000 to 11,000 notes. Variable MIDI
+controllers like aftertouch, pitch bend, mod wheel, etc. will take up more memory, so the actual amount
+of note storage capacity will vary depending on how much these controllers are used. Each set of 8
+tracks is called a `part'. There can be up to 100 parts in the MMT-8's memory ( 00-99). These parts can
+be combined into lists of parts, which are called `songs'. There can be up to 100 songs in the MMT-8's
+memory, and each can contain a list of parts up to 255 steps long.
+By constructing songs in this fashion, the MMT-8 makes it very easy to arrange songs by recording one
+verse into one part, and a chorus into another, and a bridge into another, and then making a list of the
+parts into a song with as many verses, choruses, and bridges as desired.
+The MMT-8 has many editing capabilities, which allow the user to alter any data after recording it. Notes
+can be transposed, timing corrected, copied, and erased. MIDI channels can be reassigned, controllers
+can be modified, etc. Also, the MMT-8 has an Autolocate feature which will allow you to jump to any
+desired beat number within a part or song (see auto-locate). Despite this flexibility, the MMT-8 is very
+easy to use, since these features do not get in the way of the more basic operations, like recording and
+playing back.
+- Page 2 -
+2 PART Mode
+2.1 Selecting and Playing a PART
+When power is first turned on, the sequencer will be in SONG or PART mode (SONG or PART LED lit),
+depending on the mode that was selected before power was turned off. The song or part number will
+also be the same as when power was turned off.
+2.2 PART button
+Press the PART button to enter PART mode if the sequencer is not currently in this mode. The LED next
+to the PART button will light and the display will read:
+if part 00 exists, or
+if part 00 has not yet been created.
+2.3 Selecting a PART
+The 00 is underlined to indicate that it will be changed if a new number is selected with the keypad or
++/- buttons. The second line of the display shows the name of the part. If a part is empty, the display
+reads EMPTY PART. Pressing the +/- buttons immediately selects the next part number, with the
+numbers looping past 99 to 00 and looping down from 00 to 99. If a single digit on the keypad is pressed
+(3, for example), the display will change to:
+The display is now indicating that the second digit of the part should be entered. After entering the
+second digit, the new part is selected, and its name is displayed. If the second digit is not entered within
+2 seconds, the display will revert back to the previous part number, and no new part will have been
+selected. This type of keypad entry is consistent with all entries made with the keypad described in this
+manual. The page up and page down buttons have no function when selecting parts or songs.
+2.4 Selecting TRACKs for playback
+While in PART mode, the eight TRACK SELECT LED will display the tracks that are turned on (not muted)
+on the selected part. These buttons can be turned on or off to change the selected tracks to be played.
+Whenever a part is playing, the eight track select LEDs will show which tracks are playing. When a new
+- Page 3 -
+part is selected, all eight tracks are turned on. At any time, the track selection can be changed with the
+track select buttons. Pressing PLAY will start playing the selected part from its beginning, and the PLAY
+LED will light. The display will read, for example:
+The display is now showing the current beat number and the part number that is being played. As each
+beat (quarter note) occurs, the display will advance the beat count. While the part is playing, the keypad
+and +/- buttons can be used to select a new part number, which will then be displayed in the display as
+follows:
+At the end of the current part, the newly selected part number will play, with the beat count starting
+again at 001. The NEXT part to play can be changed up until the end of the current part is reached, after
+which the new part will begin playing, and the display will revert back to PLAYING PART.
+Pressing STOP/CONTINUE will stop playing a part, and the display will return to the select part display.
+Any notes that were sustaining will turn off. Pressing STOP/CONTINUE again will begin playing a part
+from the beginning of the beat it was on when it was stopped, replaying all previously sustaining notes.
+Pressing PLAY will always start a part from the beginning. When a part reaches its end, the PLAY LED will
+turn off and the part will stop, unless LOOP is on, which will cause the part to continue playing from the
+beginning.
+2.5 FAST-FORWARD
+The << and >> buttons (rewind and fast-forward) can be used to advance or retreat through the beats
+of a part. If a part is playing, pressing the fast forward button will cause sustaining notes to stop, and the
+display to advance quickly one beat at a time until the fast forward button is released, after which the
+part continues playing from the beginning of the displayed beat.
+2.6 REWIND
+The rewind button works similarly, but in reverse. In either direction, if the end or beginning of a part is
+reached, the display remains on the last beat, unless loop is on, which results in the beat "wrapping
+around". When a part is not playing, these buttons can be used for the same function, and by pressing
+STOP/CONTINUE the song will continue from the last displayed beat. The fast forward and rewind button
+can be held down simultaneously to "freeze" the display on the current beat. It is also possible to
+Autolocate with the fast-forward and rewind buttons. This function allows you to go directly to any
+desired beat (see auto-locate).
+- Page 4 -
+3 Recording a PART
+3.1 Selecting the RECORD TRACK
+To record on a part, press the RECORD button. The RECORD LED will light. The track to be recorded
+always defaults to the lowest numbered empty track. For an empty part, track 1 will be selected. If a part
+has all eight tracks used, no track will be selected, and the RECORD LED will not light.
+Every time a track is recorded onto, the next empty track will automatically be selected the next time
+RECORD is pressed. If a track other than the selected one is desired, pressing another track select button
+while holding down the RECORD button will select the new track to be recorded on. Like on a tape
+recorder, if a track with something on it is recorded over, the old information is erased.
+Once the user has selected a track manually, the automatic track selection of the next empty track is
+turned off. This way, if the user wants to redo a track many times, he can select it once, and that track
+will remain selected until he selects another track. When a new part is selected, the automatic track
+selection is turned back on. If the track that is selected is reselected, it will stop flashing (and return to
+its previous state, flashing on or off), and no track will be selected for record (causing the RECORD LED
+to turn off when the RECORD button is held down, the display reads:
+While holding RECORD, the track that is lit indicates the currently selected track to be recorded on. Any
+tracks that are flashing are currently empty, and any tracks that are not lit currently have something
+recorded in them. Any track (flashing, on, or off) can be selected to be recorded onto.
+3.2 Entering RECORD
+After releasing RECORD, the RECORD LED will remain lit to indicate that it is ready to record if PLAY is
+pressed, unless no track was selected (no track LED lit solid), which would cause the RECORD LED to
+turn off after releasing the RECORD button. If STOP/CONTINUE is pressed while the RECORD LED is on,
+the RECORD LED will turn off, indicating that record is disabled, but the selected record track will be
+remembered. To begin recording, press PLAY. If a track had been selected (RECORD LED on), then the
+beginning of the part, after counting down four beats (the countdown can be changed; see CLICK),
+during which time the display will read:
+With each beat past, the display will change to 3, then 2, then 1, after which the display will change to:
+The part number is not underlined, indicating that a new part cannot be selected while recording. While
+recording, the eight tracks can still be turned on or off. Pressing the RECORD button effectively "punches
+out" the record track, the RECORD LED turns off, and the part continues to play from where it was.
+- Page 5 -
+Pressing the PLAY button is also the same as punching out, except that the part will immediately start
+playing from the beginning. The rewind and fast forward buttons will also punch out. Pressing
+STOP/CONTINUE also punches out, but stops the part from playing as well.
+When recording for the first time on an empty part, the track will continue recording until
+STOP/CONTINUE, FAST-FORWARD, REWIND, or PLAY is pressed. When one is pressed, this determines
+the length of the part, rounded to the nearest beat. When recording on any other track, the part will
+automatically stop when the end of the part (as determined by the first record track) is reached. If LOOP
+is on, the RECORD LED will turn off ("punch out"), and the part will begin playing from the start. It it
+possible to set the length before recording the first track, or to change the length after recording the first
+track (see LENGTH).
+While holding the RECORD button, pressing and holding the LENGTH button will show on the display the
+percentage of memory still available to recording.
+- Page 6 -
+4 LENGTH
+The LENGTH button is used to set the length of a part to a specified number of beats. While holding the
+LENGTH button, the display will show the current length of the current part. If it is an empty part, the
+display will read:
+This indicates that no length has yet been set. If RECORD mode is entered without setting this length,
+the length of the part will be determined by the number of beats recorded before pressing
+STOP/CONTINUE, RECORD or PLAY. If it is desired to set the length before recording, the +/- buttons
+can be used to move the length up or down in single beat increments (000 minimum, 682 maximum), or
+a three digit number can be entered with the keypad. In either case, the new length is not entered into
+the part until the RECORD button is pressed. When RECORD is pressed, the display changes to:
+This display remains until RECORD is released. If LENGTH is released before RECORD is pressed, no
+change to the length will be made, regardless of what was pressed on the keypad. If RECORD is pressed
+after entering a partial length (1 or 2 digits), nothing will happen. When entering in digits, the first digit
+entered ( 1, for example) results in the following display:
+The display is now waiting for the entry of the second digit. If the second digit is not entered within 2
+seconds, the display will revert to its previous value. If RECORD is pressed after entering an incomplete
+length (1 or 2 digits), the display will revert to its previous value.
+When a new length is entered (RECORD), any information on any track of the selected part that was
+beyond the new set length will be erased. Any notes sustaining beyond the new end will automatically be
+given a new duration. If the new length is longer than the previous one, the additional length will be
+filled with silence. If it is desired to remove or add length to the beginning of a part, first set the desired
+length (as described above), and then press either page up or page down. The display will change to:
+Pressing either page up or page down again will toggle back to the original display. If RECORD is pressed
+with the above display showing, any additional beats will be placed at the beginning of the part, and any
+beats removed will be removed from the part top. Notes that were stored in the removed beats will be
+removed regardless of their duration.
+The LENGTH button has no effect in song mode, or while a song or part is playing.
+- Page 7 -
+5 ERASE
+5.1 Erasing a PART
+The erase button is used to erase a single track, part or song. When in PART mode, pressing and holding
+the ERASE button causes the following display:
+The number 01 would actually be the currently selected part number. All 8 track LEDs will be lit. To erase
+the selected part, press RECORD. The display will change to:
+The display will remain this way until the RECORD button is released, after which the display will return
+to its previous state.
+5.2 Erasing a single TRACK
+To erase a single track, press and hold the ERASE button (all track LEDs will light), and select the desired
+track number. The selected track's LED will remain lit, and the other track LEDs will turn off. Additional
+tracks can be selected, and their LEDs will come on. Pressing RECORD will erase any selected tracks.
+5.3 Erasing selected information (notes, pitchbend, individual
+MIDI channel, etc.)
+When erasing a track or part, it is possible to erase only selected data from a part or track. While holding
+the ERASE button, the page up and page down buttons below the LCD display can be used to select
+specific functions. If the arrow buttons are used, they will scroll through the following choices backwards
+or forwards depending on which button is pressed:
+- Page 8 -
+thru
+This feature makes it possible to erase specific data, such as the after touch on one track, without
+affecting the other data on that track or part. If erase after touch was selected and RECORD was pressed
+without selecting a track, all after touch on all eight tracks of the selected part would be erased.
+5.4 Erasing a SONG
+In SONG mode, holding the ERASE button will cause the following display:
+Pressing the RECORD button will erase the currently selected song number. The eight track buttons are
+inactive when erasing songs. The page up and page down buttons are also inactive when erasing songs.
+In all cases, the erase is not executed until RECORD is pressed. and will be aborted if ERASE is released
+before pressing RECORD. The ERASE button has no effect while a song or part is playing.
+- Page 9 -
+6 COPY
+The copy button is used to copy or append a track, part or song, to another track, part or song. It only
+functions while the COPY button is held down. If the COPY button is released (either before or after the
+copy is executed), the previous mode will show up on the display, and copy mode is exited.
+6.1 Copying a PART to itself
+When in PART mode, and COPY is pressed and held, all 8 track LEDs will light, and the display will read:
+Both displayed part numbers will actually display the current part number (00- 99). Pressing RECORD
+completes the operation, and the display reads:
+This display remains until the RECORD button is released, which then returns the sequencer to the
+previous copy display (unless COPY is released as well). The above example demonstrated copying a part
+(all 8 tracks) to itself, which will double the length of that part.
+6.2 Copying a PART to another PART
+To copy a part to another part, press and hold COPY, then enter the two digit part number with the
+keypad. The display will show the selected part number. Pressing RECORD initiates the copy, and
+appends the source part (the current part before COPY was pressed) to the destination part (the part
+entered with the keypad). Again, all 8 track LEDs are lit, so all 8 tracks are copied.
+If the destination part was empty, then the destination now contains an exact copy of the source part. If
+the destination was not empty, then the destination's length is increased by the length of the source part,
+and the source part is appended to the end of the destination part. Any MIDI assignments made on the
+source part's tracks will be overridden by the destination part's MIDI assignments.
+6.3 Copying a TRACK to itself
+To copy a single track to itself (useful for erasing all but one type of MIDI information, see below), press
+and hold the COPY button, select the desired track (its LED will remain lit and the others wil turn off),
+then press RECORD.
+- Page 10 -
+6.4 Copying a TRACK to another TRACK of the same PART
+To copy a single track to another track of the same part number, press and hold COPY, and select the
+source track. The selected track's LED will remain lit, and all the other track LEDs will turn off. Now select
+the destination track. This track's LED will now flash, indicating that it is the track to be copied to.
+Pressing the RECORD button initiates the copy, and copies the source track to the destination track. If
+any information existed in the destination track, it is erased.
+6.5 Copying a TRACK to another TRACK of a different PART
+To copy a single track of one part to a single track of another, press and hold COPY, select the source
+track, select the destination part number, select the destination track, then press RECORD. If the
+destination track is the same number as the source track, the destination track button does not have to
+be selected before pressing RECORD.
+6.6 Copying selected information (notes, pitchbend, individual
+MIDI channels, etc.)
+In all of the above copy modes, the entire contents of a track of part are copied to the destination. It is
+possible to copy selected information from one track or part to another by using the page up and page
+down buttons to select the desired data while holding the COPY button. These buttons can be selected
+any time during the copy selection before RECORD is pressed. They will scroll backwards and forwards
+through 22 choices with the following displays:
+through
+By scrolling through the list, any selected data can be copied from one track or part to another. For
+example, if a track contained notes on many MIDI channels that had been previously combined together,
+copying only one MIDI channel to a new track would allow the parts to be separated out again. Also,
+copying NOTES ONLY from a track to itself will effectively erase all pitchbend, controller, program
+change, after touch, and system exclusive data from that track.
+- Page 11 -
+6.7 Copying a SONG to itself
+In SONG mode, pressing and holding the COPY button will result in the following display:
+The 01 display will actually show the currently selected song number. Like in PART mode, pressing
+RECORD will append the current song to itself, making it twice as long.
+6.8 Copying a SONG to another SONG
+If a new song number is selected, the display will show the newly selected song number, and pressing
+RECORD will append the source song number (the number selected before pressing COPY), to the
+destination song number (the number selected while holding COPY). This mode is very useful, since a
+verse consisting of more than one part could be entered into a song, and then appended into another
+song when needed without having to re-enter the parts for the verse. None of the eight track buttons will
+have any effect when copying songs. The page up and page down buttons also have no effect when
+copying songs.
+In all cases, the copy is not executed until RECORD is pressed, and will be aborted if COPY is released
+before pressing RECORD. The COPY button has no effect while a song or part is playing.
+- Page 12 -
+7 EDIT
+The EDIT button is an on/off switch with an associated LED. All operations as discussed so far assume
+that EDIT is off. When edit is on, individual note editing can be achieved in part mode, and the list of
+parts in a song can be edited in song mode. To exit EDIT mode, press EDIT again (the LED will turn off),
+or select PART or SONG, which automatically turns EDIT off.
+7.1 Editing a PART
+When EDIT is pressed while in PART mode (PART LED lit), individual MIDI events can be edited. The
+eight track buttons are used to select which track is being edited. Only one track can be edited at a time
+(only one track is lit at a time). The display now shows the MIDI information of the selected track as
+follows:
+The first three digits are the beat number, followed by the sub-beat count (00-95), followed by the note
+value, followed by the note velocity (01-127), followed by the note's duration (in beats and sub-beats),
+followed by the note's MIDI channel (1-16). The cursor is under the beat number, indicating that it can
+be changed with the keypad or the +/- buttons. To access the other parameters, the page up and page
+down buttons are used. They move the cursor as shown in the following displays:
+The cursor moves to the next parameter, and will "loop around" past the last parameter back to the first.
+The MIDI channel is the channel that the note is output on if the track's MIDI channel is assigned to
+UNCHANGED. If the track is assigned to a specific channel, the original channel number will be shown in
+parenthesis. The note's MIDI channel can still be changed, but no effect will be heard unless the track's
+MIDI channel is assigned to UNCHANGED (see "MIDI CHANNEL").
+Other MIDI information is displayed as follows: (This information will only be displayed if it has been
+entered into the sequence beforehand. See "Adding An Event".) For pitch bend, the display includes the
+beat, the sub-beat, MIDI channel, and pitch bend amount. The pitch bend range is from -8191 to +8192.
+The page up and page down displays scroll as follows:
+- Page 13 -
+Pitch bend amounts can be entered with the keypad, but the only way to achieve negative numbers is to
+use the `-' button until negative numbers are reached, after which any keypad entry will be negative.
+For after touch, the display includes the beat, sub-beat, MIDI channel, and after touch amount. The after
+touch range is from 0 to 127. The page up and page down displays scroll as follows:
+For controllers, the display shows the beat, sub-beat, controller number, controller amount, and MIDI
+channel. The controller range is from 0 to 121. The controller amount range is from 0 to 127. The page
+up and page down displays scroll as follows:
+For program changes, the display includes the beat, sub-beat, program change number, and MIDI
+channel. The program range is from 0 to 127. The page up and page down displays scroll as follows:
+For system exclusive information, the number of parameters could be any value. Since this could contain
+a large amount of information, the page up and page down buttons continue to scroll the data through
+the display until the end is reached. The display includes the beat, sub-beat, and any system exclusive
+data, as follows:
+- Page 14 -
+7.2 Erasing an event
+Any event being displayed can be erased by holding ERASE and pressing RECORD. Erasing an event
+removes it from the track, but does not alter the timing of the track. For example, removing a quarter
+note at the beginning of the track does not move everything else forward a quarter note.
+7.3 Adding an event
+An event can be added by using the COPY button. Pressing and holding COPY causes the following
+display:
+Pressing the RECORD button will insert a note at the current beat location, with a note value of C3, a
+velocity of 64, and a duration of 1 beat. This note can then be edited as described above to any desired
+value. If something other than a note is desired to be inserted, the page up and page down buttons can
+be used to scroll through the other choices before pressing RECORD:
+In the above choices, pressing RECORD will insert the displayed event at the current beat and with
+values of 0.
+While in part EDIT, the fast forward and rewind buttons are used to advance and retreat respectively,
+through the list of MIDI events on the selected track. When the end of a track is reached, or if a track is
+empty, the display will read END OF TRACK. Playing a part while in part edit will play the part while
+continuing to display the events as they happen on the display.
+- Page 15 -
+8 Editing and Creating a SONG
+When in SONG mode, the EDIT button is used to enter the song edit mode. This mode is used for
+creating or editing a song, which is a list of parts. The display appears as follows:
+The step number can be moved forwards or backwards with the fast forward and rewind buttons. The
+part number is underlined, indicating that it can be changed with the keypad or +/- buttons. If a song is
+empty, the first step's part will be blank. The step past the last part of a song will also display a blank
+part. To change a part, simply type in a new part number. To erase a step, hold ERASE and press
+RECORD. The displayed step will be erased, and all parts from the steps past the erased step will shift
+down one step. To insert a part, press and hold COPY. The display will read:
+The keypad or +/- buttons can be used to change the part number. Pressing RECORD inserts the part at
+the displayed step, and moves the previously displayed step and all subsequent steps one step back.
+When the buttons are released, the display reverts back to the song edit display.
+8.1 Automatic TRACK selection and muting at each step of a
+SONG
+You can select which tracks will playback at each step of a song by turning off the tracks you don't want
+to hear (LED's off) and leaving on the tracks you wish to hear (LED's on). The MMT-8 will store in
+memory which tracks were selected for playback at each step.
+- Page 16 -
+9 SONG Mode
+9.1 SONG button
+Press the SONG button to enter song mode. The display will read as follows, with the last song entered
+being indicated in the number portion of the display:
+9.2 Selecting a SONG
+The 00 is underlined to indicate that it will be changed if a new number is selected with the keypad or
+the +/- buttons. The second line of the display shows the name of the currently selected song (up to 14
+characters). If the current song number is empty, the second line will read EMPTY SONG. Pressing the
++/- buttons immediately selects the next song number, with the numbers looping past 99 to 00 and
+looping down from 00 to 99. If a single digit on the keypad is pressed (2, for example), the display will
+change to:
+The display is now indicating that the second digit of the song should be entered. After entering the
+second digit, the new song is selected, and its name will appear. If the second digit is not entered within
+2 seconds, the display will revert back to the previous song number, and no new song will have been
+selected. The page up and page down buttons have no function when selecting parts or songs.
+A SONG is a list of parts (sequences) in a specific order, with each entry into the list being a STEP which
+contains a part number. Each step also contains which of the eight tracks should be on for that step.
+9.3 Manual TRACK selection and muting in SONG mode
+While in SONG mode, the eight TRACK select LEDs will display the tracks that are turned on, on the first
+part of the selected song. These buttons can be turned on or off to change the selected tracks to be
+played, although these changes will be temporary and not stored with the song. Pressing PLAY will start
+playing the selected song from its beginning, and the PLAY LED will light. The display will read, for
+example:
+The first line of the display is now showing the current song number being played, and the current beat
+number of the part being played. The second line of the display is showing the step number and the part
+assigned to the step that is playing at the moment. When the song advances to the next step, the display
+will show the part for step 2, etc. The track select LEDs will change to show which tracks are turned on
+for the current part. Again, the track selection can be changed by turning on or off the track buttons.
+- Page 17 -
+Pressing STOP/CONTINUE will stop playing the song, and the display will return to the select song
+display. Pressing STOP/CONTINUE again will begin playing the song from the beat at which it was
+stopped. Pressing PLAY will always start the song from the beginning of the first step. When a song
+reaches its end, it will stop and the PLAY LED will turn off, unless LOOP is on, which will cause the song
+to loop back to step one and continue playing.
+The << and >> buttons (rewind and fast-forward) can be used to advance or retreat through the beats
+and steps of a song. If the song is playing, pressing the fast forward button will cause sustaining notes to
+stop, and the beat display to advance at a gradually increasing rate (up to the maximum possible tempo)
+until the fast forward button is released, after which the song continues playing from the beginning of
+the displayed beat. If the end of the current step is reached, the next step is started.
+The rewind button works similarly, but in reverse. In either direction, if the end or beginning of a song is
+reached, the display remains on that step, unless loop is on, which results in the step "wrapping around".
+When a song is not playing, these buttons can be used for the same function, and by pressing
+STOP/CONTINUE the song will continue from the last displayed beat. The fast forward and rewind button
+can be held down simultaneously to "freeze" the display on the current beat.
+- Page 18 -
+10 LOOP
+The LOOP button is a simple on/off switch with an LED indicator. When LOOP is on, a part or song will
+loop back to its beginning when it has reached its end, and continue playing indefinitely. If LOOP is off, a
+part or song will stop when it reaches its end.
+- Page 19 -
+11 MIDI ECHO
+The MIDI ECHO button is an on/off switch with an LED indicator. When MIDI ECHO is on, whatever
+information is present at the MIDI INPUT jack will be sent to the MIDI OUTPUT jack. When not in
+RECORD or RECORD ready (RECORD LED lit), the MIDI data is transmitted out unchanged.
+When in RECORD or RECORD ready, and the track selected has been assigned to a specific MIDI channel
+(see MIDI CHANNEL below), then all MIDI information received will be transmitted out on the selected
+MIDI channel. This feature allows the user to hear a part playing on the desired synthesiser while it is
+being recorded. System exclusive information and polyphonic pressure are not echoed, and MIDI clocking
+information will be echoed only if the MIDI clock is being used for clocking the MMT-8.
+- Page 20 -
+12 NAME
+The NAME button is used to change the name of a part or song. The name of a part or song is 14
+characters long. An empty part or song will always have the name "EMPTY PART" or "EMPTY SONG", and
+cannot be changed. When a part or song is first used, its name is changed from "EMPTY PART" or
+"EMPTY SONG" to "NO PART NAME" or "NO SONG NAME". To change the name of a part or song, press
+and hold the NAME button. The display will read:
+The cursor is now under the first character of the part or song name. Using the +/- buttons, any
+alphanumeric character can be selected, and the keypad can be used to enter numbers directly. The
+page up and page down buttons are used to move the cursor left and right on the display. When the
+desired name has been entered, pressing RECORD stores the name for that part or song. If RECORD is
+not pressed before releasing the NAME button, any changes to the name will not be saved.
+- Page 21 -
+13 MERGE
+The MERGE mode is provided so that two tracks can be merged together (overlapped) onto one track. In
+part mode, when MERGE is held down, the display reads:
+The eight track LEDs will be off. Press the first desired track (it will light solid), followed by the
+destination track (it will flash), followed by RECORD. The display will read:
+This display remains until the RECORD button is released. The first track and the second track are now
+combined in the second track's location. The first track remains unchanged. The MERGE button has no
+effect in song mode, or while a part is playing. Note: When two tracks are merged. their MIDI channel
+assignments (see MIDI CHANNEL) are permanently assigned to the data of each track, and the new
+track's MIDI channel is assigned to UNCHANGED. This way, tracks assigned to different channels retain
+their channel independence on the same track.
+- Page 22 -
+14 MIDI CHANNEL
+Like the COPY and ERASE buttons, the MIDI CHANNEL button is only active while it is held down. It is
+used to select the MIDI channel of a track or part (it has no function in SONG mode). When held down,
+track one's LED will light, and the display will show the MIDI channel selected for that track:
+The keypad or +/- buttons can be used to change the selected track's MIDI channel, and other tracks
+can be displayed or changed by selecting the desired track button (only one track is lit at a time). The
+selection of the channel can be 0 (UNCHANGED), or 1 through 16. A given track always retains its
+recorded MIDI channel information, so that if a track contains notes from more than one channel, it can
+be played back as recorded. In this case, it is desired to assign the track to UNCHANGED, which means
+that it will output on the same MIDI channels as are recorded. Whenever a new track is recorded, it
+defaults to UNCHANGED. If a specific MIDI channel is selected (1-16). then the selected track's notes will
+all be output on the selected channel. However, the actual track information remains unchanged, so that
+returning a track to UNCHANGED will cause the separate MIDI channels to play back as before.
+Note: An empty track can be assigned to a MIDI channel before recording onto it, which will cause that
+channel to be output while recording if MIDI ECHO is on. Also, if a track is copied to an empty track, its
+MIDI channel setting will be copied as well. If a track or part is erased, its MIDI channel assignment is
+left as it was.
+- Page 23 -
+15 QUANTIZE
+The QUANTIZE button is used to correct the timing of notes to any desired beat value. QUANTIZE only
+moves note events, and does not alter controllers, pitch bend, after touch, program change, and system
+exclusive information. While holding down the QUANTIZE button in part mode, the most recently
+recorded track will be lit, and the display will read:
+The 10 quantize choices are 1/2, 1/4, 1/6, 1/8, 1/12, 1/16, 1/24, 1/32, 1/48, 1/64. The +/- buttons or
+the keypad can be used to scroll through the choices. The keypad buttons 0-9 can also be used to select
+the quantize value directly, with 0=1/2 and 9=1/64. The track select buttons can be used to select the
+desired track(s) to be quantized. When QUANTIZE is first pressed, all eight track LEDs will be lit,
+indicating that all tracks will be quantized if RECORD is pressed. If a track button is pressed, all other
+tracks will turn off, and only that track will be selected. From that point on, each track select button will
+turn on or off its associated LED, so that any combination of tracks can be selected to be quantized.
+Pressing the RECORD button initiates the quantizing, and changes the display to:
+This display remains until the RECORD button is released, which then returns the sequencer to its
+previous quantize display. The quantization process changes the start point of each note to the nearest
+quantize beat, but leaves the note release point where it was, which changes the actual note duration.
+Other quantizing options can be selected by using the page up and page down buttons. Pressing the
+page up button scrolls through the following choices:
+If RECORD is pressed with QUANTIZE NOTE START & END being displayed, the release times of the
+notes will also be quantized to the selected quantize beat. If NOTE END is selected, only the release
+times of the notes will be quantized. If KEEP DURATION is selected, a note's duration will remain
+constant, i.e., if the start of a note is moved 1/16 note ahead, the release will also move 1/16 ahead.
+In SONG mode, the QUANTIZE button is used to select an amount of clock offset for each track in a
+song. These offsets are global settings used by all songs, and do not affect the individual parts directly.
+The purpose of this feature is to allow the user to compensate for MIDI delays, and sound devices with
+slow attack times. While holding the QUANTIZE button in SONG mode, the first track LED will light, all
+others will be off, and the display will read as follows:
+The value can be set from -48 to +48 384th notes (+/- 1/2 note) by using the keypad or the +/- buttons.
+Positive values represent a shift forward in time, and negative values represent a shift backward in time.
+- Page 24 -
+When entering a value with the keypad, the sign remains unchanged (except when entering 00, which is
+always positive). To change the sign, the +/- keys must be used to "pass through" zero to the other side.
+Each track can be selected and set independently. Of course, the first beat of the first part of a song
+cannot be advanced (it can't read minds...).
+- Page 25 -
+16 TRANSPOSE
+The TRANSPOSE function allows for a track or part to be transposed by a user specified number of
+semitones. When TRANSPOSE is held down in part mode, the display reads:
+The keypad can be used to enter a two-digit number of semitones to tranpose up from the original pitch
+(00-99), or the +/- buttons can be used to increment or decrement the amount. Like in ERASE mode, all
+eight track select LEDs are lit, indicating that the transposition will affect all tracks. If a track select
+button is pressed, all other track LEDs will turn off, and only the selected track will be lit. Additional
+tracks can be selected by pressing the select track buttons, which will toggle the LEDs on or off for each
+track. Pressing the page up or page down button will change the display to:
+Now the number entered from the keypad selects the number of semitones to transpose down. For either
+transpose up or down, pressing the RECORD button executes the transpose command, resulting in the
+following display:
+This display remains until RECORD is released. If a track that is transposed results in an underflow (notes
+below 0) or an overflow (notes above 127), the track will automatically re-adjust the pitch in octave
+increments until it is back in legal range.
+The TRANSPOSE button does not function while playing a part or song.
+- Page 26 -
+17 TEMPO
+The TEMPO button is used to change the tempo of a part or song. The tempo is stored with a song, and
+not with a part. While in part mode, the tempo remains at its previous setting until changed. While in
+song mode, the tempo changes to the programmed tempo each time a different song is selected. While
+in either part or song mode, pressing the tempo button results in the following display:
+While holding the TEMPO button, the +/- buttons can be used to select a new tempo, or a tempo can be
+entered directly with three digits on the keypad. Tempo changes are effective as soon as they are
+entered, and the RECORD button does not have to be pressed. In part mode, the RECORD button has no
+function for TEMPO. In song mode (while not playing), pressing RECORD stores the selected tempo into
+the current song. Otherwise, it is a temporary tempo change that will be forgotten once a different song
+is selected. If RECORD is pressed, the display changes to:
+This remains until the RECORD button is released. In both song and part mode, the tempo can be
+changed while playing.
+- Page 27 -
+18 MIDI FILTER
+The MIDI FILTER button is used to select what type of MIDI information will be recorded by the MMT-8.
+While holding down the MIDI FILTER button, the page up and page down buttons can be used to scroll
+through the possible choices, while the +/- buttons can be used to turn each function on or off. The
+possible displays that can be scrolled through are as follows:
+Pressing the `+' button changes the display to ON, pressing the `-' button changes the display to OFF. If
+a function is off, it will not be recorded into the MMT-8, and will not be echoed out the MIDI OUT jack if
+MIDI ECHO is on. The last page selects which MIDI channel the MMT-8 will record. Normally, it is set to
+ALL, which means that it will record on all MIDI channels. It can also be set to 1 through 16, which will
+cause the MMT-8 to ignore all channels but the selected one while recording. Selecting 00 on the keypad
+will display ALL, and the individual channels can be selected as 01 through 16. The default settings are as
+shown above, with all functions on except after touch and system exclusive.
+- Page 28 -
+19 CLOCK
+The CLOCK button is used to set the clock input and output functions of the MMT-8. Pressing and holding
+CLOCK button allows access to the CLOCK pages. The first page is used to select the clocking source, and
+will display one of the following choices:
+By using the keypad or +/- buttons, one of the three clocking sources can be selected. The default
+setting is MIDI & INTERNAL (1), with the other choices being INTERNAL ONLY (2) and TAPE SYNC (3).
+The page up and page down buttons can be used to scroll through the next two clock pages:
+The +/- buttons can be used to turn each function on or off, respectively. The default setting is MIDI &
+INTERNAL clock source, MIDI CLOCK OUT ON, and AUTO START ON. There is no TAPE SYNC out switch,
+since this function is always active. The MMT-8 does not need to turn on or off its internal clock, since it
+intelligently determines what clock to use when necessary. A functional description of the clocking
+possibilities are shown in the table below:
+ Clock Auto Press Receive Receive
+ Source Start Play Midi Start Tape Sync
+------------------------------------------------------
+ MIDI & INTERNAL OFF 2 6 1
+ MIDI & INTERNAL ON 2 6 1
+ INTERNAL ONLY OFF 2 1 1
+ INTERNAL ON 2 2 1
+ TAPE SYNC OFF 3 1 4
+ TAPE SYNC ON 3 1 5
+1. Do nothing.
+2. Start playing from beginning with internal clock.
+- Page 29 -
+3. Enter play mode, but don't start playing until tape sync clock occurs.
+4. If in play mode, start playing, otherwise ignore sync.
+5. Start playing from beginning with tape sync clock.
+6. Start playing from beginning with MIDI clock.
+If tape sync and auto start are on and a part or song is playing, it will stop playing automatically if the
+tape sync signal is interrupted for more that 1 second. If auto start is not on, the MMT-8 will wait in play
+for more sync pulses.
+- Page 30 -
+20 CLICK
+The CLICK button is used to set the rhythmic value that the metronome will have. Holding the CLICK
+button results in the following display:
+The 10 click value choices are 1/2, 1/4, 1/6, 1/8, 1/12, 1/16, 1/24, 1/32, 1/48, 1/64. The +/- buttons or
+the keypad can be used to scroll through the choices. The keypad buttons 0-9 can also be used to select
+the click value directly, with 0=1/2 and 9=1/64. Additional click pages can be accessed with the page up
+and page down buttons. Pressing the page up button once moves the cursor to the RECORD CLICK
+function, as follows:
+This function determines whether or not the metronome will click while in record mode. The default
+setting is ON, but it can be changed with the +/- buttons. The next page has two more click parameters
+which are accessed with the page up and page down buttons. They display as follows:
+The top function determines whether or not the metronome will click while in PLAY mode. The +/-
+buttons can be used to change the function on or off, respectively. The default setting is PLAY CLICK
+OFF. The last function determines the number of clicks that will be counted down when entering record.
+It can be set from 0 (OFF) to 99. The default is 4.
+- Page 31 -
+21 TAPE
+The TAPE button is used to access the tape interface features of the MMT-8. This allows the user to save
+and retrieve sequence data with an ordinary cassette recorder. Pressing and holding the TAPE button
+results in the following display:
+Pressing the RECORD button initiates the save to tape. Both buttons can now be released, since this
+operation may take over two minutes, during which the display will read:
+The display shows the current part or song being output. This display will advance until all data is output.
+Pressing the STOP/CONTINUE button will abort the operation. Before pressing RECORD, the page up and
+page down buttons can be used to access the other five tape pages. They are as follows:
+In all five of these pages, pressing RECORD initiates the operation. The verify function is used to ensure
+that the data just recorded to tape is good. LOAD ALL PARTS & SONGS FROM TAPE loads the entire
+sequence memory with the data on tape. LOAD ONE PART FROM TAPE and LOAD ONE SONG FROM
+TAPE allow a single part or song to be loaded from a tape. The keypad can be used to select the desired
+number. For operations involving output to tape, after pressing RECORD the display will change to the
+following:
+When the initial tone on the tape is detected, the display shows (depending on the page shown when
+RECORD was pressed):
+- Page 32 -
+For sending data to the MIDI OUT port, pressing RECORD from the SEND ALL PARTS & SONGS OUT
+MIDI page results in the display showing:
+Again, the RECORD and TAPE buttons can be released, and the display will continue until the operation is
+complete, with the currently loading or verifying part or song number being shown in the display. When
+loading one part or song, the display will continue to show the selected part or song number in the upper
+display. When sending out MIDI data, the display shown above will remain until the data has been sent
+out. After completion of the tape functions, the display will return to its previous state (select part or
+select song). If an error is encountered while loading from tape, the display will show ERROR as soon as
+it occurs, for example:
+The tape will attempt to continue to load, but it is possible that the data will be corrupted and therefore
+unusable.
+During any of the tape operations (but not the send MIDI function), the STOP/CONTINUE button can be
+used to abort the operation. The display will show:
+When loading in all parts and songs, aborting the tape may leave unusable data in memory. When
+loading one part or song, aborting after the selected part or song has passed will not cause any
+problems.
+- Page 33 -
+22 Storing to disk using MIDI
+system exclusive data dump
+The MMT-8 send to MIDI function is provided so that the data can be stored on a computer, a Yamaha
+MDF-1 (MIDI Filer) or a Yamaha DX-7IIFD. The data is sent out as one block of system exclusive data,
+with the length being determined by the amount of memory being used. If using the MIDI Filer, no more
+than 85% of the memory should be full or else the data will be too large for the MIDI Filer's buffer. No
+more than 25% of memory should be full when saving to a DX-7IIFD or its buffer will be filled as well.
+The MMT-8 will automatically receive MIDI system exclusive sequence data from any of these devices
+without having to select a specific page. If the system exclusive data starts to come in, the display will
+read:
+This display will remain until the data has been completely loaded, after which the MMT-8 will return to
+song 99. Note that any time the MMT-8 receives sequence data from MIDI, any data previously in
+memory will be lost.
+- Page 34 -
+23 Syncing the MMT-8 to tape
+It is possible to sync the MMT-8 to a tape recorder with the help of the TAPE SYNC mode. In this mode,
+the MMT-8 reads a master clock pulse from a track of a tape recorder, which keeps all of the
+sequencers/drum machines perfectly in time with the recorded information on the tape machine. This
+method has the advantage of eliminating the need to print drum machine or synthesiser parts on tape,
+since you can use the master clock recorded on tape (or "sync track") to trigger the drum machine and
+synthesisers via the sequencer.
+23.1 Recording the sync tone
+Before recording any audio information on the tape machine, you must lay a "sync tone" down on one
+track of the tape machine. This is usually done on an outside track (track 1 or 8 on an eight track
+machine; track 1 or 16 on a sixteen track machine, etc.) to keep the crosstalk to a minimum.
+1. Connect the TAPE OUT jack of the MMT-8 to the input of the desired track of the tape
+machine.
+2. Press PLAY on the MMT-8, then adjust the level of the track so that it reads
+approximately "0 VU".
+3. You must select a tempo for the song on the MMT-8 at this time as it cannot be
+changed later.
+4. Begin recording on the tape machine.
+5. Press PLAY on the MMT-8. Allow the MMT-8 to play through its entire song before
+stopping the recording. When the song has ended, stop the recording and rewind the
+tape machine. You are now ready to trigger the MMT-8 from the sync tone that you
+just recorded.
+Note:
+· There is no TAPE SYNC OUT switch as this is always active.
+· Keep the sync signal at about 0VU in order to avoid dropouts. If the MMT-8 does not
+see the sync tone for a half second, it will assume that the sync tone has ended and
+will go into STOP mode.
+· If possible, do not use any noise reduction, EQ, or signal processing on the sync tone.
+· Avoid recording high energy, high frequency tracks next to the sync track.
+- Page 35 -
+23.2 To clock the MMT-8 from tape sync
+1. Connect the output of the track of the tape machine that has the sync tone to the
+TAPE IN jack of the MMT-8.
+2. Press and hold the CLOCK button. The display will read:
+3. Use the keypad or +/- buttons to select TAPE SYNC IN. The display should read:
+4. Put the tape machine into PLAY. The MMT-8 will automatically start as soon as it
+receives the sync tone, causing any other sequencers connected to it to play. Be
+careful to return to the beginning of the sync tone since the MMT-8 will automatically
+begin playing any time that it recieves the sync tone.
+- Page 36 -
+24 START/STOP footswitch
+The START/STOP footswitch jack is provided for a momentary normally open footswitch that connects
+the jack's tip to its sleeve (ground). While in stop, the footswitch will function like the play button and
+start a part or song from the beginning. While in play, the footswitch acts like the stop button, and stops
+playing.
+- Page 37 -
+25 Memory
+25.1 Remaining memory
+Holding RECORD and pressing LENGTH causes the following display:
+This shows the amount of memory that has not been used. Note that some operations may not be
+possible even though it seems that there is still a small amount of memory available. This is due to the
+fact that the MMT-8 requires enough memory to duplicate a part before it can be recorded on, or length
+changed, or offset, etc. If a large part is attempted to be altered when there is not enough memory to
+complete the operation, the display will indicate that there is not enough memory available to complete
+the operation:
+25.2 Clearing memory
+To clear all of the MMT-8's memory and reinitialise all of its variables, turn power off, press and hold
+ERASE, PAGE UP, and PAGE DOWN, and turn on the power while holding these buttons down for 3
+seconds.
+- Page 38 -
+26 Auto Locate
+The MMT-8 has Auto Locate ability that allows you to go directly to a specific beat of a part without
+playing through the beats prior to the desired beat number.
+26.1 Part Mode:
+A: When the MMT-8 is in PLAY --
+· Press and hold either the fast forward or rewind button.
+· Enter the number of the desired beat (3 digits) using the keypad buttons.
+· Release the fast forward or rewind button.
+· The part will continue playing from the selected beat number.
+B: When the MMT-8 is in STOP --
+· Press and hold either the fast forward or rewind button.
+· Enter the number of the desired beat (3 digits) using the keypad buttons.
+· Release the fast forward or rewind button.
+· Press the STOP/CONTINUE button to begin playing from the selected beat.
+26.2 Song Mode:
+Follow instructions for PART mode. The MMT-8 will Auto Locate to the desired beat in the current step
+(part) of the song.
+- Page 39 -
+27 MIDI Implementation Chart
+Function Transmitted Recognized Remarks
+ Channel Default 1-16 1-16 User changeable
+Changed 1-16 1-16
+Mode Default
+Messages X X
+Altered
+Note Number True Voice 00-127 00-127
+Velocity Note on O O
+Note off X X
+After Touch Key's X X
+Chan's O O
+Pitch Bender O O
+Control Change 0-63 O O
+64-122 O O
+124-127 X X
+Program Change True # 0-127 0-127
+System Exclusive O O
+System Common Song Pos O O
+Song Sel X X
+Tune X X
+System Real Time Clock O O
+Messages O O
+Aux Messages Local Control X X
+All Notes Off X X
+Active Sense X X
+Reset X X
+Mode 1: Omni On, Poly Mode 2: Omni On, Mono O : Yes
+Mode 3: Omni Off, Poly Mode 4: Omni Off, Mono X : No
+- Page 40 -
+28 Troubleshooting Chart
+Symptom What's Probably Wrong What To Do
+Didn't record. Check MIDI connections.
+MIDI channels not properly
+corresponding with sound
+sources.
+Check MIDI channel
+assignments.
+No sound during playback of
+recorded parts
+Tracks are muted Check track mute selection.
+Won't record after touch or
+system exclusive data
+MIDI filters for after touch and
+system exclusive are enabled
+In MIDI filters mode, set after
+touch and sysex record to on
+Bad connections Check wiring
+Bad tape Use a certified data tape.
+Level of sync tone is too high or
+low
+Try a higher or lower level to
+tape.
+Won't save or load to tape
+Errors in data Re-save the data.
+Won't sync to tape. Bad connections. Check cables.
+Level on tape. Set level at or near 0VU.
+Turn off noise reduction, if
+possible.
+If problems aren't solved after troubleshooting and referring to the manual, consult your Alesis dealer for
+assistance.

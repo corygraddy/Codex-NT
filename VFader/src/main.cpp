@@ -18,6 +18,9 @@
 // - Users can route MIDI to CV using disting's MIDI→CV converter
 
 struct VFader : public _NT_algorithm {
+    // Specification settings (set at initialization, immutable)
+    bool useI2CFaders = true;  // Whether I2C faders are enabled (from specification)
+    
     // The 32 internal virtual faders (0.0-1.0)
     float internalFaders[32] = {0};
     
@@ -55,6 +58,9 @@ struct VFader : public _NT_algorithm {
     
     // Flag to trigger FADER parameter updates on next step()
     bool needsFaderUpdate = false;
+    
+    // Flag to prevent parameterChanged processing during UseI2C toggle
+    bool isTogglingI2C = false;
     
     // Name editing state
     char faderNames[32][13] = {{0}};  // 32 faders, 12 chars + null terminator (6 name + 5 category + 1 unused)
@@ -145,14 +151,21 @@ struct VFader : public _NT_algorithm {
         int activeNotes[128];
         int numActive = 0;
         
-        for (int midi = settings.bottomMidi; midi <= settings.topMidi && midi <= 127; midi++) {
+        // Safety check: ensure valid MIDI range
+        int bottomMidi = settings.bottomMidi;
+        int topMidi = settings.topMidi;
+        if (bottomMidi < 0) bottomMidi = 0;
+        if (topMidi > 127) topMidi = 127;
+        if (bottomMidi > topMidi) bottomMidi = topMidi;
+        
+        for (int midi = bottomMidi; midi <= topMidi && numActive < 128; midi++) {
             int noteInOctave = midi % 12;
             if (settings.chromaticScale[noteInOctave] == 1) {
                 activeNotes[numActive++] = midi;
             }
         }
         
-        if (numActive == 0) return settings.bottomMidi; // Safety fallback
+        if (numActive == 0) return bottomMidi; // Safety fallback
         if (numActive == 1) return activeNotes[0];      // Only one note
         
         // More aggressive handling for extremes - expand the edge zones
@@ -176,19 +189,26 @@ struct VFader : public _NT_algorithm {
     // Helper: Map fader value to value range (for Number mode)
     // Returns the scaled value (0-100) to display/send
     int snapToValueRange(float faderValue, const FaderNoteSettings& settings) {
+        // Safety checks
+        int bottomValue = settings.bottomValue;
+        int topValue = settings.topValue;
+        if (bottomValue < 0) bottomValue = 0;
+        if (topValue > 100) topValue = 100;
+        if (bottomValue > topValue) bottomValue = topValue;
+        
         // More aggressive handling for extremes - expand the edge zones
         // Bottom 5% always maps to bottom value, top 5% always maps to top value
-        if (faderValue <= 0.05f) return settings.bottomValue;
-        if (faderValue >= 0.95f) return settings.topValue;
+        if (faderValue <= 0.05f) return bottomValue;
+        if (faderValue >= 0.95f) return topValue;
         
         // Map fader value 0.05-0.95 to bottomValue-topValue range
         float adjustedValue = (faderValue - 0.05f) / 0.9f;  // Normalize 0.05-0.95 to 0-1
-        int range = settings.topValue - settings.bottomValue;
-        int scaledValue = settings.bottomValue + (int)(adjustedValue * range + 0.5f);
+        int range = topValue - bottomValue;
+        int scaledValue = bottomValue + (int)(adjustedValue * range + 0.5f);
         
         // Clamp to ensure we stay within bounds
-        if (scaledValue < settings.bottomValue) scaledValue = settings.bottomValue;
-        if (scaledValue > settings.topValue) scaledValue = settings.topValue;
+        if (scaledValue < bottomValue) scaledValue = bottomValue;
+        if (scaledValue > topValue) scaledValue = topValue;
         
         return scaledValue;
     }
@@ -382,6 +402,7 @@ static void initParameters() {
     parameters[kParamDriftControl].scaling = kNT_scalingNone;
     parameters[kParamDriftControl].enumStrings = driftControlStrings;
     
+    
     // CV Output parameters (8 CV outputs with mode and fader mapping)
     // Using NT_PARAMETER_CV_OUTPUT_WITH_MODE pattern manually
     for (int i = 0; i < 8; ++i) {
@@ -506,8 +527,14 @@ void calculateRequirements(_NT_algorithmRequirements& req, const int32_t*) {
     req.sram = sizeof(VFader);
 }
 
-_NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorithmRequirements&, const int32_t*) {
+_NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorithmRequirements&, const int32_t* specs) {
     VFader* alg = new (ptrs.sram) VFader();
+    
+    // Read specification: I2C Faders (0=Off, 1=On)
+    if (specs != NULL && specs[0] >= 0) {
+        alg->useI2CFaders = (specs[0] == 1);
+    }
+    
     initParameters();
     initPages();
     alg->parameters = parameters;
@@ -1596,8 +1623,16 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                 if (a->potLast[0] < 0.0f || fabsf(potValue - a->potLast[0]) > a->potDeadband) {
                     int targetCol = colInPage - 1;
                     int faderParam = targetCol;  // FADER 1-8 maps to 0-7
-                    int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);  // Scale to 0-16383
-                    NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                    int internalIdx = pageBase + targetCol;
+                    
+                    if (!a->useI2CFaders) {
+                        // Direct update when I2C is off
+                        a->internalFaders[internalIdx] = potValue;
+                    } else {
+                        // Use parameter system when I2C is on
+                        int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);
+                        NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                    }
                     a->potLast[0] = potValue;
                 }
             }
@@ -1614,8 +1649,16 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
             // Apply deadband - only update if change is significant
             if (a->potLast[1] < 0.0f || fabsf(potValue - a->potLast[1]) > a->potDeadband) {
                 int faderParam = colInPage;  // FADER 1-8 maps to 0-7
-                int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);  // Scale to 0-16383
-                NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                int internalIdx = pageBase + colInPage;
+                
+                if (!a->useI2CFaders) {
+                    // Direct update when I2C is off
+                    a->internalFaders[internalIdx] = potValue;
+                } else {
+                    // Use parameter system when I2C is on
+                    int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);
+                    NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                }
                 a->potLast[1] = potValue;
             }
         }
@@ -1633,8 +1676,16 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data) {
                 if (a->potLast[2] < 0.0f || fabsf(potValue - a->potLast[2]) > a->potDeadband) {
                     int targetCol = colInPage + 1;
                     int faderParam = targetCol;  // FADER 1-8 maps to 0-7
-                    int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);  // Scale to 0-16383
-                    NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                    int internalIdx = pageBase + targetCol;
+                    
+                    if (!a->useI2CFaders) {
+                        // Direct update when I2C is off
+                        a->internalFaders[internalIdx] = potValue;
+                    } else {
+                        // Use parameter system when I2C is on
+                        int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);
+                        NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                    }
                     a->potLast[2] = potValue;
                 }
             }
@@ -1659,25 +1710,47 @@ void setupUi(_NT_algorithm* self, _NT_float3& pots) {
 void parameterChanged(_NT_algorithm* self, int p) {
     VFader* a = (VFader*)self;
     
+    // Ignore all parameter changes while toggling I2C mode
+    if (a->isTogglingI2C) {
+        return;
+    }
+    
     // Handle FADER 1-8 changes: write to internal faders on current page
     if (p >= kParamFader1 && p <= kParamFader8) {
         int faderIdx = p - kParamFader1;  // 0-7
         int currentPage = (int)self->v[kParamPage];  // 0-3
+        
+        // Bounds check currentPage
+        if (currentPage < 0) currentPage = 0;
+        if (currentPage > 3) currentPage = 3;
+        
         int internalIdx = currentPage * 8 + faderIdx;  // 0-31
+        
+        // Bounds check internalIdx (safety check)
+        if (internalIdx < 0 || internalIdx >= 32) {
+            return;  // Invalid index, skip processing
+        }
         
         // Scale parameter (0-16383) to internal value (0.0-1.0)
         float v = self->v[p] / 16383.0f;
         if (v < 0.0f) v = 0.0f;
         else if (v > 1.0f) v = 1.0f;
         
-        // Apply min/max deadzones BEFORE pickup mode logic to prevent false catches at endpoints
-        // Larger deadzones (3%) at min/max to prevent getting stuck
+        // Apply min/max deadzones
         if (v < 0.03f) {
             v = 0.0f;
         } else if (v > 0.97f) {
             v = 1.0f;
         }
         
+        // Check if I2C faders are enabled (from specification)
+        if (!a->useI2CFaders) {
+            // I2C disabled - direct control from pots only, no pickup mode logic
+            a->internalFaders[internalIdx] = v;
+            return;
+        }
+        
+        // I2C enabled - use full pickup mode logic
         // Get pickup mode setting (0=Scaled, 1=Catch)
         int pickupMode = (int)(self->v[kParamPickupMode] + 0.5f);
         
@@ -1702,8 +1775,16 @@ void parameterChanged(_NT_algorithm* self, int p) {
         float movementDelta = v - a->lastPhysicalPos[internalIdx];
         // Use threshold that accounts for coarse resolution (500 steps = 0.002 per step)
         bool movingContinuously = fabsf(movementDelta) > 0.001f;  // ~0.5 coarse steps
-        bool sameDirection = (movementDelta > 0 && (v - a->physicalFaderPos[internalIdx]) > 0) ||
-                            (movementDelta < 0 && (v - a->physicalFaderPos[internalIdx]) < 0);
+        
+        // Safety check: ensure physicalFaderPos is valid before calculating sameDirection
+        float prevPhysical = a->physicalFaderPos[internalIdx];
+        if (prevPhysical < 0.0f || prevPhysical > 1.0f) {
+            prevPhysical = v;  // Use current value if previous was invalid
+            a->physicalFaderPos[internalIdx] = v;
+        }
+        
+        bool sameDirection = (movementDelta > 0 && (v - prevPhysical) > 0) ||
+                            (movementDelta < 0 && (v - prevPhysical) < 0);
         
         // Update tracking
         a->lastPhysicalPos[internalIdx] = a->physicalFaderPos[internalIdx];
@@ -2198,12 +2279,23 @@ static bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
     return true;
 }
 
+// Specifications for algorithm initialization
+static const _NT_specification specifications[] = {
+    {
+        .name = "I2C Faders",
+        .min = 0,
+        .max = 1,
+        .def = 1,  // Default to On
+        .type = kNT_typeBoolean
+    }
+};
+
 static const _NT_factory factory = {
     .guid = NT_MULTICHAR('V','F','D','R'),
     .name = "VFader",
     .description = "32 virtual faders, 7/14-bit MIDI CC, CV outputs, F8R control",
-    .numSpecifications = 0,
-    .specifications = NULL,
+    .numSpecifications = 1,
+    .specifications = specifications,
     .calculateStaticRequirements = NULL,
     .initialise = NULL,
     .calculateRequirements = calculateRequirements,

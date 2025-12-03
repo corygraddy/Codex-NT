@@ -1,8 +1,0 @@
-#!/bin/bash
-#
-#  Restarts pulseaudio (Debian-based systems use the --user mode).
-
-echo "Restarting PulseAudio. This action takes too many seconds...."
-systemctl --user restart pulseaudio.service
-
-# vim: ts=3

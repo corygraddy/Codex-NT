@@ -6,1729 +6,2202 @@
 #include <cmath>
 #include <cstring>
 
-// VSeq: 3 CV sequencers + 1 gate sequencer
-// - Clock and Reset inputs
-// - 3 CV sequencers × 3 outputs = 9 CV outputs
-// - 1 Gate sequencer with 6 tracks
-// - Each sequencer has 32 steps
-// - Direction control: Forward, Backward, Pingpong
-// - Section looping with configurable repeats
-// - Fill feature for gate sequencer
+#define VFADER_BUILD 49  // Full 14-bit resolution: parameters 0-16383
 
-struct VSeq : public _NT_algorithm {
-    // Sequencer data: 3 CV sequencers × 32 steps × 3 outputs
-    int16_t stepValues[3][32][3];
+// VFader: Simple paging architecture with MIDI output
+// - 8 FADER parameters (external controls, what F8R maps to)
+// - 1 PAGE parameter (selects which 8 of 32 internal faders to control)
+// - 1 MIDI MODE parameter (7-bit or 14-bit MIDI CC output)
+// - 32 internal faders stored in state (0.0-1.0)
+// - Outputs: MIDI CC 1-32 (7-bit) or CC 0-31 (14-bit with standard pairing)
+// - Parameters accept 0-16383 for full 14-bit MIDI resolution
+// - Users can route MIDI to CV using disting's MIDI→CV converter
+
+struct VFader : public _NT_algorithm {
+    // The 32 internal virtual faders (0.0-1.0)
+    float internalFaders[32] = {0};
     
-    // Gate sequencer data: 6 tracks × 32 steps
-    bool gateSteps[6][32];
+    // MIDI change tracking (last values sent - initialize to -1 to force first send)
+    float lastMidiValues[32] = {-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                                 -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                                 -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                                 -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
     
-    // CV Sequencer state (3 sequencers)
-    int currentStep[3];         // Current step for each sequencer (0-31)
-    bool pingpongForward[3];    // Direction state for pingpong mode
-    int section1Counter[3];     // Track section 1 repeat count
-    int section2Counter[3];     // Track section 2 repeat count
-    bool inSection2[3];         // Which section is currently playing
+    // Pickup mode: track physical fader position for relative control
+    float physicalFaderPos[32] = {0};  // Last known physical position (0.0-1.0 from parameter)
+    float lastPhysicalPos[32] = {0};   // Previous physical position to detect direction
+    float pickupPivot[32] = {-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                              -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                              -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                              -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};  // Physical position when entering pickup mode
+    float pickupStartValue[32] = {0};  // Value when entering pickup mode
+    bool inPickupMode[32] = {false};  // Whether fader is in pickup/relative mode
+    bool inSlewMode[32] = {false};    // Whether fader is slewing to catch target
+    float slewTarget[32] = {0};       // Target value for slewing
+    uint8_t pickupSettleFrames[32] = {0};  // Frames to wait after exiting pickup before re-entering (prevent jitter)
     
-    // Gate sequencer state (6 tracks)
-    int gateCurrentStep[6];     // Current step for each gate track (0-31)
-    bool gatePingpongForward[6]; // Direction state for pingpong mode
-    int gateSwingCounter[6];    // Counter for swing timing
-    int gateSection1Counter[6]; // Track section 1 repeat count
-    int gateSection2Counter[6]; // Track section 2 repeat count
-    bool gateInSection2[6];     // Which section is currently playing
-    bool gateInFill[6];         // Whether we're in the fill section
-    int gateTriggerCounter[6];  // Countdown for trigger pulse duration
-    bool gateTriggered[6];      // Whether gate was just triggered this step
+    // For 14-bit: alternate between sending MSB and LSB across steps
+    bool send14bitPhase = false;  // false = send MSB, true = send LSB
     
-    // Edge detection
-    float lastClockIn;
-    float lastResetIn;
+    // Sticky endpoints: hold min/max values for a few frames to ensure they register
+    uint8_t endpointHoldCounter[32] = {0};  // Frames remaining to hold endpoint value
     
     // UI state
-    int selectedStep;           // 0-31
-    int selectedSeq;            // 0-2 for CV seqs, 3 for gate seq
-    int selectedTrack;          // 0-5 (for gate sequencer)
-    int lastSelectedStep;       // Track when step changes to update pots
-    uint16_t lastButton4State;  // For debouncing button 4
-    uint16_t lastEncoderRButton; // For debouncing right encoder button
-    float lastPotLValue;        // Track left pot position for relative movement
-    bool potCaught[3];          // Track if each pot has caught the step value
-    bool trackPotCaught;        // Track if left pot has caught track position (for gate seq)
+    uint8_t page = 1;    // 1..4 (for display)
+    uint8_t lastPage = 1; // Track when page changes
+    uint8_t sel = 1;     // 1..32 (for display)
+    bool uiActive = false;
+    uint8_t uiActiveTicks = 0;
     
-    // Debug: track actual output bus assignments
-    int debugOutputBus[12];
+    // Flag to trigger FADER parameter updates on next step()
+    bool needsFaderUpdate = false;
     
-    VSeq() {
-        // Initialize step values to test patterns (visible voltages)
-        // Each sequencer gets different voltage levels for testing
-        for (int seq = 0; seq < 3; seq++) {
-            for (int step = 0; step < 32; step++) {
-                for (int out = 0; out < 3; out++) {
-                    // Create test patterns: different voltages for each output
-                    // seq 0: 2V, 4V, 6V
-                    // seq 1: 1V, 3V, 5V
-                    // seq 2: 3V, 5V, 7V
-                    float voltage = 2.0f + (seq * 1.0f) + (out * 2.0f);
-                    if (seq == 1) voltage -= 1.0f;
-                    
-                    // Convert voltage (0-10V range) to int16_t (-32768 to 32767)
-                    // 0V = -32768, 10V = 32767
-                    float normalized = voltage / 10.0f;  // 0.0-1.0
-                    stepValues[seq][step][out] = (int16_t)((normalized * 65535.0f) - 32768.0f);
-                }
+    // Name editing state
+    char faderNames[32][13] = {{0}};  // 32 faders, 12 chars + null terminator (6 name + 5 category + 1 unused)
+    bool nameEditMode = false;       // Whether we're currently editing a name
+    uint8_t nameEditPos = 0;         // Current character position being edited (0-10: 0-5 for name, 6-10 for category)
+    uint8_t nameEditFader = 0;       // Which fader's name is being edited (0-31)
+    uint8_t nameEditPage = 0;        // Which edit page: 0=name/category, 1=settings
+    uint8_t nameEditSettingPos = 0;  // Which setting being edited: 0=displayMode, 1=sharpFlat, 2=bottomNote, 3=bottomOctave, 4=topNote, 5=topOctave
+    float lastPotR = -1.0f;          // Last pot R value for page detection in name edit mode
+    uint16_t lastButtonState = 0;    // Track last button state for debouncing
+    bool namesModified = false;      // Whether names have been edited since last preset save
+    
+    // Per-fader note settings
+    struct FaderNoteSettings {
+        uint8_t displayMode;         // 0=Number (0-100), 1=Note
+        uint8_t sharpFlat;           // 0=Sharp, 1=Flat
+        uint8_t bottomMidi;          // 0-127 (MIDI note number, C-1 = 0, G9 = 127)
+        uint8_t topMidi;             // 0-127 (MIDI note number)
+        uint8_t bottomValue;         // 0-100 (for Number mode)
+        uint8_t topValue;            // 0-100 (for Number mode)
+        uint8_t chromaticScale[12];  // 0=off, 1=on for each note (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
+        uint8_t controlAllCount;     // 0-31: number of faders to the right to control (0=disabled)
+        uint8_t controlAllMode;      // 0=Absolute (offset), 1=Relative (proportional)
+    };
+    FaderNoteSettings faderNoteSettings[32];  // Settings for all 32 faders
+    
+    // Gang fader reference values - the "50%" position for each fader
+    float faderReferenceValues[32] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+                                       0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+                                       0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+                                       0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+    
+    // Track last gang fader values to detect changes
+    float lastGangValues[32] = {-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                                -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                                -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
+                                -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+    
+    // Initialize note settings with defaults
+    void initializeNoteSettings() {
+        for (int i = 0; i < 32; i++) {
+            faderNoteSettings[i].displayMode = 0;     // Default to Number mode
+            faderNoteSettings[i].sharpFlat = 0;       // Default to Sharps
+            faderNoteSettings[i].bottomMidi = 36;     // C1 (MIDI 36)
+            faderNoteSettings[i].topMidi = 96;        // C6 (MIDI 96)
+            faderNoteSettings[i].controlAllCount = 0; // Gang fader disabled by default
+            faderNoteSettings[i].controlAllMode = 0;  // Default to Absolute mode
+            faderNoteSettings[i].bottomValue = 0;     // 0% for Number mode
+            faderNoteSettings[i].topValue = 100;      // 100% for Number mode
+            // Initialize chromatic scale - all notes ON by default
+            for (int j = 0; j < 12; j++) {
+                faderNoteSettings[i].chromaticScale[j] = 1;
             }
-            currentStep[seq] = 0;
-            pingpongForward[seq] = true;
-            section1Counter[seq] = 0;
-            section2Counter[seq] = 0;
-            inSection2[seq] = false;
-        }
-        
-        lastClockIn = 0.0f;
-        lastResetIn = 0.0f;
-        selectedStep = 0;
-        selectedSeq = 0;
-        selectedTrack = 0;
-        lastSelectedStep = 0;
-        lastButton4State = 0;
-        lastEncoderRButton = 0;
-        lastPotLValue = 0.5f;
-        potCaught[0] = false;
-        potCaught[1] = false;
-        potCaught[2] = false;
-        trackPotCaught = false;
-        
-        // Initialize gate sequencer
-        for (int track = 0; track < 6; track++) {
-            for (int step = 0; step < 32; step++) {
-                gateSteps[track][step] = false;
-            }
-            gateCurrentStep[track] = 0;
-            gatePingpongForward[track] = true;
-            gateSwingCounter[track] = 0;
-            gateSection1Counter[track] = 0;
-            gateSection2Counter[track] = 0;
-            gateInSection2[track] = false;
-            gateInFill[track] = false;
-            gateTriggerCounter[track] = 0;
-            gateTriggered[track] = false;
-        }
-        
-        for (int i = 0; i < 12; i++) {
-            debugOutputBus[i] = 0;
         }
     }
     
-    // Advance sequencer to next step based on direction, with section looping
-    void advanceSequencer(int seq, int direction, int stepCount, int splitPoint, int sec1Reps, int sec2Reps) {
-        // If no sections (splitPoint >= stepCount), use simple wrapping logic
-        if (splitPoint >= stepCount) {
-            if (direction == 0) {
-                // Forward
-                currentStep[seq]++;
-                if (currentStep[seq] >= stepCount) {
-                    currentStep[seq] = 0;
-                }
-            } else if (direction == 1) {
-                // Backward
-                currentStep[seq]--;
-                if (currentStep[seq] < 0) {
-                    currentStep[seq] = stepCount - 1;
-                }
-            } else {
-                // Pingpong
-                if (pingpongForward[seq]) {
-                    currentStep[seq]++;
-                    if (currentStep[seq] >= stepCount) {
-                        currentStep[seq] = stepCount - 1;
-                        pingpongForward[seq] = false;
-                    }
-                } else {
-                    currentStep[seq]--;
-                    if (currentStep[seq] < 0) {
-                        currentStep[seq] = 0;
-                        pingpongForward[seq] = true;
-                    }
-                }
-            }
-            return;
-        }
+    // Helper: Get note name string from MIDI note number (0-127)
+    void getMidiNoteName(uint8_t midiNote, uint8_t sharpFlat, char* buffer, int bufSize) {
+        static const char* noteNamesSharp[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        static const char* noteNamesFlat[] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
         
-        // Section-based logic
-        if (direction == 0) {
-            // Forward
-            currentStep[seq]++;
-            
-            // Check if we've reached the end of a section
-            if (!inSection2[seq]) {
-                // In section 1
-                if (currentStep[seq] >= splitPoint) {
-                    section1Counter[seq]++;
-                    if (section1Counter[seq] >= sec1Reps) {
-                        // Move to section 2
-                        inSection2[seq] = true;
-                        section1Counter[seq] = 0;
-                    } else {
-                        // Repeat section 1
-                        currentStep[seq] = 0;
-                    }
-                }
-            } else {
-                // In section 2
-                if (currentStep[seq] >= stepCount) {
-                    section2Counter[seq]++;
-                    if (section2Counter[seq] >= sec2Reps) {
-                        // Loop back to section 1
-                        inSection2[seq] = false;
-                        section2Counter[seq] = 0;
-                        currentStep[seq] = 0;
-                    } else {
-                        // Repeat section 2
-                        currentStep[seq] = splitPoint;
-                    }
-                }
-            }
-        } else if (direction == 1) {
-            // Backward
-            currentStep[seq]--;
-            
-            // Check if we've reached the start of a section
-            if (inSection2[seq]) {
-                // In section 2
-                if (currentStep[seq] < splitPoint) {
-                    section2Counter[seq]++;
-                    if (section2Counter[seq] >= sec2Reps) {
-                        // Move to section 1
-                        inSection2[seq] = false;
-                        section2Counter[seq] = 0;
-                    } else {
-                        // Repeat section 2
-                        currentStep[seq] = stepCount - 1;
-                    }
-                }
-            } else {
-                // In section 1
-                if (currentStep[seq] < 0) {
-                    section1Counter[seq]++;
-                    if (section1Counter[seq] >= sec1Reps) {
-                        // Move to section 2
-                        inSection2[seq] = true;
-                        section1Counter[seq] = 0;
-                        currentStep[seq] = stepCount - 1;
-                    } else {
-                        // Repeat section 1
-                        currentStep[seq] = splitPoint - 1;
-                    }
-                }
-            }
+        if (midiNote > 127) midiNote = 127;
+        
+        int octave = (midiNote / 12) - 1;  // MIDI 0-11 = octave -1, 12-23 = octave 0, etc.
+        int noteInOctave = midiNote % 12;
+        const char* noteName = (sharpFlat == 0) ? noteNamesSharp[noteInOctave] : noteNamesFlat[noteInOctave];
+        
+        // Manually build string: note + octave
+        int idx = 0;
+        buffer[idx++] = noteName[0];
+        if (noteName[1] != '\0') {
+            buffer[idx++] = noteName[1];
+        }
+        // Handle octave (can be -1 to 9)
+        if (octave < 0) {
+            buffer[idx++] = '-';
+            buffer[idx++] = '1';
         } else {
-            // Pingpong
-            if (pingpongForward[seq]) {
-                currentStep[seq]++;
-                if (currentStep[seq] >= stepCount) {
-                    currentStep[seq] = stepCount - 1;
-                    pingpongForward[seq] = false;
-                }
-            } else {
-                currentStep[seq]--;
-                if (currentStep[seq] <= 0) {
-                    currentStep[seq] = 0;
-                    pingpongForward[seq] = true;
-                }
-            }
+            buffer[idx++] = '0' + (char)octave;
         }
+        buffer[idx] = '\0';
     }
     
-    void resetSequencer(int seq) {
-        int direction = 0;  // Will be set from parameters in process()
-        if (direction == 1) {
-            // Backward: start at last step
-            currentStep[seq] = 31;
-        } else {
-            // Forward and Pingpong: start at step 0
-            currentStep[seq] = 0;
+    // Helper: Snap fader value to active note in chromatic scale
+    // Returns the MIDI note number to display/send
+    int snapToActiveNote(float faderValue, const FaderNoteSettings& settings) {
+        // Build list of active MIDI notes in range
+        int activeNotes[128];
+        int numActive = 0;
+        
+        for (int midi = settings.bottomMidi; midi <= settings.topMidi && midi <= 127; midi++) {
+            int noteInOctave = midi % 12;
+            if (settings.chromaticScale[noteInOctave] == 1) {
+                activeNotes[numActive++] = midi;
+            }
         }
-        pingpongForward[seq] = true;
-        section1Counter[seq] = 0;
-        section2Counter[seq] = 0;
-        inSection2[seq] = false;
+        
+        if (numActive == 0) return settings.bottomMidi; // Safety fallback
+        if (numActive == 1) return activeNotes[0];      // Only one note
+        
+        // More aggressive handling for extremes - expand the edge zones
+        // Bottom 5% always maps to first note, top 5% always maps to last note
+        if (faderValue <= 0.05f) return activeNotes[0];
+        if (faderValue >= 0.95f) return activeNotes[numActive - 1];
+        
+        // Map fader value to index in active notes array
+        // Adjust the range to account for the edge zones we handled above
+        // Map 0.05-0.95 range to 0-(numActive-1) indices
+        float adjustedValue = (faderValue - 0.05f) / 0.9f;  // Normalize 0.05-0.95 to 0-1
+        float floatIndex = adjustedValue * (numActive - 1);
+        int index = (int)(floatIndex + 0.5f);  // Round to nearest
+        
+        if (index < 0) index = 0;
+        if (index >= numActive) index = numActive - 1;
+        
+        return activeNotes[index];
     }
     
-    // Advance gate sequencer to next step based on direction, with section looping and fill
-    void advanceGateSequencer(int track, int direction, int trackLength, int splitPoint, 
-                              int sec1Reps, int sec2Reps, int fillStart) {
-        // If no sections (splitPoint >= trackLength), use simple wrapping logic
-        if (splitPoint >= trackLength) {
-            if (direction == 0) {
-                // Forward
-                gateCurrentStep[track]++;
-                if (gateCurrentStep[track] >= trackLength) {
-                    gateCurrentStep[track] = 0;
-                }
-            } else if (direction == 1) {
-                // Backward
-                gateCurrentStep[track]--;
-                if (gateCurrentStep[track] < 0) {
-                    gateCurrentStep[track] = trackLength - 1;
-                }
-            } else if (direction == 2) {
-                // Pingpong
-                if (gatePingpongForward[track]) {
-                    gateCurrentStep[track]++;
-                    if (gateCurrentStep[track] >= trackLength) {
-                        gateCurrentStep[track] = trackLength - 2;
-                        if (gateCurrentStep[track] < 0) gateCurrentStep[track] = 0;
-                        gatePingpongForward[track] = false;
-                    }
-                } else {
-                    gateCurrentStep[track]--;
-                    if (gateCurrentStep[track] < 0) {
-                        gateCurrentStep[track] = 1;
-                        if (gateCurrentStep[track] >= trackLength) gateCurrentStep[track] = trackLength - 1;
-                        gatePingpongForward[track] = true;
-                    }
-                }
-            }
-            return;
-        }
+    // Helper: Map fader value to value range (for Number mode)
+    // Returns the scaled value (0-100) to display/send
+    int snapToValueRange(float faderValue, const FaderNoteSettings& settings) {
+        // More aggressive handling for extremes - expand the edge zones
+        // Bottom 5% always maps to bottom value, top 5% always maps to top value
+        if (faderValue <= 0.05f) return settings.bottomValue;
+        if (faderValue >= 0.95f) return settings.topValue;
         
-        // Section-based logic
-        // Determine section boundaries
-        int section1End = (splitPoint > 0 && splitPoint < trackLength) ? splitPoint : trackLength;
+        // Map fader value 0.05-0.95 to bottomValue-topValue range
+        float adjustedValue = (faderValue - 0.05f) / 0.9f;  // Normalize 0.05-0.95 to 0-1
+        int range = settings.topValue - settings.bottomValue;
+        int scaledValue = settings.bottomValue + (int)(adjustedValue * range + 0.5f);
         
-        if (direction == 0) {  // Forward
-            gateCurrentStep[track]++;
-            
-            // Check for fill trigger on last repetition of section 1
-            // Only if sections are enabled (splitPoint < trackLength) AND fill is enabled (fillStart > 0)
-            // AND we're actually repeating section 1 (sec1Reps > 1)
-            if (!gateInSection2[track] && 
-                splitPoint > 0 && 
-                splitPoint < trackLength &&
-                fillStart > 0 &&
-                fillStart < splitPoint &&
-                sec1Reps > 1 &&
-                gateSection1Counter[track] == sec1Reps - 1 &&
-                gateCurrentStep[track] >= fillStart) {
-                // Fill triggered! Jump to section 2
-                gateSection1Counter[track] = 0;
-                gateInSection2[track] = true;
-                gateCurrentStep[track] = splitPoint;
-            }
-            // Check if we've crossed a section boundary
-            else if (!gateInSection2[track] && gateCurrentStep[track] >= section1End) {
-                // Completed section 1
-                gateSection1Counter[track]++;
-                if (gateSection1Counter[track] >= sec1Reps) {
-                    // Move to section 2
-                    gateSection1Counter[track] = 0;
-                    gateInSection2[track] = true;
-                    if (splitPoint > 0) {
-                        gateCurrentStep[track] = splitPoint;
-                    } else {
-                        gateCurrentStep[track] = 0;
-                    }
-                } else {
-                    // Repeat section 1
-                    gateCurrentStep[track] = 0;
-                }
-            } else if (gateInSection2[track] && gateCurrentStep[track] >= trackLength) {
-                // Completed section 2
-                gateSection2Counter[track]++;
-                if (gateSection2Counter[track] >= sec2Reps) {
-                    // Back to section 1
-                    gateSection2Counter[track] = 0;
-                    gateInSection2[track] = false;
-                }
-                gateCurrentStep[track] = (splitPoint > 0) ? splitPoint : 0;
-                if (!gateInSection2[track]) {
-                    gateCurrentStep[track] = 0;
-                }
-            }
-        } else if (direction == 1) {  // Backward
-            gateCurrentStep[track]--;
-            
-            if (gateInSection2[track] && gateCurrentStep[track] < splitPoint) {
-                gateSection2Counter[track]++;
-                if (gateSection2Counter[track] >= sec2Reps) {
-                    gateSection2Counter[track] = 0;
-                    gateInSection2[track] = false;
-                    gateCurrentStep[track] = section1End - 1;
-                } else {
-                    gateCurrentStep[track] = trackLength - 1;
-                }
-            } else if (!gateInSection2[track] && gateCurrentStep[track] < 0) {
-                gateSection1Counter[track]++;
-                if (gateSection1Counter[track] >= sec1Reps) {
-                    gateSection1Counter[track] = 0;
-                    gateInSection2[track] = true;
-                    gateCurrentStep[track] = trackLength - 1;
-                } else {
-                    gateCurrentStep[track] = section1End - 1;
-                }
-            }
-        } else if (direction == 2) {  // Pingpong
-            if (gatePingpongForward[track]) {
-                gateCurrentStep[track]++;
-                if (gateCurrentStep[track] >= trackLength) {
-                    gateCurrentStep[track] = trackLength - 2;
-                    if (gateCurrentStep[track] < 0) gateCurrentStep[track] = 0;
-                    gatePingpongForward[track] = false;
-                }
-            } else {
-                gateCurrentStep[track]--;
-                if (gateCurrentStep[track] < 0) {
-                    gateCurrentStep[track] = 1;
-                    if (gateCurrentStep[track] >= trackLength) gateCurrentStep[track] = trackLength - 1;
-                    gatePingpongForward[track] = true;
-                }
-            }
-        }
+        // Clamp to ensure we stay within bounds
+        if (scaledValue < settings.bottomValue) scaledValue = settings.bottomValue;
+        if (scaledValue > settings.topValue) scaledValue = settings.topValue;
+        
+        return scaledValue;
     }
+
+    // Pot throttling and deadband
+    float potLast[3] = { -1.0f, -1.0f, -1.0f };
+    uint32_t potLastStep[3] = { 0, 0, 0 };
+    uint8_t minStepsBetweenPotWrites = 2;
+    float potDeadband = 0.03f;  // Minimum change required (3%) to update fader - increased from 1.5% for better touch sensitivity
+    uint32_t stepCounter = 0;
+    
+    // DEBUG tracking - captures state for JSON export
+    struct DebugSnapshot {
+        uint32_t stepCount;
+        float fader0Value;
+        float lastMidiValue0;
+        bool hasControl0;
+        int paramChangedCount;
+        int midiSentCount;
+        float lastParamChangedValue;
+        uint32_t lastParamChangedStep;
+        
+        // Pickup mode debug tracking
+        int pickupEnterCount;
+        int pickupExitCount;
+        float lastPhysicalPos;
+        float lastPickupPivot;
+        float lastPickupStartValue;
+        float lastMismatch;
+        bool lastCaughtUpUp;
+        bool lastCaughtUpDown;
+        
+        // UI interaction debug tracking
+        uint16_t lastButtonState;
+        bool nameEditModeActive;
+        uint8_t nameEditFaderIdx;
+        uint8_t nameEditCursorPos;
+        int encoderLCount;
+        int encoderRCount;
+        uint8_t currentPage;
+        uint8_t currentSel;
+        uint8_t nameEditPageNum;
+        uint8_t nameEditSettingIdx;
+        int uiFreezeCounter;
+        
+        // Note mode debug tracking for selected fader
+        uint8_t selectedFaderDisplayMode;
+        uint8_t selectedFaderBottomMidi;
+        uint8_t selectedFaderTopMidi;
+        uint8_t selectedFaderBottomValue;
+        uint8_t selectedFaderTopValue;
+        uint8_t lastSentMidiValue;
+        float lastSentFaderValue;
+        uint8_t snappedNoteValue;
+        uint8_t scaledNumberValue;  // The 0-100 value after snapToValueRange
+        
+        // Pickup indicator debug - for all 32 faders
+        bool pickupModeActive[32];
+        float internalFaderValue[32];
+        float physicalFaderValue[32];
+        float pickupPivotValue[32];
+        float pickupStartValueArray[32];
+    };
+    
+    DebugSnapshot debugSnapshot = {};  // Zero-initialize all members
+    
+    // Constructor
+    VFader() {}
 };
 
-// Helper function to set a pixel in NT_screen
-// Screen is 256x64, stored as 128x64 bytes (2 pixels per byte, 4-bit grayscale)
-inline void setPixel(int x, int y, int brightness) {
-    if (x < 0 || x >= 256 || y < 0 || y >= 64) return;
-    
-    int byteIndex = (y * 128) + (x / 2);
-    int pixelShift = (x & 1) ? 0 : 4;  // Even pixels in high nibble, odd in low
-    
-    // Clear the nibble and set new value
-    NT_screen[byteIndex] = (NT_screen[byteIndex] & (0x0F << (4 - pixelShift))) | ((brightness & 0x0F) << pixelShift);
-}
-
-// Parameter indices
+// parameters - 8 FADER + 1 PAGE + 1 MIDI MODE + 1 PICKUP MODE + 1 DEBUG = 12 total
 enum {
-    kParamClockIn = 0,
-    kParamResetIn,
-    // Sequencer 1 outputs
-    kParamSeq1Out1,
-    kParamSeq1Out2,
-    kParamSeq1Out3,
-    // Sequencer 2 outputs
-    kParamSeq2Out1,
-    kParamSeq2Out2,
-    kParamSeq2Out3,
-    // Sequencer 3 outputs
-    kParamSeq3Out1,
-    kParamSeq3Out2,
-    kParamSeq3Out3,
-    // MIDI channels for CV sequencer outputs (9 total)
-    kParamSeq1Midi1,
-    kParamSeq1Midi2,
-    kParamSeq1Midi3,
-    kParamSeq2Midi1,
-    kParamSeq2Midi2,
-    kParamSeq2Midi3,
-    kParamSeq3Midi1,
-    kParamSeq3Midi2,
-    kParamSeq3Midi3,
-    // MIDI channel for trigger sequencer (shared by all 6 tracks)
-    kParamTriggerMidiChannel,
-    // Per-sequencer parameters
-    kParamSeq1ClockDiv,
-    kParamSeq1Direction,
-    kParamSeq1StepCount,
-    kParamSeq1SplitPoint,
-    kParamSeq1Section1Reps,
-    kParamSeq1Section2Reps,
-    kParamSeq2ClockDiv,
-    kParamSeq2Direction,
-    kParamSeq2StepCount,
-    kParamSeq2SplitPoint,
-    kParamSeq2Section1Reps,
-    kParamSeq2Section2Reps,
-    kParamSeq3ClockDiv,
-    kParamSeq3Direction,
-    kParamSeq3StepCount,
-    kParamSeq3SplitPoint,
-    kParamSeq3Section1Reps,
-    kParamSeq3Section2Reps,
-    // Gate outputs and MIDI CCs (6 tracks)
-    kParamGate1Out,
-    kParamGate1CC,
-    kParamGate2Out,
-    kParamGate2CC,
-    kParamGate3Out,
-    kParamGate3CC,
-    kParamGate4Out,
-    kParamGate4CC,
-    kParamGate5Out,
-    kParamGate5CC,
-    kParamGate6Out,
-    kParamGate6CC,
-    // Gate Track 1 parameters (no longer includes Out param)
-    kParamGate1Run,
-    kParamGate1Length,
-    kParamGate1Direction,
-    kParamGate1ClockDiv,
-    kParamGate1Swing,
-    kParamGate1SplitPoint,
-    kParamGate1Section1Reps,
-    kParamGate1Section2Reps,
-    kParamGate1FillStart,
-    // Gate Track 2 parameters (no longer includes Out param)
-    kParamGate2Run,
-    kParamGate2Length,
-    kParamGate2Direction,
-    kParamGate2ClockDiv,
-    kParamGate2Swing,
-    kParamGate2SplitPoint,
-    kParamGate2Section1Reps,
-    kParamGate2Section2Reps,
-    kParamGate2FillStart,
-    // Gate Track 3 parameters (no longer includes Out param)
-    kParamGate3Run,
-    kParamGate3Length,
-    kParamGate3Direction,
-    kParamGate3ClockDiv,
-    kParamGate3Swing,
-    kParamGate3SplitPoint,
-    kParamGate3Section1Reps,
-    kParamGate3Section2Reps,
-    kParamGate3FillStart,
-    // Gate Track 4 parameters (no longer includes Out param)
-    kParamGate4Run,
-    kParamGate4Length,
-    kParamGate4Direction,
-    kParamGate4ClockDiv,
-    kParamGate4Swing,
-    kParamGate4SplitPoint,
-    kParamGate4Section1Reps,
-    kParamGate4Section2Reps,
-    kParamGate4FillStart,
-    // Gate Track 5 parameters (no longer includes Out param)
-    kParamGate5Run,
-    kParamGate5Length,
-    kParamGate5Direction,
-    kParamGate5ClockDiv,
-    kParamGate5Swing,
-    kParamGate5SplitPoint,
-    kParamGate5Section1Reps,
-    kParamGate5Section2Reps,
-    kParamGate5FillStart,
-    // Gate Track 6 parameters (no longer includes Out param)
-    kParamGate6Run,
-    kParamGate6Length,
-    kParamGate6Direction,
-    kParamGate6ClockDiv,
-    kParamGate6Swing,
-    kParamGate6SplitPoint,
-    kParamGate6Section1Reps,
-    kParamGate6Section2Reps,
-    kParamGate6FillStart,
+    kParamFader1 = 0,    // External control faders (0-1000 scaled)
+    kParamFader2,
+    kParamFader3,
+    kParamFader4,
+    kParamFader5,
+    kParamFader6,
+    kParamFader7,
+    kParamFader8,
+    kParamPage,          // Page selector (0-7, displayed as Page 1-8)
+    kParamMidiMode,      // MIDI mode: 0=7-bit, 1=14-bit
+    kParamPickupMode,    // Pickup mode: 0=Scaled, 1=Catch
+    kParamPotControl,    // Pot control: 0=On, 1=Off
+    kParamDriftControl,  // Drift control: 0=Off, 1=Low, 2=High
+    // CV Output parameters (output bus selection)
+    kParamCvOut1,
+    kParamCvOut1Mode,
+    kParamCvOut2,
+    kParamCvOut2Mode,
+    kParamCvOut3,
+    kParamCvOut3Mode,
+    kParamCvOut4,
+    kParamCvOut4Mode,
+    kParamCvOut5,
+    kParamCvOut5Mode,
+    kParamCvOut6,
+    kParamCvOut6Mode,
+    kParamCvOut7,
+    kParamCvOut7Mode,
+    kParamCvOut8,
+    kParamCvOut8Mode,
+    // CV Output fader mappings (which fader controls each CV output)
+    kParamCvOut1Map,
+    kParamCvOut2Map,
+    kParamCvOut3Map,
+    kParamCvOut4Map,
+    kParamCvOut5Map,
+    kParamCvOut6Map,
+    kParamCvOut7Map,
+    kParamCvOut8Map,
     kNumParameters
 };
 
-// String arrays for enum parameters
-static const char* const divisionStrings[] = {
-    "/16", "/8", "/4", "/2", "x1", "x2", "x4", "x8", "x16", NULL
+static const char* const pageStrings[] = { "Page 1", "Page 2", "Page 3", "Page 4", NULL };
+static const char* const midiModeStrings[] = { "7-bit CC", "14-bit CC", NULL };
+static const char* const pickupModeStrings[] = { "Scaled", "Catch", NULL };
+static const char* const potControlStrings[] = { "On", "Off", NULL };
+static const char* const driftControlStrings[] = { "Off", "Low", "High", NULL };
+
+// Fader mapping strings for CV outputs: None, Fader 1-32
+static const char* const faderMapStrings[] = {
+    "None", "Fader 1", "Fader 2", "Fader 3", "Fader 4", "Fader 5", "Fader 6", "Fader 7", "Fader 8",
+    "Fader 9", "Fader 10", "Fader 11", "Fader 12", "Fader 13", "Fader 14", "Fader 15", "Fader 16",
+    "Fader 17", "Fader 18", "Fader 19", "Fader 20", "Fader 21", "Fader 22", "Fader 23", "Fader 24",
+    "Fader 25", "Fader 26", "Fader 27", "Fader 28", "Fader 29", "Fader 30", "Fader 31", "Fader 32",
+    NULL
 };
 
-static const char* const directionStrings[] = {
-    "Forward", "Backward", "Pingpong", NULL
-};
+static _NT_parameter parameters[kNumParameters] = {};
 
-// Parameter name strings (must be static to persist)
-static char seq1DivName[] = "Seq 1 Clock Div";
-static char seq1DirName[] = "Seq 1 Direction";
-static char seq1StepName[] = "Seq 1 Steps";
-static char seq1SplitName[] = "Seq 1 Split Point";
-static char seq1Sec1Name[] = "Seq 1 Sec1 Reps";
-static char seq1Sec2Name[] = "Seq 1 Sec2 Reps";
-static char seq2DivName[] = "Seq 2 Clock Div";
-static char seq2DirName[] = "Seq 2 Direction";
-static char seq2StepName[] = "Seq 2 Steps";
-static char seq2SplitName[] = "Seq 2 Split Point";
-static char seq2Sec1Name[] = "Seq 2 Sec1 Reps";
-static char seq2Sec2Name[] = "Seq 2 Sec2 Reps";
-static char seq3DivName[] = "Seq 3 Clock Div";
-static char seq3DirName[] = "Seq 3 Direction";
-static char seq3StepName[] = "Seq 3 Steps";
-static char seq3SplitName[] = "Seq 3 Split Point";
-static char seq3Sec1Name[] = "Seq 3 Sec1 Reps";
-static char seq3Sec2Name[] = "Seq 3 Sec2 Reps";
-
-// MIDI channel parameter names
-static char seq1Midi1Name[] = "Seq 1 MIDI 1";
-static char seq1Midi2Name[] = "Seq 1 MIDI 2";
-static char seq1Midi3Name[] = "Seq 1 MIDI 3";
-static char seq2Midi1Name[] = "Seq 2 MIDI 1";
-static char seq2Midi2Name[] = "Seq 2 MIDI 2";
-static char seq2Midi3Name[] = "Seq 2 MIDI 3";
-static char seq3Midi1Name[] = "Seq 3 MIDI 1";
-static char seq3Midi2Name[] = "Seq 3 MIDI 2";
-static char seq3Midi3Name[] = "Seq 3 MIDI 3";
-
-// Trigger sequencer MIDI channel
-static char triggerMidiChannelName[] = "Trigger MIDI Ch";
-
-// Gate track parameter names
-static char gate1OutName[] = "Gate 1 Out";
-static char gate1CCName[] = "Gate 1 CC";
-static char gate2OutName[] = "Gate 2 Out";
-static char gate2CCName[] = "Gate 2 CC";
-static char gate3OutName[] = "Gate 3 Out";
-static char gate3CCName[] = "Gate 3 CC";
-static char gate4OutName[] = "Gate 4 Out";
-static char gate4CCName[] = "Gate 4 CC";
-static char gate5OutName[] = "Gate 5 Out";
-static char gate5CCName[] = "Gate 5 CC";
-static char gate6OutName[] = "Gate 6 Out";
-static char gate6CCName[] = "Gate 6 CC";
-
-static char gate1RunName[] = "Gate 1 Run";
-static char gate1LenName[] = "Gate 1 Length";
-static char gate1DirName[] = "Gate 1 Direction";
-static char gate1DivName[] = "Gate 1 ClockDiv";
-static char gate1SwingName[] = "Gate 1 Swing";
-static char gate1SplitName[] = "Gate 1 Split";
-static char gate1Sec1Name[] = "Gate 1 Sec1 Reps";
-static char gate1Sec2Name[] = "Gate 1 Sec2 Reps";
-static char gate1FillName[] = "Gate 1 Fill Start";
-
-static char gate2RunName[] = "Gate 2 Run";
-static char gate2LenName[] = "Gate 2 Length";
-static char gate2DirName[] = "Gate 2 Direction";
-static char gate2DivName[] = "Gate 2 ClockDiv";
-static char gate2SwingName[] = "Gate 2 Swing";
-static char gate2SplitName[] = "Gate 2 Split";
-static char gate2Sec1Name[] = "Gate 2 Sec1 Reps";
-static char gate2Sec2Name[] = "Gate 2 Sec2 Reps";
-static char gate2FillName[] = "Gate 2 Fill Start";
-
-static char gate3RunName[] = "Gate 3 Run";
-static char gate3LenName[] = "Gate 3 Length";
-static char gate3DirName[] = "Gate 3 Direction";
-static char gate3DivName[] = "Gate 3 ClockDiv";
-static char gate3SwingName[] = "Gate 3 Swing";
-static char gate3SplitName[] = "Gate 3 Split";
-static char gate3Sec1Name[] = "Gate 3 Sec1 Reps";
-static char gate3Sec2Name[] = "Gate 3 Sec2 Reps";
-static char gate3FillName[] = "Gate 3 Fill Start";
-
-static char gate4RunName[] = "Gate 4 Run";
-static char gate4LenName[] = "Gate 4 Length";
-static char gate4DirName[] = "Gate 4 Direction";
-static char gate4DivName[] = "Gate 4 ClockDiv";
-static char gate4SwingName[] = "Gate 4 Swing";
-static char gate4SplitName[] = "Gate 4 Split";
-static char gate4Sec1Name[] = "Gate 4 Sec1 Reps";
-static char gate4Sec2Name[] = "Gate 4 Sec2 Reps";
-static char gate4FillName[] = "Gate 4 Fill Start";
-
-static char gate5RunName[] = "Gate 5 Run";
-static char gate5LenName[] = "Gate 5 Length";
-static char gate5DirName[] = "Gate 5 Direction";
-static char gate5DivName[] = "Gate 5 ClockDiv";
-static char gate5SwingName[] = "Gate 5 Swing";
-static char gate5SplitName[] = "Gate 5 Split";
-static char gate5Sec1Name[] = "Gate 5 Sec1 Reps";
-static char gate5Sec2Name[] = "Gate 5 Sec2 Reps";
-static char gate5FillName[] = "Gate 5 Fill Start";
-
-static char gate6RunName[] = "Gate 6 Run";
-static char gate6LenName[] = "Gate 6 Length";
-static char gate6DirName[] = "Gate 6 Direction";
-static char gate6DivName[] = "Gate 6 ClockDiv";
-static char gate6SwingName[] = "Gate 6 Swing";
-static char gate6SplitName[] = "Gate 6 Split";
-static char gate6Sec1Name[] = "Gate 6 Sec1 Reps";
-static char gate6Sec2Name[] = "Gate 6 Sec2 Reps";
-static char gate6FillName[] = "Gate 6 Fill Start";
-
-// Global parameter array
-static _NT_parameter parameters[kNumParameters];
+// Fader names for mapping
+static char faderNames[8][12];
 
 // Initialize parameter definitions
 static void initParameters() {
-    // Clock and Reset inputs
-    parameters[kParamClockIn].name = "Clock in";
-    parameters[kParamClockIn].min = 0;
-    parameters[kParamClockIn].max = 28;
-    parameters[kParamClockIn].def = 1;
-    parameters[kParamClockIn].unit = kNT_unitCvInput;
-    parameters[kParamClockIn].scaling = kNT_scalingNone;
-    
-    parameters[kParamResetIn].name = "Reset in";
-    parameters[kParamResetIn].min = 0;
-    parameters[kParamResetIn].max = 28;
-    parameters[kParamResetIn].def = 2;
-    parameters[kParamResetIn].unit = kNT_unitCvInput;
-    parameters[kParamResetIn].scaling = kNT_scalingNone;
-    
-    // CV Outputs (12 total)
-    const char* outNames[] = {
-        "Seq 1 Out 1", "Seq 1 Out 2", "Seq 1 Out 3",
-        "Seq 2 Out 1", "Seq 2 Out 2", "Seq 2 Out 3",
-        "Seq 3 Out 1", "Seq 3 Out 2", "Seq 3 Out 3",
-        "Seq 4 Out 1", "Seq 4 Out 2", "Seq 4 Out 3"
-    };
-    
-    for (int i = 0; i < 12; i++) {
-        int paramIdx = kParamSeq1Out1 + i;
-        parameters[paramIdx].name = outNames[i];
-        parameters[paramIdx].min = 0;
-        parameters[paramIdx].max = 28;
-        parameters[paramIdx].def = 0;
-        parameters[paramIdx].unit = kNT_unitCvOutput;
-        parameters[paramIdx].scaling = kNT_scalingNone;
+    // FADER 1-8 parameters (0-16383 for full 14-bit MIDI resolution)
+    for (int i = 0; i < 8; ++i) {
+        snprintf(faderNames[i], sizeof(faderNames[i]), "FADER %d", i + 1);
+        parameters[kParamFader1 + i].name = faderNames[i];
+        parameters[kParamFader1 + i].min = 0;
+        parameters[kParamFader1 + i].max = 16383;  // Full 14-bit range
+        parameters[kParamFader1 + i].def = 0;
+        parameters[kParamFader1 + i].unit = kNT_unitNone;
+        parameters[kParamFader1 + i].scaling = kNT_scalingNone;
+        parameters[kParamFader1 + i].enumStrings = NULL;
     }
     
-    // MIDI channel parameters (9 total: 3 sequencers × 3 outputs each)
-    const char* midiNames[] = {
-        seq1Midi1Name, seq1Midi2Name, seq1Midi3Name,
-        seq2Midi1Name, seq2Midi2Name, seq2Midi3Name,
-        seq3Midi1Name, seq3Midi2Name, seq3Midi3Name
-    };
+    // PAGE parameter
+    parameters[kParamPage].name = "PAGE";
+    parameters[kParamPage].min = 0;
+    parameters[kParamPage].max = 3;  // 4 pages (0-3)
+    parameters[kParamPage].def = 0;
+    parameters[kParamPage].unit = kNT_unitEnum;
+    parameters[kParamPage].scaling = kNT_scalingNone;
+    parameters[kParamPage].enumStrings = pageStrings;
     
-    for (int i = 0; i < 9; i++) {
-        int paramIdx = kParamSeq1Midi1 + i;
-        parameters[paramIdx].name = midiNames[i];
-        parameters[paramIdx].min = 0;  // 0 = Off
-        parameters[paramIdx].max = 16; // 1-16 = MIDI channels
-        parameters[paramIdx].def = 0;  // Off by default
-        parameters[paramIdx].unit = kNT_unitNone;
-        parameters[paramIdx].scaling = kNT_scalingNone;
-    }
+    // MIDI MODE parameter
+    parameters[kParamMidiMode].name = "MIDI Mode";
+    parameters[kParamMidiMode].min = 0;
+    parameters[kParamMidiMode].max = 1;  // 0=7-bit, 1=14-bit
+    parameters[kParamMidiMode].def = 1;  // Default to 14-bit
+    parameters[kParamMidiMode].unit = kNT_unitEnum;
+    parameters[kParamMidiMode].scaling = kNT_scalingNone;
+    parameters[kParamMidiMode].enumStrings = midiModeStrings;
     
-    // Trigger sequencer MIDI channel
-    parameters[kParamTriggerMidiChannel].name = triggerMidiChannelName;
-    parameters[kParamTriggerMidiChannel].min = 0;  // 0 = Off
-    parameters[kParamTriggerMidiChannel].max = 16; // 1-16 = MIDI channels
-    parameters[kParamTriggerMidiChannel].def = 0;  // Off by default
-    parameters[kParamTriggerMidiChannel].unit = kNT_unitNone;
-    parameters[kParamTriggerMidiChannel].scaling = kNT_scalingNone;
+    // PICKUP MODE parameter
+    parameters[kParamPickupMode].name = "Pickup Mode";
+    parameters[kParamPickupMode].min = 0;
+    parameters[kParamPickupMode].max = 1;  // 0=Scaled, 1=Catch
+    parameters[kParamPickupMode].def = 1;  // Default to Catch mode
+    parameters[kParamPickupMode].unit = kNT_unitEnum;
+    parameters[kParamPickupMode].scaling = kNT_scalingNone;
+    parameters[kParamPickupMode].enumStrings = pickupModeStrings;
     
-    // Sequencer configuration parameters (seq 1-3 only now)
-    const char* divNames[] = {seq1DivName, seq2DivName, seq3DivName};
-    const char* dirNames[] = {seq1DirName, seq2DirName, seq3DirName};
-    const char* stepNames[] = {seq1StepName, seq2StepName, seq3StepName};
-    const char* splitNames[] = {seq1SplitName, seq2SplitName, seq3SplitName};
-    const char* sec1Names[] = {seq1Sec1Name, seq2Sec1Name, seq3Sec1Name};
-    const char* sec2Names[] = {seq1Sec2Name, seq2Sec2Name, seq3Sec2Name};
+    // POT CONTROL parameter
+    parameters[kParamPotControl].name = "Pot Control";
+    parameters[kParamPotControl].min = 0;
+    parameters[kParamPotControl].max = 1;  // 0=On, 1=Off
+    parameters[kParamPotControl].def = 0;  // Default to On
+    parameters[kParamPotControl].unit = kNT_unitEnum;
+    parameters[kParamPotControl].scaling = kNT_scalingNone;
+    parameters[kParamPotControl].enumStrings = potControlStrings;
     
-    for (int seq = 0; seq < 3; seq++) {
-        int divParam = kParamSeq1ClockDiv + (seq * 6);
-        int dirParam = kParamSeq1Direction + (seq * 6);
-        int stepParam = kParamSeq1StepCount + (seq * 6);
-        int splitParam = kParamSeq1SplitPoint + (seq * 6);
-        int sec1Param = kParamSeq1Section1Reps + (seq * 6);
-        int sec2Param = kParamSeq1Section2Reps + (seq * 6);
-        
-        // Clock Division parameter
-        parameters[divParam].name = divNames[seq];
-        parameters[divParam].min = 0;
-        parameters[divParam].max = 8;  // /16, /8, /4, /2, x1, x2, x4, x8, x16
-        parameters[divParam].def = 0;  // Default to /16 (lowest)
-        parameters[divParam].unit = kNT_unitEnum;
-        parameters[divParam].scaling = kNT_scalingNone;
-        parameters[divParam].enumStrings = divisionStrings;
-        
-        // Direction parameter
-        parameters[dirParam].name = dirNames[seq];
-        parameters[dirParam].min = 0;
-        parameters[dirParam].max = 2;  // Forward, Backward, Pingpong
-        parameters[dirParam].def = 0;  // Forward
-        parameters[dirParam].unit = kNT_unitEnum;
-        parameters[dirParam].scaling = kNT_scalingNone;
-        parameters[dirParam].enumStrings = directionStrings;
-        
-        // Step Count parameter
-        parameters[stepParam].name = stepNames[seq];
-        parameters[stepParam].min = 1;
-        parameters[stepParam].max = 32;
-        parameters[stepParam].def = 16;  // Default to 16 steps
-        parameters[stepParam].unit = kNT_unitNone;
-        parameters[stepParam].scaling = kNT_scalingNone;
-        
-        // Split Point parameter
-        parameters[splitParam].name = splitNames[seq];
-        parameters[splitParam].min = 1;
-        parameters[splitParam].max = 31;
-        parameters[splitParam].def = 8;  // Default to middle of 16 steps
-        parameters[splitParam].unit = kNT_unitNone;
-        parameters[splitParam].scaling = kNT_scalingNone;
-        
-        // Section 1 Repeats parameter
-        parameters[sec1Param].name = sec1Names[seq];
-        parameters[sec1Param].min = 1;
-        parameters[sec1Param].max = 99;
-        parameters[sec1Param].def = 1;
-        parameters[sec1Param].unit = kNT_unitNone;
-        parameters[sec1Param].scaling = kNT_scalingNone;
-        
-        // Section 2 Repeats parameter
-        parameters[sec2Param].name = sec2Names[seq];
-        parameters[sec2Param].min = 1;
-        parameters[sec2Param].max = 99;
-        parameters[sec2Param].def = 1;
-        parameters[sec2Param].unit = kNT_unitNone;
-        parameters[sec2Param].scaling = kNT_scalingNone;
-    }
+    // DRIFT CONTROL parameter
+    parameters[kParamDriftControl].name = "Drift Ctrl";
+    parameters[kParamDriftControl].min = 0;
+    parameters[kParamDriftControl].max = 2;  // 0=Off, 1=Low, 2=High
+    parameters[kParamDriftControl].def = 0;  // Default to Off
+    parameters[kParamDriftControl].unit = kNT_unitEnum;
+    parameters[kParamDriftControl].scaling = kNT_scalingNone;
+    parameters[kParamDriftControl].enumStrings = driftControlStrings;
     
-    // Gate outputs and MIDI CC parameters (6 tracks, 2 parameters each)
-    const char* gateOutNames[] = {gate1OutName, gate2OutName, gate3OutName, gate4OutName, gate5OutName, gate6OutName};
-    const char* gateCCNames[] = {gate1CCName, gate2CCName, gate3CCName, gate4CCName, gate5CCName, gate6CCName};
-    
-    for (int track = 0; track < 6; track++) {
-        int outParam = kParamGate1Out + (track * 2);
-        int ccParam = kParamGate1CC + (track * 2);
+    // CV Output parameters (8 CV outputs with mode and fader mapping)
+    // Using NT_PARAMETER_CV_OUTPUT_WITH_MODE pattern manually
+    for (int i = 0; i < 8; ++i) {
+        // CV Output bus selection (which output 1-28)
+        int cvOutParam = kParamCvOut1 + (i * 2);
+        parameters[cvOutParam].name = (i == 0) ? "CV Out 1" :
+                                       (i == 1) ? "CV Out 2" :
+                                       (i == 2) ? "CV Out 3" :
+                                       (i == 3) ? "CV Out 4" :
+                                       (i == 4) ? "CV Out 5" :
+                                       (i == 5) ? "CV Out 6" :
+                                       (i == 6) ? "CV Out 7" : "CV Out 8";
+        parameters[cvOutParam].min = 1;
+        parameters[cvOutParam].max = 28;
+        parameters[cvOutParam].def = i + 1;  // Default to outputs 1-8
+        parameters[cvOutParam].unit = kNT_unitCvOutput;
+        parameters[cvOutParam].scaling = kNT_scalingNone;
+        parameters[cvOutParam].enumStrings = NULL;
         
-        parameters[outParam].name = gateOutNames[track];
-        parameters[outParam].min = 0;
-        parameters[outParam].max = 28;
-        parameters[outParam].def = 0;
-        parameters[outParam].unit = kNT_unitCvOutput;
-        parameters[outParam].scaling = kNT_scalingNone;
+        // CV Output mode (add/replace)
+        int cvModeParam = kParamCvOut1Mode + (i * 2);
+        parameters[cvModeParam].name = (i == 0) ? "CV Out 1 mode" :
+                                        (i == 1) ? "CV Out 2 mode" :
+                                        (i == 2) ? "CV Out 3 mode" :
+                                        (i == 3) ? "CV Out 4 mode" :
+                                        (i == 4) ? "CV Out 5 mode" :
+                                        (i == 5) ? "CV Out 6 mode" :
+                                        (i == 6) ? "CV Out 7 mode" : "CV Out 8 mode";
+        parameters[cvModeParam].min = 0;
+        parameters[cvModeParam].max = 1;
+        parameters[cvModeParam].def = 0;
+        parameters[cvModeParam].unit = kNT_unitOutputMode;
+        parameters[cvModeParam].scaling = kNT_scalingNone;
+        parameters[cvModeParam].enumStrings = NULL;
         
-        parameters[ccParam].name = gateCCNames[track];
-        parameters[ccParam].min = 0;  // 0-127
-        parameters[ccParam].max = 127;
-        parameters[ccParam].def = 0;  // Default to CC 0 for all
-        parameters[ccParam].unit = kNT_unitNone;
-        parameters[ccParam].scaling = kNT_scalingNone;
-    }
-    
-    // Gate Track parameters (6 tracks, 10 parameters each - minus the Out param which is now separate)
-    const char* gateRunNames[] = {gate1RunName, gate2RunName, gate3RunName, gate4RunName, gate5RunName, gate6RunName};
-    const char* gateLenNames[] = {gate1LenName, gate2LenName, gate3LenName, gate4LenName, gate5LenName, gate6LenName};
-    const char* gateDirNames[] = {gate1DirName, gate2DirName, gate3DirName, gate4DirName, gate5DirName, gate6DirName};
-    const char* gateDivNames[] = {gate1DivName, gate2DivName, gate3DivName, gate4DivName, gate5DivName, gate6DivName};
-    const char* gateSwingNames[] = {gate1SwingName, gate2SwingName, gate3SwingName, gate4SwingName, gate5SwingName, gate6SwingName};
-    const char* gateSplitNames[] = {gate1SplitName, gate2SplitName, gate3SplitName, gate4SplitName, gate5SplitName, gate6SplitName};
-    const char* gateSec1Names[] = {gate1Sec1Name, gate2Sec1Name, gate3Sec1Name, gate4Sec1Name, gate5Sec1Name, gate6Sec1Name};
-    const char* gateSec2Names[] = {gate1Sec2Name, gate2Sec2Name, gate3Sec2Name, gate4Sec2Name, gate5Sec2Name, gate6Sec2Name};
-    const char* gateFillNames[] = {gate1FillName, gate2FillName, gate3FillName, gate4FillName, gate5FillName, gate6FillName};
-    
-    for (int track = 0; track < 6; track++) {
-        int runParam = kParamGate1Run + (track * 9);   // Now 9 params per track instead of 10
-        int lenParam = kParamGate1Length + (track * 9);
-        int dirParam = kParamGate1Direction + (track * 9);
-        int divParam = kParamGate1ClockDiv + (track * 9);
-        int swingParam = kParamGate1Swing + (track * 9);
-        int splitParam = kParamGate1SplitPoint + (track * 9);
-        int sec1Param = kParamGate1Section1Reps + (track * 9);
-        int sec2Param = kParamGate1Section2Reps + (track * 9);
-        int fillParam = kParamGate1FillStart + (track * 9);
-        
-        parameters[runParam].name = gateRunNames[track];
-        parameters[runParam].min = 0;
-        parameters[runParam].max = 1;
-        parameters[runParam].def = 0;  // Default to stopped
-        parameters[runParam].unit = kNT_unitNone;
-        parameters[runParam].scaling = kNT_scalingNone;
-        
-        parameters[lenParam].name = gateLenNames[track];
-        parameters[lenParam].min = 1;
-        parameters[lenParam].max = 32;
-        parameters[lenParam].def = 16;  // Default to 16 steps
-        parameters[lenParam].unit = kNT_unitNone;
-        parameters[lenParam].scaling = kNT_scalingNone;
-        
-        parameters[dirParam].name = gateDirNames[track];
-        parameters[dirParam].min = 0;
-        parameters[dirParam].max = 2;
-        parameters[dirParam].def = 0;
-        parameters[dirParam].unit = kNT_unitEnum;
-        parameters[dirParam].scaling = kNT_scalingNone;
-        parameters[dirParam].enumStrings = directionStrings;
-        
-        parameters[divParam].name = gateDivNames[track];
-        parameters[divParam].min = 0;
-        parameters[divParam].max = 8;
-        parameters[divParam].def = 0;  // Default to /16
-        parameters[divParam].unit = kNT_unitEnum;
-        parameters[divParam].scaling = kNT_scalingNone;
-        parameters[divParam].enumStrings = divisionStrings;
-        
-        parameters[swingParam].name = gateSwingNames[track];
-        parameters[swingParam].min = 0;
-        parameters[swingParam].max = 100;
-        parameters[swingParam].def = 0;
-        parameters[swingParam].unit = kNT_unitNone;
-        parameters[swingParam].scaling = kNT_scalingNone;
-        
-        parameters[splitParam].name = gateSplitNames[track];
-        parameters[splitParam].min = 0;
-        parameters[splitParam].max = 31;
-        parameters[splitParam].def = 0;
-        parameters[splitParam].unit = kNT_unitNone;
-        parameters[splitParam].scaling = kNT_scalingNone;
-        
-        parameters[sec1Param].name = gateSec1Names[track];
-        parameters[sec1Param].min = 1;
-        parameters[sec1Param].max = 99;
-        parameters[sec1Param].def = 1;
-        parameters[sec1Param].unit = kNT_unitNone;
-        parameters[sec1Param].scaling = kNT_scalingNone;
-        
-        parameters[sec2Param].name = gateSec2Names[track];
-        parameters[sec2Param].min = 1;
-        parameters[sec2Param].max = 99;
-        parameters[sec2Param].def = 1;
-        parameters[sec2Param].unit = kNT_unitNone;
-        parameters[sec2Param].scaling = kNT_scalingNone;
-        
-        parameters[fillParam].name = gateFillNames[track];
-        parameters[fillParam].min = 1;
-        parameters[fillParam].max = 32;
-        parameters[fillParam].def = 1;  // Default to lowest value
-        parameters[fillParam].unit = kNT_unitNone;
-        parameters[fillParam].scaling = kNT_scalingNone;
+        // Fader mapping (which fader 0-32 controls this CV output)
+        int mapParam = kParamCvOut1Map + i;
+        parameters[mapParam].name = (i == 0) ? "CV Out 1 Fader" :
+                                     (i == 1) ? "CV Out 2 Fader" :
+                                     (i == 2) ? "CV Out 3 Fader" :
+                                     (i == 3) ? "CV Out 4 Fader" :
+                                     (i == 4) ? "CV Out 5 Fader" :
+                                     (i == 5) ? "CV Out 6 Fader" :
+                                     (i == 6) ? "CV Out 7 Fader" : "CV Out 8 Fader";
+        parameters[mapParam].min = 0;
+        parameters[mapParam].max = 32;  // 0=None, 1-32=Fader 1-32
+        parameters[mapParam].def = 0;   // Default to None
+        parameters[mapParam].unit = kNT_unitEnum;
+        parameters[mapParam].scaling = kNT_scalingNone;
+        parameters[mapParam].enumStrings = faderMapStrings;
     }
 }
 
-// Parameter pages
-static uint8_t paramPageInputs[] = { kParamClockIn, kParamResetIn, 0 };
-static uint8_t paramPageSeq1Out[] = { kParamSeq1Out1, kParamSeq1Midi1, kParamSeq1Out2, kParamSeq1Midi2, kParamSeq1Out3, kParamSeq1Midi3, 0 };
-static uint8_t paramPageSeq2Out[] = { kParamSeq2Out1, kParamSeq2Midi1, kParamSeq2Out2, kParamSeq2Midi2, kParamSeq2Out3, kParamSeq2Midi3, 0 };
-static uint8_t paramPageSeq3Out[] = { kParamSeq3Out1, kParamSeq3Midi1, kParamSeq3Out2, kParamSeq3Midi2, kParamSeq3Out3, kParamSeq3Midi3, 0 };
-static uint8_t paramPageSeq1Params[] = { kParamSeq1ClockDiv, kParamSeq1Direction, kParamSeq1StepCount, kParamSeq1SplitPoint, kParamSeq1Section1Reps, kParamSeq1Section2Reps, 0 };
-static uint8_t paramPageSeq2Params[] = { kParamSeq2ClockDiv, kParamSeq2Direction, kParamSeq2StepCount, kParamSeq2SplitPoint, kParamSeq2Section1Reps, kParamSeq2Section2Reps, 0 };
-static uint8_t paramPageSeq3Params[] = { kParamSeq3ClockDiv, kParamSeq3Direction, kParamSeq3StepCount, kParamSeq3SplitPoint, kParamSeq3Section1Reps, kParamSeq3Section2Reps, 0 };
-static uint8_t paramPageGateOuts[] = { kParamTriggerMidiChannel, kParamGate1Out, kParamGate1CC, kParamGate2Out, kParamGate2CC, kParamGate3Out, kParamGate3CC, kParamGate4Out, kParamGate4CC, kParamGate5Out, kParamGate5CC, kParamGate6Out, kParamGate6CC, 0 };
-static uint8_t paramPageGate1[] = { kParamGate1Run, kParamGate1Length, kParamGate1Direction, kParamGate1ClockDiv, kParamGate1Swing, kParamGate1SplitPoint, kParamGate1Section1Reps, kParamGate1Section2Reps, kParamGate1FillStart, 0 };
-static uint8_t paramPageGate2[] = { kParamGate2Run, kParamGate2Length, kParamGate2Direction, kParamGate2ClockDiv, kParamGate2Swing, kParamGate2SplitPoint, kParamGate2Section1Reps, kParamGate2Section2Reps, kParamGate2FillStart, 0 };
-static uint8_t paramPageGate3[] = { kParamGate3Run, kParamGate3Length, kParamGate3Direction, kParamGate3ClockDiv, kParamGate3Swing, kParamGate3SplitPoint, kParamGate3Section1Reps, kParamGate3Section2Reps, kParamGate3FillStart, 0 };
-static uint8_t paramPageGate4[] = { kParamGate4Run, kParamGate4Length, kParamGate4Direction, kParamGate4ClockDiv, kParamGate4Swing, kParamGate4SplitPoint, kParamGate4Section1Reps, kParamGate4Section2Reps, kParamGate4FillStart, 0 };
-static uint8_t paramPageGate5[] = { kParamGate5Run, kParamGate5Length, kParamGate5Direction, kParamGate5ClockDiv, kParamGate5Swing, kParamGate5SplitPoint, kParamGate5Section1Reps, kParamGate5Section2Reps, kParamGate5FillStart, 0 };
-static uint8_t paramPageGate6[] = { kParamGate6Run, kParamGate6Length, kParamGate6Direction, kParamGate6ClockDiv, kParamGate6Swing, kParamGate6SplitPoint, kParamGate6Section1Reps, kParamGate6Section2Reps, kParamGate6FillStart, 0 };
+// Parameter pages: Single FADER page with all parameters
+static uint8_t faderPageParams[12];  // FADER 1-8 + MIDI Mode + Pickup Mode + Pot Control + Drift Control
+static _NT_parameterPage page_array[1];
+static _NT_parameterPages pages;
 
-static _NT_parameterPage pageArray[] = {
-    { .name = "Inputs", .numParams = 2, .params = paramPageInputs },
-    { .name = "Seq 1 Outs", .numParams = 6, .params = paramPageSeq1Out },
-    { .name = "Seq 2 Outs", .numParams = 6, .params = paramPageSeq2Out },
-    { .name = "Seq 3 Outs", .numParams = 6, .params = paramPageSeq3Out },
-    { .name = "Seq 1 Params", .numParams = 6, .params = paramPageSeq1Params },
-    { .name = "Seq 2 Params", .numParams = 6, .params = paramPageSeq2Params },
-    { .name = "Seq 3 Params", .numParams = 6, .params = paramPageSeq3Params },
-    { .name = "Gate Outs", .numParams = 13, .params = paramPageGateOuts },
-    { .name = "Trig Track 1", .numParams = 9, .params = paramPageGate1 },
-    { .name = "Trig Track 2", .numParams = 9, .params = paramPageGate2 },
-    { .name = "Trig Track 3", .numParams = 9, .params = paramPageGate3 },
-    { .name = "Trig Track 4", .numParams = 9, .params = paramPageGate4 },
-    { .name = "Trig Track 5", .numParams = 9, .params = paramPageGate5 },
-    { .name = "Trig Track 6", .numParams = 9, .params = paramPageGate6 }
-};
+static void initPages() {
+    // FADER page: FADER 1-8, MIDI Mode, Pickup Mode, Pot Control, Drift Control
+    for (int i = 0; i < 8; ++i) {
+        faderPageParams[i] = kParamFader1 + i;
+    }
+    faderPageParams[8] = kParamMidiMode;
+    faderPageParams[9] = kParamPickupMode;
+    faderPageParams[10] = kParamPotControl;
+    faderPageParams[11] = kParamDriftControl;
+    
+    page_array[0].name = "VFADER";
+    page_array[0].numParams = 12;
+    page_array[0].params = faderPageParams;
+    
+    pages.numPages = 1;
+    pages.pages = page_array;
+}
 
-static _NT_parameterPages pages = {
-    .numPages = 14,
-    .pages = pageArray
-};
+// helpers
+static inline uint8_t clampU8(int v, int lo, int hi) { return (uint8_t)(v < lo ? lo : v > hi ? hi : v); }
+static inline int faderIndex(uint8_t page, uint8_t col) { return (page - 1) * 8 + col; } // 1..32
+
+// queue removed in minimal mode
+
+static inline uint32_t destMaskFromParam(int destParamVal) {
+    switch (destParamVal) {
+        case 0: return kNT_destinationBreakout;
+        case 1: return kNT_destinationUSB;
+        case 2: return (kNT_destinationBreakout | kNT_destinationUSB);
+        case 3: return kNT_destinationInternal;
+        case 4: return kNT_destinationSelectBus;
+        default: return (kNT_destinationBreakout | kNT_destinationUSB | kNT_destinationInternal | kNT_destinationSelectBus);
+    }
+}
+
+static void sendCCPair(uint32_t destMask, uint8_t channel1based, uint8_t faderIdx1based, float norm01, bool highFirst) {
+    uint8_t status = (uint8_t)(0xB0 + ((channel1based - 1) & 0x0F));
+    int full = (int)(norm01 * 16383.0f + 0.5f);
+    uint8_t msb = (uint8_t)(full >> 7);
+    uint8_t lsb = (uint8_t)(full & 0x7F);
+    
+    // Standard 14-bit MIDI CC mapping for 32 faders:
+    // Faders 1-32: CC 0-31 (MSB) paired with CC 32-63 (LSB)
+    uint8_t msbCC = faderIdx1based - 1;  // CC 0-31
+    uint8_t lsbCC = msbCC + 32;          // CC 32-63
+    
+    // Clamp values to valid MIDI range
+    if (msb > 127) msb = 127;
+    if (lsb > 127) lsb = 127;
+    if (msbCC > 127) msbCC = 127;
+    if (lsbCC > 127) lsbCC = 127;
+    
+    if (highFirst) {
+        NT_sendMidi3ByteMessage(destMask, status, msbCC, msb);
+        NT_sendMidi3ByteMessage(destMask, status, lsbCC, lsb);
+    } else {
+        NT_sendMidi3ByteMessage(destMask, status, lsbCC, lsb);
+        NT_sendMidi3ByteMessage(destMask, status, msbCC, msb);
+    }
+}
 
 void calculateRequirements(_NT_algorithmRequirements& req, const int32_t*) {
     req.numParameters = kNumParameters;
-    req.sram = sizeof(VSeq);
+    req.sram = sizeof(VFader);
 }
 
 _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorithmRequirements&, const int32_t*) {
-    VSeq* alg = new (ptrs.sram) VSeq();
+    VFader* alg = new (ptrs.sram) VFader();
     initParameters();
+    initPages();
     alg->parameters = parameters;
     alg->parameterPages = &pages;
     
-    // Initialize debug output bus array from default parameter values
-    for (int i = 0; i < 12; i++) {
-        alg->debugOutputBus[i] = parameters[kParamSeq1Out1 + i].def;
+    // Initialize default fader names (12 chars max)
+    for (int i = 0; i < 32; i++) {
+        snprintf(alg->faderNames[i], 13, "FADER%02d", i + 1);
     }
+    
+    // Initialize note settings for all faders
+    alg->initializeNoteSettings();
     
     return alg;
 }
 
+// Helper function to apply drift control
+// Locks fader value until input changes by more than threshold
+static inline float applyDriftControl(float newValue, float lockedValue, int driftLevel) {
+    if (driftLevel == 0) {
+        return newValue;  // No drift control
+    }
+    
+    // Drift thresholds: Low=0.5%, High=1%
+    float threshold;
+    switch (driftLevel) {
+        case 1: threshold = 0.005f; break;  // Low
+        case 2: threshold = 0.01f; break;   // High
+        default: threshold = 0.0f; break;
+    }
+    
+    // If locked value is negative, this is first read - use new value
+    if (lockedValue < 0.0f) {
+        return newValue;
+    }
+    
+    // Check if new value differs from locked value by more than threshold
+    if (fabsf(newValue - lockedValue) > threshold) {
+        return newValue;  // Update to new value
+    }
+    
+    return lockedValue;  // Stay locked at current value
+}
+
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
-    VSeq* a = (VSeq*)self;
+    VFader* a = (VFader*)self;
     
-    // Get input bus indices from parameters
-    int clockBus = self->v[kParamClockIn] - 1;  // 0-27 (parameter is 1-28)
-    int resetBus = self->v[kParamResetIn] - 1;
+    // Get drift control setting
+    int driftLevel = self->v[kParamDriftControl];
     
-    // Calculate number of actual frames
-    int numFrames = numFramesBy4 * 4;
+    // Advance step counter and UI ticking
+    a->stepCounter++;
+    if (a->uiActiveTicks > 0) { 
+        a->uiActive = true; 
+        --a->uiActiveTicks; 
+    } else { 
+        a->uiActive = false; 
+    }
     
-    // Get first sample from each input bus (for edge detection)
-    float clockIn = (clockBus >= 0 && clockBus < 28) ? busFrames[clockBus * numFrames] : 0.0f;
-    float resetIn = (resetBus >= 0 && resetBus < 28) ? busFrames[resetBus * numFrames] : 0.0f;
     
-    // Clock edge detection (rising edge)
-    bool clockTrig = (clockIn > 0.5f && a->lastClockIn <= 0.5f);
-    bool resetTrig = (resetIn > 0.5f && a->lastResetIn <= 0.5f);
-    
-    a->lastClockIn = clockIn;
-    a->lastResetIn = resetIn;
-    
-    // Process each CV sequencer (3 total)
-    for (int seq = 0; seq < 3; seq++) {
-        int dirParam = kParamSeq1Direction + (seq * 6);
-        int stepParam = kParamSeq1StepCount + (seq * 6);
-        int splitParam = kParamSeq1SplitPoint + (seq * 6);
-        int sec1Param = kParamSeq1Section1Reps + (seq * 6);
-        int sec2Param = kParamSeq1Section2Reps + (seq * 6);
-        
-        int direction = self->v[dirParam];  // 0=Forward, 1=Backward, 2=Pingpong
-        int stepCount = self->v[stepParam]; // 1-32
-        int splitPoint = self->v[splitParam]; // 1-31
-        int sec1Reps = self->v[sec1Param];  // 1-99
-        int sec2Reps = self->v[sec2Param];  // 1-99
-        
-        // Reset handling
-        if (resetTrig) {
-            a->resetSequencer(seq);
-        }
-        
-        // Clock handling - advance one step per clock
-        if (clockTrig) {
-            a->advanceSequencer(seq, direction, stepCount, splitPoint, sec1Reps, sec2Reps);
-        }
-        
-        // Clamp current step to step count (safety check)
-        if (a->currentStep[seq] >= stepCount) {
-            a->currentStep[seq] = stepCount - 1;
-        }
-        
-        // Output current step values to all output buses
-        int step = a->currentStep[seq];
-        for (int out = 0; out < 3; out++) {
-            int paramIdx = kParamSeq1Out1 + (seq * 3) + out;
-            int outputBus = self->v[paramIdx];  // 0 = none, 1-28 = bus 0-27
+    // Apply gang fader transformations
+    // Only apply when the gang fader itself has changed
+    for (int i = 0; i < 32; i++) {
+        if (a->faderNoteSettings[i].controlAllCount > 0) {
+            float gangValue = a->internalFaders[i];  // 0.0 to 1.0
+            float lastGangValue = a->lastGangValues[i];
             
-            // Store actual bus assignment for debug
-            int debugIdx = seq * 3 + out;
-            a->debugOutputBus[debugIdx] = outputBus;  // Store as 0-28
+            // Only update children if gang fader changed
+            bool gangChanged = (lastGangValue < 0.0f) || (fabsf(gangValue - lastGangValue) > 0.001f);
             
-            if (outputBus > 0 && outputBus <= 28) {
-                int16_t value = a->stepValues[seq][step][out];
-                // Convert from int16_t range to 0.0-1.0
-                float outputValue = (value + 32768) / 65535.0f;
+            if (gangChanged) {
+                int childCount = a->faderNoteSettings[i].controlAllCount;
+                uint8_t mode = a->faderNoteSettings[i].controlAllMode;
                 
-                // Write to all frames in the output bus
-                float* outBus = busFrames + ((outputBus - 1) * numFrames);
-                for (int frame = 0; frame < numFrames; frame++) {
-                    outBus[frame] = outputValue;
+                // For Absolute mode, calculate min/max reference values ONCE before processing children
+                float minRef = 1.0f;
+                float maxRef = 0.0f;
+                if (mode == 0) {
+                    for (int k = 1; k <= childCount && (i + k) < 32; k++) {
+                        int checkIdx = i + k;
+                        if (a->faderNoteSettings[checkIdx].controlAllCount > 0) continue; // Skip nested macros
+                        float checkRef = a->faderReferenceValues[checkIdx];
+                        if (checkRef < minRef) minRef = checkRef;
+                        if (checkRef > maxRef) maxRef = checkRef;
+                    }
                 }
-            }
-            
-            // Send MIDI note if channel is configured and clock just triggered
-            if (clockTrig) {
-                int midiParam = kParamSeq1Midi1 + (seq * 3) + out;
-                int midiChannel = self->v[midiParam];  // 0 = off, 1-16 = MIDI channels
                 
-                if (midiChannel > 0 && midiChannel <= 16) {
-                    // Convert CV value to MIDI note (0-127)
-                    int16_t value = a->stepValues[seq][step][out];
-                    float normalized = (value + 32768) / 65535.0f;  // 0.0-1.0
-                    uint8_t midiNote = (uint8_t)(normalized * 127.0f);
-                    if (midiNote > 127) midiNote = 127;
-                    
-                    uint8_t channel = (midiChannel - 1) & 0x0F;
-                    
-                    // Send note on
-                    NT_sendMidi3ByteMessage(
-                        kNT_destinationInternal,
-                        0x90 | channel,  // Note On
-                        midiNote,
-                        100              // Fixed velocity
-                    );
+                // Calculate gang logical value for Absolute mode (used by all children)
+                float gangLogical = 0.0f;
+                if (mode == 0) {
+                    float gangLogicalMin = 0.5f - maxRef;
+                    float gangLogicalMax = 0.5f + (1.0f - minRef);
+                    gangLogical = gangLogicalMin + (gangValue * (gangLogicalMax - gangLogicalMin));
                 }
+                
+                // Process each child fader
+                for (int j = 1; j <= childCount && (i + j) < 32; j++) {
+                    int childIdx = i + j;
+                    
+                    // Skip if child is also a gang fader
+                    if (a->faderNoteSettings[childIdx].controlAllCount > 0) continue;
+                    
+                    float refValue = a->faderReferenceValues[childIdx];
+                    float newValue;
+                    
+                    if (mode == 0) {
+                        // Absolute mode: children move in parallel using pre-calculated gangLogical
+                        float shift = gangLogical - 0.5f;
+                        newValue = refValue + shift;
+                    } else {
+                        // Relative mode: proportional scaling from reference position
+                        // Reference value is the child's position when macro is at 0.5 (center)
+                        // As macro moves from 0.5, children scale proportionally
+                        
+                        if (gangValue <= 0.5f) {
+                            // Macro is in lower half [0.0 to 0.5]
+                            // Map: macro 0.0→child reaches 0.0, macro 0.5→child stays at refValue
+                            float scaleFactor = gangValue / 0.5f;  // 0.0 to 1.0
+                            newValue = refValue * scaleFactor;
+                        } else {
+                            // Macro is in upper half [0.5 to 1.0]
+                            // Map: macro 0.5→child stays at refValue, macro 1.0→child reaches 1.0
+                            float t = (gangValue - 0.5f) / 0.5f;  // 0.0 to 1.0
+                            newValue = refValue + ((1.0f - refValue) * t);
+                        }
+                    }
+                    
+                    // Clamp to valid range
+                    if (newValue < 0.0f) newValue = 0.0f;
+                    if (newValue > 1.0f) newValue = 1.0f;
+                    
+                    // Update child fader
+                    a->internalFaders[childIdx] = newValue;
+                    
+                    // In Relative mode, update reference to track current child position
+                    // This allows manual child adjustments to be preserved
+                    if (mode == 1) {
+                        a->faderReferenceValues[childIdx] = newValue;
+                    }
+                }
+                
+                // Update last gang value
+                a->lastGangValues[i] = gangValue;
             }
         }
     }
     
-    // Process gate sequencer (6 tracks)
-    for (int track = 0; track < 6; track++) {
-        int outParam = kParamGate1Out + (track * 2);   // Gate outputs are now paired with CC params
-        int runParam = kParamGate1Run + (track * 9);   // 9 params per track now
-        int lenParam = kParamGate1Length + (track * 9);
-        int dirParam = kParamGate1Direction + (track * 9);
-        int splitParam = kParamGate1SplitPoint + (track * 9);
-        int sec1Param = kParamGate1Section1Reps + (track * 9);
-        int sec2Param = kParamGate1Section2Reps + (track * 9);
-        int fillParam = kParamGate1FillStart + (track * 9);
-        
-        int outputBus = self->v[outParam];     // 0 = none, 1-28 = bus 0-27
-        int isRunning = self->v[runParam];     // 0 = stopped, 1 = running
-        int trackLength = self->v[lenParam];   // 1-32
-        int direction = self->v[dirParam];     // 0=Forward, 1=Backward, 2=Pingpong
-        int splitPoint = self->v[splitParam];  // 0-31 (0 = no split)
-        int sec1Reps = self->v[sec1Param];     // 1-99
-        int sec2Reps = self->v[sec2Param];     // 1-99
-        int fillStart = self->v[fillParam];    // 1-32 (step where fill replaces section 1 on last rep)
-        
-        // Skip sequencer advancement if not running
-        if (isRunning == 0) continue;
-        
-        // Reset handling
-        if (resetTrig) {
-            a->gateCurrentStep[track] = 0;
-            a->gatePingpongForward[track] = true;
-            a->gateSwingCounter[track] = 0;
-            a->gateSection1Counter[track] = 0;
-            a->gateSection2Counter[track] = 0;
-            a->gateInSection2[track] = false;
-            a->gateInFill[track] = false;
-        }
-        
-        // Clock handling - advance one step per clock
-        if (clockTrig) {
-            a->advanceGateSequencer(track, direction, trackLength, splitPoint, sec1Reps, sec2Reps, fillStart);
+    // Get MIDI mode (0=7-bit, 1=14-bit)
+    int midiMode = (int)(self->v[kParamMidiMode] + 0.5f);
+    
+    // MIDI settings
+    uint8_t midiChannel = 1;  // Hardcoded to channel 1 for now
+    uint32_t midiDest = kNT_destinationUSB | kNT_destinationInternal;  // Send to USB and Internal
+    
+    if (midiMode == 0) {
+        // 7-bit mode: send all changed faders
+        for (int i = 0; i < 32; ++i) {
+            float rawValue = a->internalFaders[i];
+            float lastValue = a->lastMidiValues[i];
             
-            // After advancing, mark if current step should trigger
-            int currentStep = a->gateCurrentStep[track];
-            if (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]) {
-                // Gate is active on this step - trigger!
-                a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
+            // Apply drift control - lock value unless change exceeds threshold
+            float currentValue = applyDriftControl(rawValue, lastValue, driftLevel);
+            
+            // Note: Soft takeover removed for external I2C control
+            // External controllers always have immediate control
+            // This could be re-enabled for onboard pot control if needed
+            
+            // Send MIDI if value changed (or first time)
+            bool firstSend = (lastValue < 0.0f);
+            bool valueChanged = fabsf(currentValue - lastValue) > 0.001f;
+            
+            if (firstSend || valueChanged) {
+                uint8_t midiValue;
+                int scaledValue = 0;  // Track the scaled value for debug
                 
-                // Send MIDI CC if configured
-                int triggerMidiChannel = self->v[kParamTriggerMidiChannel];  // 0 = off, 1-16 = MIDI channels
+                // Check if this fader is in Note mode
+                if (a->faderNoteSettings[i].displayMode == 1) {
+                    // Note mode: snap to active note and send that MIDI note number
+                    midiValue = (uint8_t)a->snapToActiveNote(currentValue, a->faderNoteSettings[i]);
+                } else {
+                    // Number mode: snap to value range (0-100), then scale to MIDI (0-127)
+                    scaledValue = a->snapToValueRange(currentValue, a->faderNoteSettings[i]);
+                    // Map 0-100 to 0-127
+                    midiValue = (uint8_t)((scaledValue * 127) / 100);
+                    if (midiValue > 127) midiValue = 127;
+                }
                 
-                if (triggerMidiChannel > 0 && triggerMidiChannel <= 16) {
-                    int ccParam = kParamGate1CC + (track * 2);
-                    int ccNumber = self->v[ccParam];  // 0-127
+                
+                // Send MIDI CC (CC number is i+1, so fader 0 → CC #1)
+                uint8_t ccNumber = (uint8_t)(i + 1);
+                uint8_t status = 0xB0 | (midiChannel - 1);  // Control Change on channel
+                NT_sendMidi3ByteMessage(midiDest, status, ccNumber, midiValue);
+                
+                // Update last sent value
+                a->lastMidiValues[i] = currentValue;
+                
+            }
+        }
+    } else {
+        // 14-bit mode: send MSB and LSB on alternate steps to avoid conflicts
+        uint8_t status = 0xB0 | (midiChannel - 1);
+        
+        for (int i = 0; i < 32; ++i) {
+            float rawValue = a->internalFaders[i];
+            float lastValue = a->lastMidiValues[i];
+            
+            // Apply drift control - lock value unless change exceeds threshold
+            float currentValue = applyDriftControl(rawValue, lastValue, driftLevel);
+            
+            // Note: Soft takeover removed for external I2C control
+            // External controllers always have immediate control
+            
+            // Check if value changed (or first time)
+            bool firstSend = (lastValue < 0.0f);
+            bool valueChanged = fabsf(currentValue - lastValue) > 0.001f;
+            
+            if (firstSend || valueChanged) {
+                int full;
+                
+                // Check if this fader is in Note mode
+                if (a->faderNoteSettings[i].displayMode == 1) {
+                    // Note mode: snap to active note and use that as the value (0-127)
+                    uint8_t noteValue = (uint8_t)a->snapToActiveNote(currentValue, a->faderNoteSettings[i]);
+                    full = noteValue << 7;  // Shift to MSB position for 14-bit
+                } else {
+                    // Number mode: use full 0.0-1.0 resolution, scale directly to 14-bit (0-16383)
+                    // Add deadzone at min/max for reliable endpoint hitting
+                    float scaledValue = currentValue;
+                    bool isAtEndpoint = false;
                     
-                    uint8_t channel = (triggerMidiChannel - 1) & 0x0F;
+                    if (scaledValue < 0.01f) {
+                        scaledValue = 0.0f;      // Snap to min
+                        isAtEndpoint = true;
+                    }
+                    if (scaledValue > 0.99f) {
+                        scaledValue = 1.0f;      // Snap to max
+                        isAtEndpoint = true;
+                    }
                     
-                    // Send CC value 127 when trigger fires
-                    NT_sendMidi3ByteMessage(
-                        kNT_destinationInternal,
-                        0xB0 | channel, // CC message on configured channel
-                        ccNumber,       // CC number
-                        127             // CC value (full on)
-                    );
+                    // Sticky endpoints: hold min/max for 3 frames to ensure registration
+                    if (isAtEndpoint) {
+                        a->endpointHoldCounter[i] = 3;
+                    }
+                    
+                    full = (int)(scaledValue * 16383.0f + 0.5f);
+                    if (full > 16383) full = 16383;
+                    if (full < 0) full = 0;
+                }
+                
+                uint8_t msb = (uint8_t)(full >> 7);
+                uint8_t lsb = (uint8_t)(full & 0x7F);
+                
+                // CC mapping: fader N (1-32) -> CC (N-1) for MSB, CC (N-1+32) for LSB
+                uint8_t msbCC = i;           // CC 0-31
+                uint8_t lsbCC = i + 32;      // CC 32-63
+                
+                // Clamp
+                if (msb > 127) msb = 127;
+                if (lsb > 127) lsb = 127;
+                
+                // Send MSB or LSB based on phase (order doesn't matter to disting)
+                if (a->send14bitPhase) {
+                    NT_sendMidi3ByteMessage(midiDest, status, lsbCC, lsb);
+                } else {
+                    NT_sendMidi3ByteMessage(midiDest, status, msbCC, msb);
+                }
+                
+                // Update last sent value after both phases complete
+                if (a->send14bitPhase) {
+                    a->lastMidiValues[i] = currentValue;
+                }
+            } else if (a->endpointHoldCounter[i] > 0) {
+                // Not changed, but still holding endpoint - keep sending
+                a->endpointHoldCounter[i]--;
+                
+                // Re-send the last value
+                float heldValue = a->lastMidiValues[i];
+                int full = (int)(heldValue * 16383.0f + 0.5f);
+                if (full > 16383) full = 16383;
+                if (full < 0) full = 0;
+                
+                uint8_t msb = (uint8_t)(full >> 7);
+                uint8_t lsb = (uint8_t)(full & 0x7F);
+                
+                uint8_t msbCC = i;
+                uint8_t lsbCC = i + 32;
+                
+                if (msb > 127) msb = 127;
+                if (lsb > 127) lsb = 127;
+                
+                if (a->send14bitPhase) {
+                    NT_sendMidi3ByteMessage(midiDest, status, lsbCC, lsb);
+                } else {
+                    NT_sendMidi3ByteMessage(midiDest, status, msbCC, msb);
                 }
             }
         }
         
-        // Countdown trigger pulses every buffer
-        if (a->gateTriggerCounter[track] > 0) {
-            a->gateTriggerCounter[track] -= numFrames;  // Countdown by buffer size
-            if (a->gateTriggerCounter[track] < 0) {
-                a->gateTriggerCounter[track] = 0;
-            }
-        }
-        
-        // Output trigger pulse
-        if (outputBus > 0 && outputBus <= 28) {
-            bool triggerActive = a->gateTriggerCounter[track] > 0;
-            
-            // Write to all frames in the output bus
-            float* outBus = busFrames + ((outputBus - 1) * numFrames);
-            for (int frame = 0; frame < numFrames; frame++) {
-                outBus[frame] = triggerActive ? 5.0f : 0.0f;  // 5V trigger
-            }
-        }
+        // Toggle phase for next step
+        a->send14bitPhase = !a->send14bitPhase;
     }
 }
 
 bool draw(_NT_algorithm* self) {
-    VSeq* a = (VSeq*)self;
+    VFader* a = (VFader*)self;
+    a->uiActive = true;
+    a->uiActiveTicks = 2; // keep active for a couple of steps to capture immediate controls
     
-    // Clear screen
-    NT_drawShapeI(kNT_rectangle, 0, 0, 256, 64, 0);  // Black background
+    // Validate bounds
+    if (a->page < 1 || a->page > 4) a->page = clampU8(a->page, 1, 4);
+    if (a->sel < 1 || a->sel > 32) a->sel = clampU8(a->sel, 1, 32);
     
-    int seq = a->selectedSeq;  // 0-2 for CV, 3 for gate
-    
-    // If seq 3 (4th sequencer), draw gate sequencer instead
-    if (seq == 3) {
-        // Show track and step info
-        char info[32];
-        snprintf(info, sizeof(info), "T%d S%d", a->selectedTrack + 1, a->selectedStep + 1);
-        NT_drawText(0, 0, info, 255);
+    // NAME EDIT MODE DISPLAY
+    if (a->nameEditMode) {
+        // Bounds check nameEditFader to prevent display corruption
+        if (a->nameEditFader > 31) a->nameEditFader = 0;
         
-        // Show gate state for current selection
-        bool currentGateState = a->gateSteps[a->selectedTrack][a->selectedStep];
-        NT_drawText(60, 0, currentGateState ? "ON" : "off", currentGateState ? 255 : 100);
+        VFader::FaderNoteSettings& settings = a->faderNoteSettings[a->nameEditFader];
         
-        // Draw page indicators at top - same as CV sequencers
-        // 4 lines representing the 4 sequencer pages (CV1, CV2, CV3, Gate)
-        int pageBarY = 4;
-        int pageBarWidth = 64;  // 256px / 4 = 64px per sequencer
-        for (int i = 0; i < 4; i++) {
-            int barStartX = (i * pageBarWidth) + 4;
-            int barEndX = ((i + 1) * pageBarWidth) - 4;
-            int brightness = (i == seq) ? 255 : 80;  // Bright if current page, dim otherwise
-            NT_drawShapeI(kNT_line, barStartX, pageBarY, barEndX, pageBarY, brightness);
-        }
-        
-        // 6 tracks × 32 steps
-        // Screen: 256px wide, 64px tall
-        // Step size: 256/32 = 8px per step
-        // Track height: (64-8)/6 = ~9px per track (leave 8px for title)
-        
-        int stepWidth = 8;
-        int trackHeight = 9;
-        int startY = 8;
-        
-        for (int track = 0; track < 6; track++) {
-            int y = startY + (track * trackHeight);
+        if (a->nameEditPage == 0) {
+            // PAGE 1: NAME/CATEGORY EDITING
             
-            // Get track parameters (now 9 params per track, not 10)
-            int lenParam = kParamGate1Length + (track * 9);
-            int splitParam = kParamGate1SplitPoint + (track * 9);
-            int trackLength = self->v[lenParam];
-            int splitPoint = self->v[splitParam];
-            int currentStep = a->gateCurrentStep[track];
+            // Title centered
+            NT_drawText(128, 8, "EDIT NAME", 15, kNT_textCentre);
             
-            // Highlight selected track with a line on the left
-            if (track == a->selectedTrack) {
-                NT_drawShapeI(kNT_line, 0, y, 0, y + trackHeight - 1, 255);
-                NT_drawShapeI(kNT_line, 1, y, 1, y + trackHeight - 1, 255);
-            }
+            char* name = a->faderNames[a->nameEditFader];
+            int yName = 28;
+            int yCat = 42;
+            int xStart = 40;
             
-            // Draw split point line if active
-            if (splitPoint > 0 && splitPoint < trackLength) {
-                int splitX = splitPoint * stepWidth;
-                NT_drawShapeI(kNT_line, splitX, y, splitX, y + trackHeight - 1, 200);
-            }
+            // "Name" label
+            NT_drawText(8, yName, "Name", 15);
             
-            for (int step = 0; step < 32; step++) {
-                int x = step * stepWidth;
-                
-                // Determine if this step is active (within track length)
-                bool isActive = (step < trackLength);
-                
-                // Only draw steps that are within the track length
-                if (!isActive) continue;  // Skip inactive steps entirely
-                
-                // Get gate state for this track/step
-                bool hasGate = a->gateSteps[track][step];
-                
-                // Calculate center position
-                int centerX = x + (stepWidth / 2);
-                int centerY = y + (trackHeight / 2);
-                
-                // If gate is active, draw filled 5x5 square
-                if (hasGate) {
-                    // Draw filled 5x5 square (very obvious)
-                    NT_drawShapeI(kNT_rectangle, centerX - 2, centerY - 2, centerX + 2, centerY + 2, 255);
-                } else {
-                    // Just draw center pixel for inactive steps
-                    NT_drawShapeI(kNT_rectangle, centerX, centerY, centerX, centerY, 255);
-                }
-                
-                // Draw small box below the current playing step
-                if (step == currentStep) {
-                    NT_drawShapeI(kNT_rectangle, centerX, centerY + 3, centerX + 1, centerY + 3, 255);
-                }
-                
-                // Highlight selected step (for editing)
-                if (step == a->selectedStep && track == a->selectedTrack) {
-                    NT_drawShapeI(kNT_line, centerX - 3, centerY - 3, centerX + 3, centerY - 3, 200);  // Top
-                    NT_drawShapeI(kNT_line, centerX - 3, centerY + 3, centerX + 3, centerY + 3, 200);  // Bottom
-                    NT_drawShapeI(kNT_line, centerX - 3, centerY - 3, centerX - 3, centerY + 3, 200);  // Left
-                    NT_drawShapeI(kNT_line, centerX + 3, centerY - 3, centerX + 3, centerY + 3, 200);  // Right
+            // Name field (chars 0-5)
+            for (int i = 0; i < 6; i++) {
+                char c = name[i];
+                if (c == 0) c = ' ';
+                char buf[2] = {c, 0};
+                int x = xStart + i * 10;  // 8px char width + 2px spacing
+                NT_drawText(x, yName, buf, 15);
+                if (i == a->nameEditPos) {
+                    NT_drawShapeI(kNT_line, x, yName + 3, x + 7, yName + 3, 15);
                 }
             }
+            
+            // "Cat" label
+            NT_drawText(8, yCat, "Cat", 15);
+            
+            // Category field (chars 6-10, displayed as positions 0-4)
+            for (int i = 6; i < 11; i++) {
+                char c = name[i];
+                if (c == 0) c = ' ';
+                char buf[2] = {c, 0};
+                int x = xStart + (i - 6) * 10;
+                NT_drawText(x, yCat, buf, 15);
+                if (i == a->nameEditPos) {
+                    NT_drawShapeI(kNT_line, x, yCat + 3, x + 7, yCat + 3, 15);
+                }
+            }
+        } else if (a->nameEditPage == 1) {
+            // PAGE 2: FADER FUNCTION EDITING
+            
+            // Title centered
+            NT_drawText(128, 8, "FADER FUNCTION EDIT", 15, kNT_textCentre);
+            
+            // Left side: Note parameters
+            int xLabel = 8;
+            int xValue = 79;  // Moved 3px to the right (was 76)
+            int yPos = 20;
+            int yStep = 10;
+            
+            // Display Mode
+            NT_drawText(xLabel, yPos, "Display", (a->nameEditSettingPos == 0) ? 15 : 5);
+            const char* displayStr = (settings.displayMode == 0) ? "Number" : "Note";
+            NT_drawText(xValue, yPos, displayStr, (a->nameEditSettingPos == 0) ? 15 : 5);
+            yPos += yStep;
+            
+            // Sharp/Flat - dim to 1 when Display is Number mode
+            int accidentalLabelColor = (a->nameEditSettingPos == 1) ? 15 : 5;
+            int accidentalValueColor = (a->nameEditSettingPos == 1) ? 15 : 5;
+            // Override to very dark if Display is Number mode (not applicable)
+            if (settings.displayMode == 0) {
+                accidentalLabelColor = 1;
+                accidentalValueColor = 1;
+            }
+            NT_drawText(xLabel, yPos, "Accidental", accidentalLabelColor);
+            const char* sharpFlatStr = (settings.sharpFlat == 0) ? "Sharp" : "Flat";
+            NT_drawText(xValue, yPos, sharpFlatStr, accidentalValueColor);
+            yPos += yStep;
+            
+            // Top Value (displays as note name in Note mode, number in Number mode)
+            NT_drawText(xLabel, yPos, "Top Value", (a->nameEditSettingPos == 2) ? 15 : 5);
+            char topValStr[8];
+            if (settings.displayMode == 1) {
+                // Note mode: show note name
+                a->getMidiNoteName(settings.topMidi, settings.sharpFlat, topValStr, sizeof(topValStr));
+            } else {
+                // Number mode: show value 0-100
+                snprintf(topValStr, sizeof(topValStr), "%d", settings.topValue);
+            }
+            NT_drawText(xValue, yPos, topValStr, (a->nameEditSettingPos == 2) ? 15 : 5);
+            yPos += yStep;
+            
+            // Bottom Value (displays as note name in Note mode, number in Number mode)
+            NT_drawText(xLabel, yPos, "Bottom Value", (a->nameEditSettingPos == 3) ? 15 : 5);
+            char botValStr[8];
+            if (settings.displayMode == 1) {
+                // Note mode: show note name
+                a->getMidiNoteName(settings.bottomMidi, settings.sharpFlat, botValStr, sizeof(botValStr));
+            } else {
+                // Number mode: show value 0-100
+                snprintf(botValStr, sizeof(botValStr), "%d", settings.bottomValue);
+            }
+            NT_drawText(xValue, yPos, botValStr, (a->nameEditSettingPos == 3) ? 15 : 5);
+            
+            // Right side: Note Mask (3 rows of 4 notes)
+            static const char* noteNamesSharp[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+            static const char* noteNamesFlat[] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
+            const char** noteNames = (settings.sharpFlat == 0) ? noteNamesSharp : noteNamesFlat;
+            
+            NT_drawText(140, 20, "Mask:", 15);
+            
+            int xMaskStart = 140;
+            int yMaskStart = 30;
+            int xSpacing = 18;
+            int ySpacing = 10;
+            
+            // 3 rows of 4 notes each
+            for (int row = 0; row < 3; row++) {
+                for (int col = 0; col < 4; col++) {
+                    int noteIdx = row * 4 + col;
+                    int x = xMaskStart + col * xSpacing;
+                    int y = yMaskStart + row * ySpacing;
+                    
+                    bool isActive = (settings.chromaticScale[noteIdx] == 1);
+                    bool isSelected = (a->nameEditSettingPos == 4 + noteIdx);  // Mask starts at position 4
+                    
+                    if (isActive) {
+                        NT_drawText(x, y, noteNames[noteIdx], isSelected ? 15 : 5);
+                    } else {
+                        NT_drawText(x, y, "-", isSelected ? 15 : 5);
+                    }
+                }
+            }
+        } else if (a->nameEditPage == 2) {
+            // PAGE 3: MACRO FADER SETTINGS
+            
+            // Title centered
+            NT_drawText(128, 8, "MACRO FADER", 15, kNT_textCentre);
+            
+            int xLabel = 8;
+            int xValue = 89;  // Moved 10px to the right (was 79)
+            int yPos = 25;
+            int yStep = 12;
+            
+            // Control Count (0-31, with dynamic max)
+            NT_drawText(xLabel, yPos, "Control Count", (a->nameEditSettingPos == 0) ? 15 : 5);
+            char countStr[8];
+            if (settings.controlAllCount == 0) {
+                snprintf(countStr, sizeof(countStr), "Off");
+            } else {
+                snprintf(countStr, sizeof(countStr), "%d", settings.controlAllCount);
+            }
+            NT_drawText(xValue, yPos, countStr, (a->nameEditSettingPos == 0) ? 15 : 5);
+            yPos += yStep;
+            
+            // Control Mode (Absolute/Relative)
+            NT_drawText(xLabel, yPos, "Control Mode", (a->nameEditSettingPos == 1) ? 15 : 5);
+            const char* modeStr = (settings.controlAllMode == 0) ? "Absolute" : "Relative";
+            NT_drawText(xValue, yPos, modeStr, (a->nameEditSettingPos == 1) ? 15 : 5);
+            yPos += yStep;
+            
+            // Help text
+            NT_drawText(8, yPos + 5, "Controls faders to the right", 5, kNT_textLeft, kNT_textTiny);
+            NT_drawText(8, yPos + 12, "At 50% = reference values", 5, kNT_textLeft, kNT_textTiny);
         }
         
-        return true;  // Suppress default parameter drawing
+        // Page indicator and exit on right side, close together
+        const char* pageStr;
+        if (a->nameEditPage == 0) pageStr = "Page 1/3";
+        else if (a->nameEditPage == 1) pageStr = "Page 2/3";
+        else pageStr = "Page 3/3";
+        NT_drawText(250, 61, pageStr, 5, kNT_textRight, kNT_textTiny);
+        NT_drawText(250, 55, "R:Exit", 5, kNT_textRight, kNT_textTiny);
+        
+        return true;
     }
     
-    // Original CV sequencer view for seq 0-2
-    // Get parameters for current sequencer
-    int stepParam = kParamSeq1StepCount + (seq * 6);
-    int splitParam = kParamSeq1SplitPoint + (seq * 6);
-    int stepCount = self->v[stepParam];
-    int splitPoint = self->v[splitParam];
+    // NORMAL MODE DISPLAY
     
-    // Draw step view
-    char title[16];
-    snprintf(title, sizeof(title), "SEQ %d", seq + 1);
-    NT_drawText(0, 0, title, 255);
-    
-    // Draw 32 steps in 2 rows of 16
-    // Each step gets 3 skinny bars for 3 outputs
-    // Screen is 256 wide, divided into 2 rows of 16 steps
-    
-    int barWidth = 3;   // Width of each bar
-    int barSpacing = 1; // Space between bars within a step
-    int barsWidth = (3 * barWidth) + (2 * barSpacing);  // Width of 3 bars: 3*3 + 2*1 = 11
-    int stepGap = 4;    // Gap after each step (reduced to make room for dots)
-    int stepWidth = barsWidth + stepGap;  // Total width per step: 11 + 4 = 15
-    int startY = 10;    // Start below title
-    int rowHeight = 26; // Height of each row
-    int maxBarHeight = 22; // Maximum bar height
-    
-    for (int step = 0; step < 32; step++) {
-        int row = step / 16;     // 0 or 1
-        int col = step % 16;     // 0-15
+    // Fader bank layout: 8 vertical "faders" with names and values
+    const int colWidth = 28;     // Squeeze columns closer together
+    const int faderHeight = 45;  // Shorter fader
+    const int faderTop = 12;     // Start lower to fit numbers on top
+    const int faderBottom = 57;  // Stop earlier
+
+    int localSel = ((a->sel - 1) % 8) + 1;
+    int leftLocal = (localSel > 1) ? (localSel - 1) : 1;
+    int rightLocal = (localSel < 8) ? (localSel + 1) : 8;
+
+    int baseIndex = (a->page - 1) * 8;
+    for (int i = 1; i <= 8; ++i) {
+        int idx = baseIndex + i; // 1..64
+        int colStart = (i - 1) * colWidth;
+        int xCenter = colStart + (colWidth / 2);
+
+        // Read value from internal faders array (0-indexed, so idx-1)
+        float v = a->internalFaders[idx - 1];
+        if (v < 0.0f) v = 0.0f; 
+        else if (v > 1.0f) v = 1.0f;
         
-        int x = col * stepWidth;
-        int y = startY + (row * rowHeight);
+        // Check if fader is in pickup mode (for visual indication)
+        bool isPickup = a->inPickupMode[idx - 1];
         
-        // Determine if this step is active
-        bool isActive = (step < stepCount);
-        int brightness = isActive ? 255 : 40;  // Dim inactive steps
+        bool isSel = (i == localSel);
         
-        // Draw 3 vertical bars for this step
-        for (int out = 0; out < 3; out++) {
-            int16_t value = a->stepValues[seq][step][out];
-            // Convert int16_t (-32768 to 32767) to 0.0-1.0
-            float normalized = (value + 32768.0f) / 65535.0f;
-            // Convert to bar height (1 to maxBarHeight pixels)
-            int barHeight = (int)(normalized * maxBarHeight);
-            if (barHeight < 1) barHeight = 1;
+        // Draw vertical fader bar (skinnier - 12px wide, centered in column)
+        int faderX = colStart + 8;  // Left edge of fader (leave space for name on left)
+        int faderWidth = 12;        // Skinnier fader width
+        
+        // Calculate filled height based on value
+        int fillHeight = (int)(v * faderHeight);
+        
+        // Draw fader background (empty part)
+        NT_drawShapeI(kNT_box, faderX, faderTop, faderX + faderWidth, faderBottom, 7);
+        
+        // Calculate tick mark positions
+        int faderMidY = faderTop + (faderHeight / 2);
+        int fader25Y = faderTop + (faderHeight * 3 / 4);  // 25% from top = 75% from bottom
+        int fader75Y = faderTop + (faderHeight / 4);      // 75% from top = 25% from bottom
+        
+        // Draw filled part of fader as solid box
+        int fillTop = faderBottom;
+        if (fillHeight > 0) {
+            int fillColor = isSel ? 15 : 10;
+            fillTop = faderBottom - fillHeight;
+            // Draw solid filled rectangle
+            NT_drawShapeI(kNT_rectangle, faderX + 1, fillTop, faderX + faderWidth - 1, faderBottom - 1, fillColor);
+        }
+        
+        // Draw tick marks at 25%, 50%, 75% - invert color if covered by fill
+        // 50% mark - lines (4px) on left and right
+        int tick50Color = (faderMidY >= fillTop) ? 0 : 10;  // Black if filled, bright if empty
+        NT_drawShapeI(kNT_line, faderX, faderMidY, faderX + 3, faderMidY, tick50Color);
+        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, faderMidY, faderX + faderWidth, faderMidY, tick50Color);
+        
+        // 25% mark - same length lines (4px)
+        int tick25Color = (fader25Y >= fillTop) ? 0 : 10;
+        NT_drawShapeI(kNT_line, faderX, fader25Y, faderX + 3, fader25Y, tick25Color);
+        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, fader25Y, faderX + faderWidth, fader25Y, tick25Color);
+        
+        // 75% mark - same length lines (4px)
+        int tick75Color = (fader75Y >= fillTop) ? 0 : 10;
+        NT_drawShapeI(kNT_line, faderX, fader75Y, faderX + 3, fader75Y, tick75Color);
+        NT_drawShapeI(kNT_line, faderX + faderWidth - 3, fader75Y, faderX + faderWidth, fader75Y, tick75Color);
+
+        
+        // Value at TOP - 1px above fader bar
+        int nameColor = isSel ? 15 : 7;
+        VFader::FaderNoteSettings& faderSettings = a->faderNoteSettings[idx - 1];
+        
+        if (faderSettings.displayMode == 1) {
+            // Note mode - display note name with scale snapping
+            int midiNote = a->snapToActiveNote(v, faderSettings);
             
-            int barX = x + (out * (barWidth + barSpacing));
-            int barBottomY = y + maxBarHeight;
-            int barTopY = barBottomY - barHeight;
+            // Get note name
+            char noteBuf[8];
+            a->getMidiNoteName(midiNote, faderSettings.sharpFlat, noteBuf, sizeof(noteBuf));
+            NT_drawText(xCenter + 3, faderTop - 2, noteBuf, nameColor, kNT_textCentre, kNT_textNormal);
+        } else {
+            // Number mode - display scaled value (respecting bottomValue/topValue range)
+            int scaledValue = a->snapToValueRange(v, faderSettings);
+            char valBuf[4];
+            snprintf(valBuf, sizeof(valBuf), "%d", scaledValue);
             
-            // Draw bar (filled rectangle from top to bottom)
-            NT_drawShapeI(kNT_rectangle, barX, barTopY, barX + barWidth - 1, barBottomY, brightness);
-        }
-        
-        // Draw step indicator dot if this is the current step
-        if (step == a->currentStep[seq]) {
-            // Draw more visible indicator above the step (2x2 box)
-            int dotX = x + (barWidth + barSpacing);  // Above middle bar
-            NT_drawShapeI(kNT_rectangle, dotX, y - 3, dotX + barWidth - 1, y - 2, 255);
-            NT_drawShapeI(kNT_rectangle, dotX, y - 2, dotX + barWidth - 1, y - 1, 255);
-        }
-        
-        // Draw selection underline if this is the selected step
-        if (step == a->selectedStep) {
-            NT_drawShapeI(kNT_line, x, y + maxBarHeight + 2, x + barsWidth - 1, y + maxBarHeight + 2, 255);
-        }
-        
-        // Draw percentage dots in the gap between steps
-        if (col < 15) {  // Don't draw after the last step in each row
-            int dotX = x + barsWidth + 2;  // Start of gap area (moved 1px right)
-            // 4 dots at 25%, 50%, 75%, 100% of bar height
-            int dot25Y = y + maxBarHeight - (maxBarHeight / 4);
-            int dot50Y = y + maxBarHeight - (maxBarHeight / 2);
-            int dot75Y = y + maxBarHeight - (3 * maxBarHeight / 4);
-            int dot100Y = y;
+            // Draw main value
+            NT_drawText(xCenter + 3, faderTop - 2, valBuf, nameColor, kNT_textCentre, kNT_textNormal);
             
-            NT_drawShapeI(kNT_rectangle, dotX, dot25Y, dotX, dot25Y, 128);
-            NT_drawShapeI(kNT_rectangle, dotX, dot50Y, dotX, dot50Y, 128);
-            NT_drawShapeI(kNT_rectangle, dotX, dot75Y, dotX, dot75Y, 128);
-            NT_drawShapeI(kNT_rectangle, dotX, dot100Y, dotX, dot100Y, 128);
+            // Add tiny decimal digit (.0-.9) to the right using pixels
+            // Calculate decimal part from full resolution value
+            float fullValue = v * 100.0f;  // 0.0 - 100.0
+            int decimalDigit = ((int)(fullValue * 10.0f)) % 10;  // Extract tenths place
+            
+            // Position for decimal digit - to the right of main value
+            int mainWidth = (scaledValue >= 100) ? 18 : (scaledValue >= 10) ? 12 : 6;
+            int decX = xCenter + 3 + (mainWidth / 2) + 1;  // Right edge + 1px spacing
+            int decY = faderTop - 1;  // Align with top of main value
+            
+            // Draw the decimal digit as a tiny 3x5 pixel pattern
+            // Simple patterns for 0-9
+            switch (decimalDigit) {
+                case 0: // O shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_point, decX, decY+1, decX, decY+1, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+1, decX+2, decY+1, nameColor);
+                    NT_drawShapeI(kNT_point, decX, decY+2, decX, decY+2, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_line, decX, decY+3, decX+2, decY+3, nameColor);
+                    break;
+                case 1: // I shape
+                    NT_drawShapeI(kNT_line, decX+1, decY, decX+1, decY+3, nameColor);
+                    break;
+                case 2: // 2 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+1, decX+2, decY+1, nameColor);
+                    NT_drawShapeI(kNT_line, decX, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_point, decX, decY+3, decX, decY+3, nameColor);
+                    break;
+                case 3: // 3 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_line, decX+1, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+1, decX+2, decY+1, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+3, decX+2, decY+3, nameColor);
+                    break;
+                case 4: // 4 shape
+                    NT_drawShapeI(kNT_point, decX, decY, decX, decY+1, nameColor);
+                    NT_drawShapeI(kNT_line, decX, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_line, decX+2, decY, decX+2, decY+3, nameColor);
+                    break;
+                case 5: // 5 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_point, decX, decY+1, decX, decY+1, nameColor);
+                    NT_drawShapeI(kNT_line, decX, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+3, decX+2, decY+3, nameColor);
+                    break;
+                case 6: // 6 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX, decY+3, nameColor);
+                    NT_drawShapeI(kNT_line, decX, decY+2, decX+2, decY+2, nameColor);
+                    NT_drawShapeI(kNT_point, decX+2, decY+3, decX+2, decY+3, nameColor);
+                    break;
+                case 7: // 7 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_line, decX+2, decY, decX+2, decY+3, nameColor);
+                    break;
+                case 8: // 8 shape
+                    NT_drawShapeI(kNT_rectangle, decX, decY, decX+2, decY+3, nameColor);
+                    break;
+                case 9: // 9 shape
+                    NT_drawShapeI(kNT_line, decX, decY, decX+2, decY, nameColor);
+                    NT_drawShapeI(kNT_point, decX, decY+1, decX, decY+1, nameColor);
+                    NT_drawShapeI(kNT_line, decX+2, decY, decX+2, decY+3, nameColor);
+                    break;
+            }
         }
         
-        // Draw triangle between last step of first section and first step of second section
-        if (step == (splitPoint - 1) && splitPoint > 0 && splitPoint < stepCount) {
-            int boxX = x + barsWidth + 1;  // In the gap after this step
-            int boxY = y + maxBarHeight + 3;  // Below the bars
-            // Draw small 2x2 box
-            NT_drawShapeI(kNT_rectangle, boxX, boxY, boxX + 1, boxY + 1, 255);
+        // Pickup mode indicator - small line sticking out right side at locked value position (2px long, 3px tall)
+        // Only show if there's actually a mismatch (physical != internal)
+        if (isPickup) {
+            float lockedValue = a->internalFaders[idx - 1];
+            float physicalPos = a->physicalFaderPos[idx - 1];
+            float mismatch = fabsf(physicalPos - lockedValue);
+            
+            // Only draw the line if there's a meaningful mismatch (>2%)
+            if (mismatch > 0.02f) {
+                int lockY = faderBottom - 1 - (int)(lockedValue * faderHeight);
+                int lineStartX = faderX + faderWidth;
+                int lineEndX = lineStartX + 2;  // 2px line extending to the right
+                // Draw 3 lines for 3px height (centered)
+                NT_drawShapeI(kNT_line, lineStartX, lockY - 1, lineEndX, lockY - 1, 15);
+                NT_drawShapeI(kNT_line, lineStartX, lockY, lineEndX, lockY, 15);
+                NT_drawShapeI(kNT_line, lineStartX, lockY + 1, lineEndX, lockY + 1, 15);
+            }
+        }
+        
+        // Draw underline indicators below fader (thicker 3px and 2px wider each direction = 4px total)
+        int underlineY = faderBottom + 2;
+        int underlineStartX = faderX - 4;
+        int underlineEndX = faderX + faderWidth + 4;
+        
+        // Check pot control setting
+        int potControl = (int)(self->v[kParamPotControl] + 0.5f);
+        
+        if (isSel) {
+            // Solid line for active fader (3px thick)
+            NT_drawShapeI(kNT_line, underlineStartX, underlineY, underlineEndX, underlineY, 15);
+            NT_drawShapeI(kNT_line, underlineStartX, underlineY + 1, underlineEndX, underlineY + 1, 15);
+            NT_drawShapeI(kNT_line, underlineStartX, underlineY + 2, underlineEndX, underlineY + 2, 15);
+        } else if ((i == localSel - 1 || i == localSel + 1) && potControl == 0) {
+            // Dotted line for adjacent faders (3px thick, draw every other pixel)
+            // Only show if pot control is ON (0)
+            for (int dotX = underlineStartX; dotX <= underlineEndX; dotX += 2) {
+                NT_drawShapeI(kNT_line, dotX, underlineY, dotX, underlineY, 7);
+                NT_drawShapeI(kNT_line, dotX, underlineY + 1, dotX, underlineY + 1, 7);
+                NT_drawShapeI(kNT_line, dotX, underlineY + 2, dotX, underlineY + 2, 7);
+            }
+        }
+        
+        // Macro/Child indicator on right side of fader
+        if (faderSettings.controlAllCount > 0) {
+            // This is a macro fader - show "M"
+            int indicatorX = faderX + faderWidth + 2;
+            int indicatorY = faderTop + 4;
+            NT_drawText(indicatorX, indicatorY, "M", 10, kNT_textLeft, kNT_textTiny);
+        } else {
+            // Check if this is a child of any macro fader
+            for (int m = 0; m < idx - 1; m++) {
+                if (a->faderNoteSettings[m].controlAllCount > 0) {
+                    int childCount = a->faderNoteSettings[m].controlAllCount;
+                    int firstChild = m + 1;
+                    int lastChild = m + childCount;
+                    if ((idx - 1) >= firstChild && (idx - 1) <= lastChild) {
+                        // This fader is a child - show "C"
+                        int indicatorX = faderX + faderWidth + 2;
+                        int indicatorY = faderTop + 4;
+                        NT_drawText(indicatorX, indicatorY, "C", 10, kNT_textLeft, kNT_textTiny);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Draw name vertically on LEFT side - 0px spacing between chars (tighter fit for 6 chars)
+        const char* nameStr = a->faderNames[idx - 1];
+        int nameLen = 0;
+        for (int j = 0; j < 12 && nameStr[j] != 0; j++) nameLen++;
+        if (nameLen > 6) nameLen = 6;  // Limit to 6 chars for display
+        
+        if (nameLen > 0) {
+            int nameX = colStart + 1;  // Position name on left side of column
+            int nameStartY = faderTop + 5;  // Moved down 6px from previous position (was -1, now +5)
+            
+            for (int charIdx = 0; charIdx < nameLen; charIdx++) {
+                char buf[2] = {nameStr[charIdx], 0};
+                int charY = nameStartY + charIdx * 8;  // 8px char height + 0px spacing
+                if (charY >= -2 && charY <= 63) {  // Allow full range to bottom of screen
+                    NT_drawText(nameX, charY, buf, nameColor, kNT_textLeft, kNT_textNormal);
+                }
+            }
         }
     }
+
+    // Right side display area (no box, just content)
+    int rightAreaX = 224;
     
-    // Draw short separator lines at top and bottom of screen between groups of 4 steps
-    // Between steps 4-5, 8-9, 12-13
-    int separatorY1 = 0;  // Very top of screen
-    int separatorY2 = 63; // Very bottom of screen
-    int x1 = 4 * stepWidth - (stepGap / 2);
-    int x2 = 8 * stepWidth - (stepGap / 2);
-    int x3 = 12 * stepWidth - (stepGap / 2);
+    // Top: Large page number with "P" prefix - aligned with F below
+    char pageBuf[4];
+    snprintf(pageBuf, sizeof(pageBuf), "P%d", a->page);
+    NT_drawText(rightAreaX, 20, pageBuf, 15, kNT_textLeft, kNT_textLarge);  // Was rightAreaX + 8, now rightAreaX to align with F
     
-    NT_drawShapeI(kNT_line, x1, separatorY1, x1, separatorY1 + 3, 128);
-    NT_drawShapeI(kNT_line, x1, separatorY2 - 3, x1, separatorY2, 128);
-    NT_drawShapeI(kNT_line, x2, separatorY1, x2, separatorY1 + 3, 128);
-    NT_drawShapeI(kNT_line, x2, separatorY2 - 3, x2, separatorY2, 128);
-    NT_drawShapeI(kNT_line, x3, separatorY1, x3, separatorY1 + 3, 128);
-    NT_drawShapeI(kNT_line, x3, separatorY2 - 3, x3, separatorY2, 128);
+    // Fader number under page number - large with "F" prefix, moved down 6px
+    int selectedFaderIdx = a->sel - 1;  // 0-31
+    int faderNumber = selectedFaderIdx + 1;  // 1-32
+    char ccBuf[8];
+    snprintf(ccBuf, sizeof(ccBuf), "F%d", faderNumber);
+    NT_drawText(rightAreaX, 41, ccBuf, 15, kNT_textLeft, kNT_textLarge);  // Was 38, now 38 + 3 = 41
     
-    // Draw page indicators at the very top (above step view)
-    // 4 bars representing 4 sequencers, centered above groups of 4 steps
-    int pageBarY = 4;  // Just below the top separator lines
-    int groupWidth = 4 * stepWidth;  // Width of 4 steps including gaps
-    for (int i = 0; i < 4; i++) {
-        int barStartX = (i * groupWidth) + (stepGap / 2);
-        int barEndX = ((i + 1) * groupWidth) - (stepGap / 2) - stepGap;
-        int brightness = (i == seq) ? 255 : 80;  // Bright if active, dim otherwise
-        NT_drawShapeI(kNT_line, barStartX, pageBarY, barEndX, pageBarY, brightness);
+    // Category (chars 6-10) - moved left 3px and down 3px from previous position
+    const char* selectedName = a->faderNames[selectedFaderIdx];
+    int catY = 53;  // Was 50, now 50 + 3 = 53
+    
+    // Display category with normal font
+    char catBuf[6] = {0};
+    for (int i = 0; i < 5; i++) {
+        catBuf[i] = selectedName[6 + i];
+        if (catBuf[i] == 0) catBuf[i] = ' ';
     }
+    NT_drawText(rightAreaX - 5, catY, catBuf, 15, kNT_textLeft, kNT_textNormal);  // Changed back to kNT_textNormal
     
-    // Draw current step number in top right corner
-    char stepNum[4];
-    snprintf(stepNum, sizeof(stepNum), "%d", a->selectedStep + 1);
-    NT_drawText(248, 0, stepNum, 255);
+    // Build number in bottom right corner (tiny font)
+    NT_drawText(236, 60, "B48", 15, kNT_textLeft, kNT_textTiny);
     
-    return true;  // Suppress default parameter line
+    return true; // keep suppressing default header; change to false if needed in next step
 }
 
-uint32_t hasCustomUi(_NT_algorithm* self) {
-    return kNT_potL | kNT_potC | kNT_potR | kNT_encoderL | kNT_encoderR | kNT_encoderButtonR | kNT_button4;
+uint32_t hasCustomUi(_NT_algorithm* self) { 
+    (void)self; 
+    return kNT_potL | kNT_potC | kNT_potR | kNT_encoderL | kNT_encoderR; 
 }
 
 void customUi(_NT_algorithm* self, const _NT_uiData& data) {
-    VSeq* a = (VSeq*)self;
+    VFader* a = (VFader*)self;
     
-    // Left encoder: select sequencer (0-2 for CV, 3 for gate)
-    if (data.encoders[0] != 0) {
-        int delta = data.encoders[0];
-        int oldSeq = a->selectedSeq;
-        a->selectedSeq += delta;
-        // Clamp to 0-3 range (no wraparound)
-        if (a->selectedSeq < 0) a->selectedSeq = 0;
-        if (a->selectedSeq > 3) a->selectedSeq = 3;
+    // Get current column (0-7) within the page
+    int currentCol = (a->sel - 1) % 8;
+    int currentFader = (a->sel - 1);  // 0-31 index
+    
+    // Detect button press (not hold) - only trigger on rising edge
+    bool leftButtonPressed = (data.controls & kNT_encoderButtonL) && !(a->lastButtonState & kNT_encoderButtonL);
+    bool rightButtonPressed = (data.controls & kNT_encoderButtonR) && !(a->lastButtonState & kNT_encoderButtonR);
+    a->lastButtonState = data.controls;
+    
+    
+    // NAME EDIT MODE
+    if (a->nameEditMode) {
+        // Right encoder: navigate between pages or edit values
+        // Limit encoder delta to prevent freeze
+        int encoderDelta = data.encoders[1];
+        if (encoderDelta > 1) encoderDelta = 1;
+        if (encoderDelta < -1) encoderDelta = -1;
         
-        // If sequencer changed, clamp selectedStep to new sequencer's length
-        if (a->selectedSeq != oldSeq) {
-            // Determine new sequencer's length
-            int newLength;
-            if (a->selectedSeq == 3) {
-                // Gate sequencer - get current track's length (9 params per track now)
-                int lenParam = kParamGate1Length + (a->selectedTrack * 9);
-                newLength = self->v[lenParam];
-                // Reset track pot catch when entering gate sequencer
-                a->trackPotCaught = false;
-            } else {
-                // CV sequencer - get step count
-                int lengthParam;
-                if (a->selectedSeq == 0) lengthParam = kParamSeq1StepCount;
-                else if (a->selectedSeq == 1) lengthParam = kParamSeq2StepCount;
-                else lengthParam = kParamSeq3StepCount;
-                newLength = self->v[lengthParam];
-            }
-            
-            // Clamp selectedStep to new length
-            if (a->selectedStep >= newLength) {
-                a->selectedStep = newLength - 1;
-            }
-        }
-    }
-    
-    // Gate sequencer mode (seq 3)
-    if (a->selectedSeq == 3) {
-        // Left pot: select track (0-5) with catch behavior
-        // Each track has a virtual position: track 0 = 0%, track 1 = 20%, ..., track 5 = 100%
-        // Pot must "catch" current track position before it can change tracks
-        if (data.controls & kNT_potL) {
-            float potValue = data.pots[0];
-            
-            // Calculate virtual position for current track (0-5 maps to 0.0-1.0)
-            float trackPosition = a->selectedTrack / 5.0f;
-            
-            // Check if pot has caught the track position (within 5% tolerance)
-            if (!a->trackPotCaught) {
-                if (fabsf(potValue - trackPosition) < 0.05f) {
-                    a->trackPotCaught = true;
-                }
-            }
-            
-            // Only allow track changes when caught
-            if (a->trackPotCaught) {
-                // Map pot to track with hysteresis to prevent flickering
-                // 0.00-0.10 = track 0, 0.10-0.30 = track 1, etc.
-                int newTrack;
-                if (potValue < 0.10f) newTrack = 0;
-                else if (potValue < 0.30f) newTrack = 1;
-                else if (potValue < 0.50f) newTrack = 2;
-                else if (potValue < 0.70f) newTrack = 3;
-                else if (potValue < 0.90f) newTrack = 4;
-                else newTrack = 5;
+        if (encoderDelta != 0) {
+            if (a->nameEditPage == 0) {
+                // PAGE 1: Editing name/category characters
+                char* name = a->faderNames[a->nameEditFader];
+                char c = name[a->nameEditPos];
                 
-                // If track changed, update selection and reset catch
-                if (newTrack != a->selectedTrack) {
-                    a->selectedTrack = newTrack;
-                    a->trackPotCaught = false;  // Must re-catch at new position
-                    
-                    // Clamp selected step to new track's length (9 params per track now)
-                    int lenParam = kParamGate1Length + (a->selectedTrack * 9);
-                    if (a->selectedStep >= self->v[lenParam]) {
-                        a->selectedStep = self->v[lenParam] - 1;
+                // Character set: A-Z (65-90), 0-9 (48-57), space (32)
+                // Array: space, 0-9, A-Z (37 total characters)
+                const char charset[] = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                const int charsetLen = 37;
+                
+                // Find current position in charset
+                int currentIdx = 0;
+                if (c == 0) c = 'A';  // Initialize if null
+                for (int i = 0; i < charsetLen; i++) {
+                    if (charset[i] == c) {
+                        currentIdx = i;
+                        break;
                     }
                 }
-            }
-        }
-        
-        // Get current track length for encoder bounds (9 params per track now)
-        int lenParam = kParamGate1Length + (a->selectedTrack * 9);
-        int trackLength = self->v[lenParam];  // 1-32
-        
-        // Right encoder: select step (0 to trackLength-1)
-        if (data.encoders[1] != 0) {
-            int delta = data.encoders[1];
-            a->selectedStep += delta;
-            
-            // Wrap around based on track length
-            if (a->selectedStep < 0) a->selectedStep = trackLength - 1;
-            if (a->selectedStep >= trackLength) a->selectedStep = 0;
-        }
-        
-        // Right encoder button: toggle gate
-        uint16_t currentEncoderRButton = data.controls & kNT_encoderButtonR;
-        uint16_t lastEncoderRButton = a->lastEncoderRButton & kNT_encoderButtonR;
-        if (currentEncoderRButton && !lastEncoderRButton) {  // Rising edge
-            // Toggle the gate
-            int track = a->selectedTrack;
-            int step = a->selectedStep;
-            a->gateSteps[track][step] = !a->gateSteps[track][step];
-            
-            // Force update by incrementing a counter to verify button is being pressed
-            a->selectedSeq = 3;  // Force redraw
-        }
-        a->lastEncoderRButton = data.controls;
-        
-        // DEBUG: Show encoder button state visually
-        if (currentEncoderRButton) {
-            // Draw indicator when button is pressed
-            NT_drawText(120, 0, "BTN", 255);
-        }
-        
-        // Ignore all other controls in gate mode
-        return;  // Skip CV sequencer controls
-    }
-    
-    // CV Sequencer mode (seq 0-2)
-    
-    // Get current sequencer's length
-    int seq = a->selectedSeq;
-    int lengthParam;
-    if (seq == 0) lengthParam = kParamSeq1StepCount;
-    else if (seq == 1) lengthParam = kParamSeq2StepCount;
-    else lengthParam = kParamSeq3StepCount;
-    
-    int seqLength = self->v[lengthParam];  // 1-32
-    
-    // Right encoder: select step (0 to seqLength-1)
-    if (data.encoders[1] != 0) {
-        int delta = data.encoders[1];
-        a->selectedStep += delta;
-        
-        // Wrap around based on sequencer length
-        if (a->selectedStep < 0) a->selectedStep = seqLength - 1;
-        if (a->selectedStep >= seqLength) a->selectedStep = 0;
-        
-        // Reset pot catch state when step changes
-        a->potCaught[0] = false;
-        a->potCaught[1] = false;
-        a->potCaught[2] = false;
-    }
-    
-    // Button 4: (currently unused - previously was ratchet/repeat mode cycling)
-    a->lastButton4State = data.controls;
-    
-    // Pots control the 3 values for the selected step with catch logic
-    if (data.controls & kNT_potL) {
-        float potValue = data.pots[0];
-        int16_t currentValue = a->stepValues[a->selectedSeq][a->selectedStep][0];
-        float currentNormalized = (currentValue + 32768) / 65535.0f;
-        
-        // Check if pot has caught the current value (within 2% tolerance)
-        if (!a->potCaught[0]) {
-            if (fabsf(potValue - currentNormalized) < 0.02f) {
-                a->potCaught[0] = true;
-            }
-        }
-        
-        // Only update if caught
-        if (a->potCaught[0]) {
-            a->stepValues[a->selectedSeq][a->selectedStep][0] = (int16_t)((potValue * 65535.0f) - 32768);
-        }
-    }
-    
-    if (data.controls & kNT_potC) {
-        float potValue = data.pots[1];
-        int16_t currentValue = a->stepValues[a->selectedSeq][a->selectedStep][1];
-        float currentNormalized = (currentValue + 32768) / 65535.0f;
-        
-        if (!a->potCaught[1]) {
-            if (fabsf(potValue - currentNormalized) < 0.02f) {
-                a->potCaught[1] = true;
-            }
-        }
-        
-        if (a->potCaught[1]) {
-            a->stepValues[a->selectedSeq][a->selectedStep][1] = (int16_t)((potValue * 65535.0f) - 32768);
-        }
-    }
-    
-    if (data.controls & kNT_potR) {
-        float potValue = data.pots[2];
-        int16_t currentValue = a->stepValues[a->selectedSeq][a->selectedStep][2];
-        float currentNormalized = (currentValue + 32768) / 65535.0f;
-        
-        if (!a->potCaught[2]) {
-            if (fabsf(potValue - currentNormalized) < 0.02f) {
-                a->potCaught[2] = true;
-            }
-        }
-        
-        if (a->potCaught[2]) {
-            a->stepValues[a->selectedSeq][a->selectedStep][2] = (int16_t)((potValue * 65535.0f) - 32768);
-        }
-    }
-}
-
-void setupUi(_NT_algorithm* self, _NT_float3& pots) {
-    VSeq* a = (VSeq*)self;
-    
-    // Only update pot positions when step changes
-    if (a->selectedStep != a->lastSelectedStep) {
-        a->lastSelectedStep = a->selectedStep;
-        for (int i = 0; i < 3; i++) {
-            int16_t value = a->stepValues[a->selectedSeq][a->selectedStep][i];
-            // Convert from int16_t to 0.0-1.0
-            pots[i] = (value + 32768) / 65535.0f;
-        }
-    }
-}
-
-void parameterChanged(_NT_algorithm* self, int parameterIndex) {
-    VSeq* a = (VSeq*)self;
-    
-    // Update debug output bus tracking when output parameters change
-    if (parameterIndex >= kParamSeq1Out1 && parameterIndex <= kParamSeq3Out3) {
-        int debugIdx = parameterIndex - kParamSeq1Out1;
-        a->debugOutputBus[debugIdx] = self->v[parameterIndex];  // Store parameter value (1-28)
-    }
-    
-    // Reset split/section parameters when step count changes
-    if (parameterIndex == kParamSeq1StepCount || 
-        parameterIndex == kParamSeq2StepCount ||
-        parameterIndex == kParamSeq3StepCount) {
-        
-        int seq = 0;
-        if (parameterIndex == kParamSeq1StepCount) seq = 0;
-        else if (parameterIndex == kParamSeq2StepCount) seq = 1;
-        else if (parameterIndex == kParamSeq3StepCount) seq = 2;
-        
-        int stepCount = self->v[parameterIndex];
-        int splitParam = kParamSeq1SplitPoint + (seq * 6);
-        int sec1Param = kParamSeq1Section1Reps + (seq * 6);
-        int sec2Param = kParamSeq1Section2Reps + (seq * 6);
-        
-        // Calculate new split point (middle of sequence)
-        int newSplit = stepCount / 2;
-        if (newSplit < 1) newSplit = 1;
-        if (newSplit >= stepCount) newSplit = stepCount - 1;
-        
-        // Reset parameters using NT_setParameterFromAudio
-        int32_t algoIdx = NT_algorithmIndex(self);
-        NT_setParameterFromAudio(algoIdx, splitParam + NT_parameterOffset(), newSplit);
-        NT_setParameterFromAudio(algoIdx, sec1Param + NT_parameterOffset(), 1);
-        NT_setParameterFromAudio(algoIdx, sec2Param + NT_parameterOffset(), 1);
-        
-        // Reset section counters
-        a->section1Counter[seq] = 0;
-        a->section2Counter[seq] = 0;
-        a->inSection2[seq] = false;
-    }
-}
-
-void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
-    VSeq* a = (VSeq*)self;
-    
-    // Save all step values as 3D array
-    stream.addMemberName("stepValues");
-    stream.openArray();
-    for (int seq = 0; seq < 3; seq++) {
-        stream.openArray();
-        for (int step = 0; step < 32; step++) {
-            stream.openArray();
-            for (int out = 0; out < 3; out++) {
-                stream.addNumber((int)a->stepValues[seq][step][out]);
-            }
-            stream.closeArray();
-        }
-        stream.closeArray();
-    }
-    stream.closeArray();
-    
-    // Save debug output bus assignments
-    stream.addMemberName("debugOutputBus");
-    stream.openArray();
-    for (int i = 0; i < 12; i++) {
-        stream.addNumber(a->debugOutputBus[i]);
-    }
-    stream.closeArray();
-    
-    // Save gate sequencer data (6 tracks × 32 steps)
-    stream.addMemberName("gateSteps");
-    stream.openArray();
-    for (int track = 0; track < 6; track++) {
-        stream.openArray();
-        for (int step = 0; step < 32; step++) {
-            stream.addNumber(a->gateSteps[track][step] ? 1 : 0);
-        }
-        stream.closeArray();
-    }
-    stream.closeArray();
-}
-
-bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
-    VSeq* a = (VSeq*)self;
-    
-    // Match "stepValues"
-    if (parse.matchName("stepValues")) {
-        int numSeqs = 0;
-        if (parse.numberOfArrayElements(numSeqs)) {
-            // Support both 3 and 4 sequencer presets (backwards compatibility)
-            int seqsToLoad = (numSeqs < 3) ? numSeqs : 3;
-            for (int seq = 0; seq < seqsToLoad; seq++) {
-                int numSteps = 0;
-                if (parse.numberOfArrayElements(numSteps)) {
-                    // Support both 16 and 32 step presets
-                    int stepsToLoad = (numSteps < 32) ? numSteps : 32;
-                    for (int step = 0; step < stepsToLoad; step++) {
-                        int numOuts = 0;
-                        if (parse.numberOfArrayElements(numOuts) && numOuts == 3) {
-                            for (int out = 0; out < 3; out++) {
-                                int value;
-                                if (parse.number(value)) {
-                                    a->stepValues[seq][step][out] = (int16_t)value;
+                
+                // Move to next/previous character
+                currentIdx += encoderDelta;
+                if (currentIdx < 0) currentIdx = charsetLen - 1;
+                if (currentIdx >= charsetLen) currentIdx = 0;
+                
+                name[a->nameEditPos] = charset[currentIdx];
+            } else if (a->nameEditPage == 1) {
+                // PAGE 2: Editing settings or mask
+                VFader::FaderNoteSettings& settings = a->faderNoteSettings[a->nameEditFader];
+                bool settingsChanged = false;
+                
+                if (a->nameEditSettingPos < 4) {
+                    // Editing settings (0-3)
+                    switch (a->nameEditSettingPos) {
+                        case 0: // Display Mode (Number/Note)
+                            settings.displayMode = (settings.displayMode == 0) ? 1 : 0;
+                            settingsChanged = true;
+                            break;
+                        case 1: // Sharp/Flat
+                            settings.sharpFlat = (settings.sharpFlat == 0) ? 1 : 0;
+                            settingsChanged = true;
+                            break;
+                        case 2: // Top Value (MIDI note in Note mode, 0-100 value in Number mode)
+                            if (settings.displayMode == 1) {
+                                // Note mode: edit MIDI note (0-127)
+                                int newMidi = (int)settings.topMidi + encoderDelta;
+                                if (newMidi < 0) newMidi = 0;
+                                if (newMidi > 127) newMidi = 127;
+                                settings.topMidi = (uint8_t)newMidi;
+                                
+                                // Validate: top can't be lower than bottom
+                                if (settings.topMidi < settings.bottomMidi) {
+                                    settings.bottomMidi = settings.topMidi;
+                                }
+                            } else {
+                                // Number mode: edit value (0-100)
+                                int newValue = (int)settings.topValue + encoderDelta;
+                                if (newValue < 0) newValue = 0;
+                                if (newValue > 100) newValue = 100;
+                                
+                                // Validate: top must be greater than bottom (not equal)
+                                if (newValue <= settings.bottomValue) {
+                                    newValue = settings.bottomValue + 1;
+                                    if (newValue > 100) newValue = 100;
+                                }
+                                settings.topValue = (uint8_t)newValue;
+                            }
+                            settingsChanged = true;
+                            break;
+                        case 3: // Bottom Value (MIDI note in Note mode, 0-100 value in Number mode)
+                            if (settings.displayMode == 1) {
+                                // Note mode: edit MIDI note (0-127)
+                                int newMidi = (int)settings.bottomMidi + encoderDelta;
+                                if (newMidi < 0) newMidi = 0;
+                                if (newMidi > 127) newMidi = 127;
+                                settings.bottomMidi = (uint8_t)newMidi;
+                                
+                                // Validate: bottom can't be higher than top
+                                if (settings.bottomMidi > settings.topMidi) {
+                                    settings.topMidi = settings.bottomMidi;
+                                }
+                            } else {
+                                // Number mode: edit value (0-100)
+                                int newValue = (int)settings.bottomValue + encoderDelta;
+                                if (newValue < 0) newValue = 0;
+                                if (newValue > 100) newValue = 100;
+                                
+                                // Validate: bottom must be less than top (not equal)
+                                if (newValue >= settings.topValue) {
+                                    newValue = settings.topValue - 1;
+                                    if (newValue < 0) newValue = 0;
+                                }
+                                settings.bottomValue = (uint8_t)newValue;
+                            }
+                            settingsChanged = true;
+                            break;
+                    }
+                } else {
+                    // Editing mask (4-15 maps to notes 0-11)
+                    int maskIdx = a->nameEditSettingPos - 4;
+                    if (maskIdx >= 0 && maskIdx < 12) {
+                        // Check if we're trying to turn off the last active note
+                        if (settings.chromaticScale[maskIdx] == 1) {
+                            // Count active notes
+                            int activeCount = 0;
+                            for (int i = 0; i < 12; i++) {
+                                if (settings.chromaticScale[i] == 1) activeCount++;
+                            }
+                            // Only allow turning off if at least 2 notes are active
+                            if (activeCount > 1) {
+                                settings.chromaticScale[maskIdx] = 0;
+                                settingsChanged = true;
+                            }
+                        } else {
+                            // Turning on is always allowed
+                            settings.chromaticScale[maskIdx] = 1;
+                            settingsChanged = true;
+                        }
+                    }
+                }
+                
+                if (settingsChanged) {
+                    a->namesModified = true;  // Mark settings as modified
+                    // Invalidate MIDI cache for this fader to force re-send with new settings
+                    a->lastMidiValues[a->nameEditFader] = -1.0f;
+                }
+            } else if (a->nameEditPage == 2) {
+                // PAGE 3: Gang fader settings
+                VFader::FaderNoteSettings& settings = a->faderNoteSettings[a->nameEditFader];
+                bool settingsChanged = false;
+                
+                switch (a->nameEditSettingPos) {
+                    case 0: // Control Count (0-31)
+                        {
+                            uint8_t oldCount = settings.controlAllCount;
+                            int newCount = (int)settings.controlAllCount + encoderDelta;
+                            if (newCount < 0) newCount = 0;
+                            if (newCount > 31) newCount = 31;
+                            
+                            // Calculate max based on fader position and next gang fader
+                            int faderIdx = a->nameEditFader;  // 0-31
+                            int maxPossible = 31 - faderIdx;  // Can't control beyond fader 31
+                            
+                            // Find next gang fader to the right (if any)
+                            for (int i = faderIdx + 1; i < 32; i++) {
+                                if (a->faderNoteSettings[i].controlAllCount > 0) {
+                                    maxPossible = i - faderIdx - 1;
+                                    break;
                                 }
                             }
+                            
+                            if (newCount > maxPossible) newCount = maxPossible;
+                            settings.controlAllCount = (uint8_t)newCount;
+                            
+                            // If gang fader was just created (0 -> non-zero), initialize children's reference values
+                            if (oldCount == 0 && newCount > 0) {
+                                for (int j = 1; j <= newCount && (faderIdx + j) < 32; j++) {
+                                    int childIdx = faderIdx + j;
+                                    // Set reference to current position (don't snap!)
+                                    a->faderReferenceValues[childIdx] = a->internalFaders[childIdx];
+                                }
+                                // Initialize lastGangValues to current macro position (not -1.0!)
+                                // This prevents the first macro movement from causing incorrect transforms
+                                a->lastGangValues[faderIdx] = a->internalFaders[faderIdx];
+                            }
+                            
+                            settingsChanged = true;
                         }
+                        break;
+                    case 1: // Control Mode (Absolute/Relative)
+                        settings.controlAllMode = (settings.controlAllMode == 0) ? 1 : 0;
+                        settingsChanged = true;
+                        break;
+                }
+                
+                if (settingsChanged) {
+                    a->namesModified = true;
+                }
+            }
+        }
+        
+        // Left encoder: move cursor position (page 1) or setting selection (page 2/3)
+        if (data.encoders[0] != 0) {
+            if (a->nameEditPage == 0) {
+                // PAGE 1: Move character position
+                int newPos = (int)a->nameEditPos + data.encoders[0];
+                if (newPos < 0) newPos = 0;
+                if (newPos > 10) newPos = 10;  // 0-10 for 11 characters (6 name + 5 category)
+                a->nameEditPos = (uint8_t)newPos;
+            } else if (a->nameEditPage == 1) {
+                // PAGE 2: Move between settings (4 settings + 12 mask notes = 16 total)
+                int newSettingPos = (int)a->nameEditSettingPos + data.encoders[0];
+                if (newSettingPos < 0) newSettingPos = 0;
+                if (newSettingPos > 15) newSettingPos = 15;  // 0-3: settings, 4-15: mask notes
+                a->nameEditSettingPos = (uint8_t)newSettingPos;
+            } else if (a->nameEditPage == 2) {
+                // PAGE 3: Move between gang fader settings (2 settings)
+                int newSettingPos = (int)a->nameEditSettingPos + data.encoders[0];
+                if (newSettingPos < 0) newSettingPos = 0;
+                if (newSettingPos > 1) newSettingPos = 1;  // 0-1: Control Count, Control Mode
+                a->nameEditSettingPos = (uint8_t)newSettingPos;
+            }
+        }
+        
+        // Top right pot (pot R): switch between edit pages (3 pages)
+        // Pot value: < 0.33 = Page 1, 0.33-0.66 = Page 2, >= 0.66 = Page 3
+        if (data.controls & kNT_potR) {
+            float potValue = data.pots[2];
+            // Check if pot moved significantly (to avoid jitter)
+            if (a->lastPotR < 0.0f || fabsf(potValue - a->lastPotR) > 0.1f) {
+                if (potValue < 0.33f) {
+                    a->nameEditPage = 0;
+                } else if (potValue < 0.66f) {
+                    a->nameEditPage = 1;
+                } else {
+                    a->nameEditPage = 2;
+                }
+                a->lastPotR = potValue;
+            }
+        }
+        
+        // Right encoder button: exit name edit mode (only on press, not hold)
+        if (rightButtonPressed) {
+            a->nameEditMode = false;
+            a->namesModified = true;  // Mark that names have been changed
+            a->lastPotR = -1.0f;  // Reset pot tracking
+        }
+        
+        return;  // Don't process normal UI in name edit mode
+    }
+    
+    // NORMAL MODE
+    
+    // Right encoder button: Enter name edit mode for selected fader (only on press, not hold)
+    if (rightButtonPressed) {
+        a->nameEditMode = true;
+        a->nameEditFader = currentFader;
+        // Bounds check
+        if (a->nameEditFader > 31) a->nameEditFader = 0;
+        a->nameEditPos = 0;
+        a->nameEditPage = 0;  // Start on page 1 (name/category)
+        a->nameEditSettingPos = 0;
+        a->lastPotR = -1.0f;  // Reset pot tracking for page switching
+        return;
+    }
+    
+    // Handle encoder left (page selection)
+    if (data.encoders[0] != 0) {
+        int newPage = (int)a->page + data.encoders[0];
+        if (newPage < 1) newPage = 1;
+        if (newPage > 4) newPage = 4;  // 4 pages max
+        a->page = (uint8_t)newPage;
+        
+        // Update PAGE parameter to stay in sync
+        uint32_t algIndex = NT_algorithmIndex(self);
+        uint32_t paramOffset = NT_parameterOffset();
+        NT_setParameterFromUi(algIndex, kParamPage + paramOffset, (int16_t)(newPage - 1));
+        
+        // Update sel to maintain column position on new page
+        a->sel = (uint8_t)((a->page - 1) * 8 + currentCol + 1);
+    }
+    
+    // Handle encoder right (column selection within page)
+    if (data.encoders[1] != 0) {
+        int newCol = currentCol + data.encoders[1];
+        if (newCol < 0) newCol = 0;
+        if (newCol > 7) newCol = 7;
+        
+        // Update sel based on current page and new column
+        a->sel = (uint8_t)((a->page - 1) * 8 + newCol + 1);
+    }
+    
+    // Handle pots - write to FADER parameters to trigger pickup mode logic
+    int pageBase = (a->page - 1) * 8;   // 0, 8, 16, ... 56
+    int colInPage = (a->sel - 1) - pageBase;  // 0-7 column within current page
+    
+    uint32_t algIndex = NT_algorithmIndex(self);
+    uint32_t paramOffset = NT_parameterOffset();
+    
+    // Check if pot control is enabled (0=On, 1=Off)
+    int potControl = (int)(self->v[kParamPotControl] + 0.5f);
+    
+    // Only process pot input if pot control is ON
+    if (potControl == 0) {
+        // Left pot controls fader to the LEFT of selected (does nothing if first fader selected)
+        if (data.controls & kNT_potL) {
+            if (colInPage > 0) {  // Only active if not first fader
+                float potValue = data.pots[0];
+                // Apply min/max deadzones to pot values (3% to match parameter logic)
+                if (potValue < 0.03f) potValue = 0.0f;
+                else if (potValue > 0.97f) potValue = 1.0f;
+                // Quantize pot to 2500 steps to reduce jitter/backtracking
+                potValue = floorf(potValue * 2500.0f + 0.5f) / 2500.0f;
+                // Apply deadband - only update if change is significant
+                if (a->potLast[0] < 0.0f || fabsf(potValue - a->potLast[0]) > a->potDeadband) {
+                    int targetCol = colInPage - 1;
+                    int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+                    int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);  // Scale to 0-16383
+                    NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                    a->potLast[0] = potValue;
+                }
+            }
+        }
+        
+        // Center pot always controls the SELECTED fader's column
+        if (data.controls & kNT_potC) {
+            float potValue = data.pots[1];
+            // Apply min/max deadzones to pot values (3% to match parameter logic)
+            if (potValue < 0.03f) potValue = 0.0f;
+            else if (potValue > 0.97f) potValue = 1.0f;
+            // Quantize pot to 2500 steps to reduce jitter/backtracking
+            potValue = floorf(potValue * 2500.0f + 0.5f) / 2500.0f;
+            // Apply deadband - only update if change is significant
+            if (a->potLast[1] < 0.0f || fabsf(potValue - a->potLast[1]) > a->potDeadband) {
+                int faderParam = colInPage;  // FADER 1-8 maps to 0-7
+                int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);  // Scale to 0-16383
+                NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                a->potLast[1] = potValue;
+            }
+        }
+        
+        // Right pot controls fader to the RIGHT of selected (does nothing if last fader selected)
+        if (data.controls & kNT_potR) {
+            if (colInPage < 7) {  // Only active if not last fader
+                float potValue = data.pots[2];
+                // Apply min/max deadzones to pot values (3% to match parameter logic)
+                if (potValue < 0.03f) potValue = 0.0f;
+                else if (potValue > 0.97f) potValue = 1.0f;
+                // Quantize pot to 2500 steps to reduce jitter/backtracking
+                potValue = floorf(potValue * 2500.0f + 0.5f) / 2500.0f;
+                // Apply deadband - only update if change is significant
+                if (a->potLast[2] < 0.0f || fabsf(potValue - a->potLast[2]) > a->potDeadband) {
+                    int targetCol = colInPage + 1;
+                    int faderParam = targetCol;  // FADER 1-8 maps to 0-7
+                    int16_t value = (int16_t)(potValue * 16383.0f + 0.5f);  // Scale to 0-16383
+                    NT_setParameterFromUi(algIndex, kParamFader1 + faderParam + paramOffset, value);
+                    a->potLast[2] = potValue;
+                }
+            }
+        }
+    }
+}
+
+void setupUi(_NT_algorithm* self, _NT_float3& pots) { 
+    VFader* a = (VFader*)self;
+    int pageBase = (a->page - 1) * 8;
+    int selCol = (a->sel - 1) % 8;
+    
+    // Sync pots to current internal fader values on this page
+    // Left pot → leftmost fader on page
+    // Center pot → selected fader
+    // Right pot → rightmost fader on page
+    pots[0] = a->internalFaders[pageBase + 0];
+    pots[1] = a->internalFaders[pageBase + selCol];
+    pots[2] = a->internalFaders[pageBase + 7];
+}
+
+void parameterChanged(_NT_algorithm* self, int p) {
+    VFader* a = (VFader*)self;
+    
+    // Handle FADER 1-8 changes: write to internal faders on current page
+    if (p >= kParamFader1 && p <= kParamFader8) {
+        int faderIdx = p - kParamFader1;  // 0-7
+        int currentPage = (int)self->v[kParamPage];  // 0-3
+        int internalIdx = currentPage * 8 + faderIdx;  // 0-31
+        
+        // Scale parameter (0-16383) to internal value (0.0-1.0)
+        float v = self->v[p] / 16383.0f;
+        if (v < 0.0f) v = 0.0f;
+        else if (v > 1.0f) v = 1.0f;
+        
+        // Apply min/max deadzones BEFORE pickup mode logic to prevent false catches at endpoints
+        // Larger deadzones (3%) at min/max to prevent getting stuck
+        if (v < 0.03f) {
+            v = 0.0f;
+        } else if (v > 0.97f) {
+            v = 1.0f;
+        }
+        
+        // Get pickup mode setting (0=Scaled, 1=Catch)
+        int pickupMode = (int)(self->v[kParamPickupMode] + 0.5f);
+        
+        // Pickup mode logic: relative scaling when physical position ≠ value
+        float currentValue = a->internalFaders[internalIdx];
+        
+        // Also apply deadzones to current value for consistent comparison
+        float currentValueWithDeadzone = currentValue;
+        if (currentValueWithDeadzone < 0.03f) {
+            currentValueWithDeadzone = 0.0f;
+        } else if (currentValueWithDeadzone > 0.97f) {
+            currentValueWithDeadzone = 1.0f;
+        }
+        
+        // Use coarse resolution (500 steps) for pickup mode detection to reduce jitter sensitivity
+        // Still maintain full 16k resolution for actual output
+        int coarsePhysical = (int)(v * 500.0f + 0.5f);
+        int coarseCurrent = (int)(currentValueWithDeadzone * 500.0f + 0.5f);
+        int coarseMismatch = abs(coarsePhysical - coarseCurrent);
+        
+        // Track movement direction to detect continuous fast sweeps
+        float movementDelta = v - a->lastPhysicalPos[internalIdx];
+        // Use threshold that accounts for coarse resolution (500 steps = 0.002 per step)
+        bool movingContinuously = fabsf(movementDelta) > 0.001f;  // ~0.5 coarse steps
+        bool sameDirection = (movementDelta > 0 && (v - a->physicalFaderPos[internalIdx]) > 0) ||
+                            (movementDelta < 0 && (v - a->physicalFaderPos[internalIdx]) < 0);
+        
+        // Update tracking
+        a->lastPhysicalPos[internalIdx] = a->physicalFaderPos[internalIdx];
+        a->physicalFaderPos[internalIdx] = v;
+        
+        // Debug tracking for fader 0
+        if (internalIdx == 0) {
+        }
+        
+        // Decide whether to use pickup mode or absolute mode
+        if (!a->inPickupMode[internalIdx]) {
+            // Decrement settle counter if active AND not actively moving
+            if (a->pickupSettleFrames[internalIdx] > 0) {
+                if (!movingContinuously) {
+                    a->pickupSettleFrames[internalIdx]--;
+                } else {
+                    // Active movement clears settle period immediately
+                    a->pickupSettleFrames[internalIdx] = 0;
+                }
+            }
+            
+            // Currently in absolute mode - check if we should enter pickup
+            // Enter pickup mode if:
+            //   1. Mismatch > 1% (coarse) AND
+            //   2. Either:
+            //      a) Big mismatch (>10%) - always enter pickup, OR
+            //      b) Small mismatch (1-10%) but NOT continuous same-direction movement (allows fast sweeps)
+            //   3. Settle period has expired
+            bool bigMismatch = coarseMismatch > 50;  // >10% - always use pickup
+            bool smallMismatch = coarseMismatch > 5;  // >1% - use pickup unless fast sweep
+            bool shouldEnterPickup = a->pickupSettleFrames[internalIdx] == 0 && 
+                                    (bigMismatch || (smallMismatch && !(movingContinuously && sameDirection)));
+            
+            if (shouldEnterPickup) {
+                // Enter pickup mode
+                a->inPickupMode[internalIdx] = true;
+                a->pickupPivot[internalIdx] = v;
+                a->pickupStartValue[internalIdx] = currentValue;
+                
+                // Debug tracking for fader 0
+                if (internalIdx == 0) {
+                }
+                // Don't change value yet - will calculate on next call
+            } else {
+                // Small mismatch with fast sweep OR in settle period - update directly
+                a->internalFaders[internalIdx] = v;
+            }
+        } else {
+            // Already in pickup mode
+            if (pickupMode == 1) {
+                // CATCH MODE: Only exit on continuous movement if already close (within 10%)
+                // This prevents jumps when starting from a big mismatch
+                bool closeEnoughToExit = coarseMismatch < 50;  // Within 10%
+                
+                if (movingContinuously && sameDirection && closeEnoughToExit) {
+                    // Continuous movement AND already close - exit pickup and follow directly
+                    a->internalFaders[internalIdx] = v;
+                    a->inPickupMode[internalIdx] = false;
+                    a->inSlewMode[internalIdx] = false;
+                    a->pickupPivot[internalIdx] = -1.0f;
+                    a->pickupSettleFrames[internalIdx] = 0;  // No settle when actively moving
+                } else if (coarseMismatch < 25) {
+                    // Within 5% (coarse) - enter slew mode for smooth catch
+                    if (!a->inSlewMode[internalIdx]) {
+                        a->inSlewMode[internalIdx] = true;
+                        a->slewTarget[internalIdx] = v;
+                    }
+                    
+                    // Slew toward target over ~0.5 seconds
+                    float slewRate = 0.005333f;
+                    float delta = v - currentValue;
+                    
+                    // Exit when within 2 coarse steps (0.2%)
+                    if (coarseMismatch < 2) {
+                        // Close enough - snap and exit pickup mode
+                        a->internalFaders[internalIdx] = v;
+                        a->inPickupMode[internalIdx] = false;
+                        a->inSlewMode[internalIdx] = false;
+                        a->pickupPivot[internalIdx] = -1.0f;
+                        a->pickupSettleFrames[internalIdx] = 5;
+                    } else {
+                        // Slew toward target
+                        if (delta > 0) {
+                            a->internalFaders[internalIdx] += slewRate;
+                        } else {
+                            a->internalFaders[internalIdx] -= slewRate;
+                        }
+                    }
+                } else {
+                    // Still > 5% (coarse) away - use scaled pickup behavior like Scaled mode
+                    // Calculate scaled value based on pivot
+                    float pivotPos = a->pickupPivot[internalIdx];
+                    float startValue = a->pickupStartValue[internalIdx];
+                    float physicalDelta = v - pivotPos;
+                    
+                    float targetValue;
+                    if (physicalDelta > 0) {
+                        // Moving up from pivot
+                        float physicalRange = 1.0f - pivotPos;
+                        float valueRange = 1.0f - startValue;
+                        if (physicalRange > 0.001f) {
+                            float ratio = physicalDelta / physicalRange;
+                            if (ratio > 1.0f) ratio = 1.0f;
+                            targetValue = startValue + ratio * valueRange;
+                        } else {
+                            targetValue = 1.0f;
+                        }
+                    } else if (physicalDelta < 0) {
+                        // Moving down from pivot
+                        float physicalRange = pivotPos;
+                        float valueRange = startValue;
+                        if (physicalRange > 0.001f) {
+                            float ratio = -physicalDelta / physicalRange;
+                            if (ratio > 1.0f) ratio = 1.0f;
+                            targetValue = startValue - ratio * valueRange;
+                        } else {
+                            targetValue = 0.0f;
+                        }
+                    } else {
+                        targetValue = startValue;
+                    }
+                    
+                    if (targetValue < 0.0f) targetValue = 0.0f;
+                    if (targetValue > 1.0f) targetValue = 1.0f;
+                    
+                    a->internalFaders[internalIdx] = targetValue;
+                }
+            } else {
+                // SCALED MODE: Calculate scaled value based on pivot
+                float pivotPos = a->pickupPivot[internalIdx];
+                float startValue = a->pickupStartValue[internalIdx];
+                float physicalDelta = v - pivotPos;
+                
+                // Calculate scaled target value
+                float targetValue;
+                if (physicalDelta > 0) {
+                    // Moving up from pivot
+                    float physicalRange = 1.0f - pivotPos;
+                    float valueRange = 1.0f - startValue;
+                    if (physicalRange > 0.001f) {
+                        float ratio = physicalDelta / physicalRange;
+                        if (ratio > 1.0f) ratio = 1.0f;
+                        targetValue = startValue + ratio * valueRange;
+                    } else {
+                        targetValue = 1.0f;
+                    }
+                } else if (physicalDelta < 0) {
+                    // Moving down from pivot
+                    float physicalRange = pivotPos;
+                    float valueRange = startValue;
+                    if (physicalRange > 0.001f) {
+                        float ratio = -physicalDelta / physicalRange;
+                        if (ratio > 1.0f) ratio = 1.0f;
+                        targetValue = startValue - ratio * valueRange;
+                    } else {
+                        targetValue = 0.0f;
+                    }
+                } else {
+                    // No movement from pivot yet
+                    targetValue = startValue;
+                }
+                
+                // Clamp
+                if (targetValue < 0.0f) targetValue = 0.0f;
+                if (targetValue > 1.0f) targetValue = 1.0f;
+                
+                // Check if we should exit pickup mode
+                // Exit when physical position is close to the OUTPUT value (not start value)
+                float outputMismatch = fabsf(v - targetValue);
+                bool caughtUp = (outputMismatch < 0.02f);  // Within 2% of output
+                
+                // Debug tracking for fader 0
+                if (internalIdx == 0) {
+                }
+                
+                if (caughtUp) {
+                    // Physical position has caught up with output - exit pickup mode
+                    a->inPickupMode[internalIdx] = false;
+                    a->pickupPivot[internalIdx] = -1.0f;
+                    a->internalFaders[internalIdx] = v;  // Now use absolute
+                    
+                    // Debug tracking for fader 0
+                    if (internalIdx == 0) {
+                    }
+                } else {
+                    // Still in pickup - use scaled value
+                    a->internalFaders[internalIdx] = targetValue;
+                }
+            }
+        }
+        
+        // Update physical position tracking
+        a->physicalFaderPos[internalIdx] = v;
+        
+        // Update reference value for gang fader system
+        // If this fader is a child of a gang fader, update its reference
+        bool isChild = false;
+        for (int g = 0; g < internalIdx; g++) {
+            if (a->faderNoteSettings[g].controlAllCount > 0) {
+                int childStart = g + 1;
+                int childEnd = g + a->faderNoteSettings[g].controlAllCount;
+                if (internalIdx >= childStart && internalIdx <= childEnd) {
+                    isChild = true;
+                    break;
+                }
+            }
+        }
+        
+        // If this is a child fader and it was manually adjusted, update its reference
+        if (isChild && !a->inPickupMode[internalIdx]) {
+            a->faderReferenceValues[internalIdx] = a->internalFaders[internalIdx];
+        }
+        
+        // Track debug info for FADER 1 (internalIdx 0 on page 0)
+        if (internalIdx == 0) {
+        }
+    }
+    // Handle PAGE changes: just update display value and set flag
+    else if (p == kParamPage) {
+        int newPage = (int)self->v[kParamPage];  // 0-3
+        a->page = (uint8_t)(newPage + 1);  // Update display value (1-4)
+        
+        // Don't call NT_setParameterFromUi here - it causes deadlock
+        // Instead, we won't update FADER parameters at all (simpler, no freeze)
+    }
+}
+
+// Serialization - write debug data to preset JSON
+static void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
+    VFader* a = static_cast<VFader*>(self);
+    
+    // Clear the modified flag when saving
+    a->namesModified = false;
+    
+    // Write display layout info for debugging/screenshots
+    stream.addMemberName("displayLayout");
+    stream.openObject();
+        stream.addMemberName("buildVersion");
+        stream.addNumber(VFADER_BUILD);
+        
+        stream.addMemberName("currentPage");
+        stream.addNumber(a->page);
+        
+        stream.addMemberName("selectedFader");
+        stream.addNumber(a->sel);
+        
+        stream.addMemberName("nameEditMode");
+        stream.addBoolean(a->nameEditMode);
+        
+        stream.addMemberName("nameEditFader");
+        stream.addNumber(a->nameEditFader);
+        
+        stream.addMemberName("namesModified");
+        stream.addBoolean(a->namesModified);
+        
+        // Store visible fader values for this page
+        stream.addMemberName("visibleFaders");
+        stream.openArray();
+        int baseIndex = (a->page - 1) * 8;
+        for (int i = 0; i < 8; i++) {
+            stream.openObject();
+                stream.addMemberName("index");
+                stream.addNumber(baseIndex + i);
+                stream.addMemberName("value");
+                stream.addNumber(a->internalFaders[baseIndex + i]);
+                stream.addMemberName("name");
+                stream.addString(a->faderNames[baseIndex + i]);
+                stream.addMemberName("inPickup");
+                stream.addBoolean(a->inPickupMode[baseIndex + i]);
+            stream.closeObject();
+        }
+        stream.closeArray();
+    stream.closeObject();
+    
+    // Write current state of all 32 faders
+    stream.addMemberName("faders");
+    stream.openArray();
+    for (int i = 0; i < 32; i++) {
+        stream.addNumber(a->internalFaders[i]);
+    }
+    stream.closeArray();
+    
+    // Write soft takeover/pickup state
+    stream.addMemberName("inPickupMode");
+    stream.openArray();
+    for (int i = 0; i < 32; i++) {
+        stream.addBoolean(a->inPickupMode[i]);
+    }
+    stream.closeArray();
+    
+    // Write last MIDI values
+    stream.addMemberName("lastMidiValues");
+    stream.openArray();
+    for (int i = 0; i < 32; i++) {
+        stream.addNumber(a->lastMidiValues[i]);
+    }
+    stream.closeArray();
+    
+    // Write fader names
+    stream.addMemberName("faderNames");
+    stream.openArray();
+    for (int i = 0; i < 32; i++) {
+        stream.addString(a->faderNames[i]);
+    }
+    stream.closeArray();
+    
+    // Write fader note settings
+    stream.addMemberName("noteSettings");
+    stream.openArray();
+    for (int i = 0; i < 32; i++) {
+        stream.openObject();
+        stream.addMemberName("displayMode");
+        stream.addNumber(a->faderNoteSettings[i].displayMode);
+        stream.addMemberName("sharpFlat");
+        stream.addNumber(a->faderNoteSettings[i].sharpFlat);
+        stream.addMemberName("bottomMidi");
+        stream.addNumber(a->faderNoteSettings[i].bottomMidi);
+        stream.addMemberName("topMidi");
+        stream.addNumber(a->faderNoteSettings[i].topMidi);
+        stream.addMemberName("bottomValue");
+        stream.addNumber(a->faderNoteSettings[i].bottomValue);
+        stream.addMemberName("topValue");
+        stream.addNumber(a->faderNoteSettings[i].topValue);
+        stream.addMemberName("chromaticScale");
+        stream.openArray();
+        for (int j = 0; j < 12; j++) {
+            stream.addNumber(a->faderNoteSettings[i].chromaticScale[j]);
+        }
+        stream.closeArray();
+        stream.addMemberName("controlAllCount");
+        stream.addNumber(a->faderNoteSettings[i].controlAllCount);
+        stream.addMemberName("controlAllMode");
+        stream.addNumber(a->faderNoteSettings[i].controlAllMode);
+        stream.closeObject();
+    }
+    stream.closeArray();
+    
+    // Save fader reference values
+    stream.addMemberName("faderReferenceValues");
+    stream.openArray();
+    for (int i = 0; i < 32; i++) {
+        stream.addNumber(a->faderReferenceValues[i]);
+    }
+    stream.closeArray();
+}
+
+// Deserialization - restore fader names and values
+static bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
+    VFader* a = static_cast<VFader*>(self);
+    
+    // Clear the modified flag when loading a preset
+    a->namesModified = false;
+    
+    int numMembers;
+    if (!parse.numberOfObjectMembers(numMembers))
+        return false;
+    
+    for (int i = 0; i < numMembers; i++) {
+        // Check for fader values
+        if (parse.matchName("faders")) {
+            int arraySize;
+            if (!parse.numberOfArrayElements(arraySize))
+                return false;
+            for (int j = 0; j < arraySize && j < 32; j++) {
+                float value;
+                if (!parse.number(value))
+                    return false;
+                a->internalFaders[j] = value;
+            }
+        }
+        // Check for fader names
+        else if (parse.matchName("faderNames")) {
+            int arraySize;
+            if (!parse.numberOfArrayElements(arraySize))
+                return false;
+            for (int j = 0; j < arraySize && j < 32; j++) {
+                const char* str = NULL;
+                if (!parse.string(str))
+                    return false;
+                if (str != NULL) {
+                    strncpy(a->faderNames[j], str, 12);
+                    a->faderNames[j][12] = 0;  // Ensure null termination (12 chars max)
+                }
+            }
+        }
+        // Load note settings
+        else if (parse.matchName("noteSettings")) {
+            int arraySize;
+            if (!parse.numberOfArrayElements(arraySize))
+                return false;
+            for (int j = 0; j < arraySize && j < 32; j++) {
+                int numFields;
+                if (!parse.numberOfObjectMembers(numFields))
+                    return false;
+                for (int k = 0; k < numFields; k++) {
+                    if (parse.matchName("displayMode")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        a->faderNoteSettings[j].displayMode = (uint8_t)val;
+                    }
+                    else if (parse.matchName("sharpFlat")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        a->faderNoteSettings[j].sharpFlat = (uint8_t)val;
+                    }
+                    else if (parse.matchName("bottomMidi")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        int midi = (int)val;
+                        if (midi < 0) midi = 0;
+                        if (midi > 127) midi = 127;
+                        a->faderNoteSettings[j].bottomMidi = (uint8_t)midi;
+                    }
+                    else if (parse.matchName("topMidi")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        int midi = (int)val;
+                        if (midi < 0) midi = 0;
+                        if (midi > 127) midi = 127;
+                        a->faderNoteSettings[j].topMidi = (uint8_t)midi;
+                    }
+                    else if (parse.matchName("bottomValue")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        int value = (int)val;
+                        if (value < 0) value = 0;
+                        if (value > 100) value = 100;
+                        a->faderNoteSettings[j].bottomValue = (uint8_t)value;
+                    }
+                    else if (parse.matchName("topValue")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        int value = (int)val;
+                        if (value < 0) value = 0;
+                        if (value > 100) value = 100;
+                        a->faderNoteSettings[j].topValue = (uint8_t)value;
+                    }
+                    // Backward compatibility with old format
+                    else if (parse.matchName("bottomNote") || parse.matchName("bottomOctave") || 
+                             parse.matchName("topNote") || parse.matchName("topOctave")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        // Ignore old format - will use defaults
+                    }
+                    else if (parse.matchName("chromaticScale")) {
+                        int scaleSize;
+                        if (!parse.numberOfArrayElements(scaleSize)) return false;
+                        for (int m = 0; m < scaleSize && m < 12; m++) {
+                            float val;
+                            if (!parse.number(val)) return false;
+                            a->faderNoteSettings[j].chromaticScale[m] = (uint8_t)val;
+                        }
+                    }
+                    else if (parse.matchName("controlAllCount")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        int count = (int)val;
+                        if (count < 0) count = 0;
+                        if (count > 31) count = 31;
+                        a->faderNoteSettings[j].controlAllCount = (uint8_t)count;
+                    }
+                    else if (parse.matchName("controlAllMode")) {
+                        float val;
+                        if (!parse.number(val)) return false;
+                        int mode = (int)val;
+                        if (mode < 0) mode = 0;
+                        if (mode > 1) mode = 1;
+                        a->faderNoteSettings[j].controlAllMode = (uint8_t)mode;
+                    }
+                    else {
+                        if (!parse.skipMember()) return false;
                     }
                 }
             }
         }
-    }
-    
-    // Match "debugOutputBus" (optional)
-    if (parse.matchName("debugOutputBus")) {
-        int numBuses = 0;
-        if (parse.numberOfArrayElements(numBuses)) {
-            for (int i = 0; i < numBuses && i < 12; i++) {
-                int bus;
-                if (parse.number(bus)) {
-                    a->debugOutputBus[i] = bus;
-                }
+        else if (parse.matchName("faderReferenceValues")) {
+            int refCount;
+            if (!parse.numberOfArrayElements(refCount)) return false;
+            for (int i = 0; i < refCount && i < 32; i++) {
+                float val;
+                if (!parse.number(val)) return false;
+                a->faderReferenceValues[i] = val;
             }
         }
-    }
-    
-    // Match "gateSteps" (optional, for gate sequencer)
-    if (parse.matchName("gateSteps")) {
-        int numTracks = 0;
-        if (parse.numberOfArrayElements(numTracks)) {
-            int tracksToLoad = (numTracks < 6) ? numTracks : 6;
-            for (int track = 0; track < tracksToLoad; track++) {
-                int numSteps = 0;
-                if (parse.numberOfArrayElements(numSteps)) {
-                    int stepsToLoad = (numSteps < 32) ? numSteps : 32;
-                    for (int step = 0; step < stepsToLoad; step++) {
-                        int value;
-                        if (parse.number(value)) {
-                            a->gateSteps[track][step] = (value != 0);
-                        }
-                    }
-                }
-            }
+        // Skip other members (debug data, etc.)
+        else {
+            if (!parse.skipMember())
+                return false;
         }
-    }
-    
-    // After deserialization, sync debug array from current parameter values
-    // (in case parameters were loaded but custom data wasn't)
-    for (int i = 0; i < 12; i++) {
-        a->debugOutputBus[i] = self->v[kParamSeq1Out1 + i];
     }
     
     return true;
 }
 
-// Factory
-extern "C" {
-
 static const _NT_factory factory = {
-    .guid = NT_MULTICHAR('V','S','E','Q'),
-    .name = "VSeq",
-    .description = "4-channel 16-step sequencer with clock/reset",
+    .guid = NT_MULTICHAR('V','F','D','R'),
+    .name = "VFader",
+    .description = "32 virtual faders, 7/14-bit MIDI CC, CV outputs, F8R control",
     .numSpecifications = 0,
     .specifications = NULL,
     .calculateStaticRequirements = NULL,
@@ -1736,7 +2209,7 @@ static const _NT_factory factory = {
     .calculateRequirements = calculateRequirements,
     .construct = construct,
     .parameterChanged = parameterChanged,
-    .step = step,  // Note: step callback processes audio
+    .step = step,
     .draw = draw,
     .midiRealtime = NULL,
     .midiMessage = NULL,
@@ -1749,17 +2222,11 @@ static const _NT_factory factory = {
     .midiSysEx = NULL
 };
 
-uintptr_t pluginEntry(_NT_selector selector, uint32_t data) {
+extern "C" uintptr_t pluginEntry(_NT_selector selector, uint32_t data) {
     switch (selector) {
-        case kNT_selector_version:
-            return kNT_apiVersionCurrent;
-        case kNT_selector_numFactories:
-            return 1;
-        case kNT_selector_factoryInfo:
-            return (uintptr_t)((data == 0) ? &factory : NULL);
-        default:
-            return 0;
+        case kNT_selector_version: return kNT_apiVersionCurrent;
+        case kNT_selector_numFactories: return 1;
+        case kNT_selector_factoryInfo: return (uintptr_t)((data == 0) ? &factory : NULL);
     }
+    return 0;
 }
-
-} // extern "C"
