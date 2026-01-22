@@ -1102,6 +1102,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int lenParam = kParamGate1Length + (track * 9);
         int dirParam = kParamGate1Direction + (track * 9);
         int divParam = kParamGate1ClockDiv + (track * 9);
+        int swingParam = kParamGate1Swing + (track * 9);
         int splitParam = kParamGate1SplitPoint + (track * 9);
         int sec1Param = kParamGate1Section1Reps + (track * 9);
         int sec2Param = kParamGate1Section2Reps + (track * 9);
@@ -1112,6 +1113,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int trackLength = self->v[lenParam];   // 1-32
         int direction = self->v[dirParam];     // 0=Forward, 1=Backward, 2=Pingpong
         int clockDiv = self->v[divParam];      // 0-8: /16, /8, /4, /2, x1, x2, x4, x8, x16
+        int swing = self->v[swingParam];       // 0-100 (percentage of swing delay)
         int splitPoint = self->v[splitParam];  // 0-31 (0 = no split)
         int sec1Reps = self->v[sec1Param];     // 1-99
         int sec2Reps = self->v[sec2Param];     // 1-99
@@ -1181,24 +1183,67 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         if (gateStepped) {  // Only trigger when we actually stepped
             int currentStep = a->gateCurrentStep[track];
             if (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]) {
-                // Gate is active on this step - trigger!
+                // Apply swing: delay odd-numbered steps
+                bool isOddStep = (currentStep % 2) == 1;
+                int swingDelay = 0;
+                
+                if (isOddStep && swing > 0 && a->gateLastClockPeriod[track] > 0) {
+                    // Swing delays the trigger by a percentage of half the clock period
+                    // swing=100 = delay by 50% of clock period (triplet feel)
+                    // swing=0 = no delay (straight)
+                    swingDelay = (a->gateLastClockPeriod[track] * swing) / 200;  // divide by 200 = (100 * 2)
+                }
+                
+                // If no swing delay, trigger immediately
+                if (swingDelay == 0) {
+                    a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
+                    
+                    // Send MIDI CC if configured
+                    int triggerMidiChannel = self->v[kParamTriggerMidiChannel];  // 0 = off, 1-16 = MIDI channels
+                    
+                    if (triggerMidiChannel > 0 && triggerMidiChannel <= 16) {
+                        int ccParam = kParamGate1CC + (track * 2);
+                        int ccNumber = self->v[ccParam];  // 0-127
+                        
+                        uint8_t channel = (triggerMidiChannel - 1) & 0x0F;
+                        
+                        // Send CC value 127 when trigger fires
+                        NT_sendMidi3ByteMessage(
+                            kNT_destinationInternal,
+                            0xB0 | channel, // CC message on configured channel
+                            ccNumber,       // CC number
+                            127             // CC value (full on)
+                        );
+                    }
+                } else {
+                    // Set swing counter to delay the trigger
+                    a->gateSwingCounter[track] = swingDelay;
+                }
+            }
+        }
+        
+        // Handle swing delay countdown
+        if (a->gateSwingCounter[track] > 0) {
+            a->gateSwingCounter[track] -= numFrames;
+            if (a->gateSwingCounter[track] <= 0) {
+                a->gateSwingCounter[track] = 0;
+                // Trigger now after swing delay
                 a->gateTriggerCounter[track] = 240;  // ~5ms at 48kHz
                 
                 // Send MIDI CC if configured
-                int triggerMidiChannel = self->v[kParamTriggerMidiChannel];  // 0 = off, 1-16 = MIDI channels
+                int triggerMidiChannel = self->v[kParamTriggerMidiChannel];
                 
                 if (triggerMidiChannel > 0 && triggerMidiChannel <= 16) {
                     int ccParam = kParamGate1CC + (track * 2);
-                    int ccNumber = self->v[ccParam];  // 0-127
+                    int ccNumber = self->v[ccParam];
                     
                     uint8_t channel = (triggerMidiChannel - 1) & 0x0F;
                     
-                    // Send CC value 127 when trigger fires
                     NT_sendMidi3ByteMessage(
                         kNT_destinationInternal,
-                        0xB0 | channel, // CC message on configured channel
-                        ccNumber,       // CC number
-                        127             // CC value (full on)
+                        0xB0 | channel,
+                        ccNumber,
+                        127
                     );
                 }
             }
