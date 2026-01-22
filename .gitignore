@@ -8,6 +8,10 @@ PluginTemplate/build/
 .venv/
 docs/
 
+# Ignore experimental/in-development plugins
+VLoop/
+VLoop2/
+
 # Ignore experimental/broken VLoop versions
 VLoop/src/main_v3.cpp
 VLoop/src/main_v2.cpp
