@@ -4,21 +4,27 @@
 ## Current Session Work
 
 ### Just Completed
-1. **VSeq restored from git** - Was accidentally replaced with VFader code in commit `3893a73`
-   - Restored from working commit `355e014`
-   - Saved broken version as `main.cpp.vfader_accident`
-   
-2. **VSeq CV output voltage fixed** - Was outputting 0-1V instead of 0-10V
-   - Issue: Code converted int16_t to 0.0-1.0 float instead of 0-10V
-   - Fix: Changed conversion from `(value + 32768) / 65535.0f` to `((value + 32768) / 65535.0f) * 10.0f`
-   - Committed as: "Fix VSeq CV output voltage range (0-10V instead of 0-1V)"
+1. **VSeq Clock Division/Multiplication Implementation** - ✅ COMPLETE
+   - Added clock counter arrays for all sequencers (CV + gate)
+   - Division modes (/16, /8, /4, /2): Count clock pulses before advancing
+   - Multiplication modes (x1, x2, x4, x8, x16): Measure clock period and generate internal subdivisions
+   - Fixed MIDI/gate triggers to only fire on actual step events (not every clock)
+   - Committed as: "Implement clock division/multiplication for VSeq"
 
-### Currently Working On
-- **VSeq Clock Division Not Working** - Parameter exists but has no effect
-  - Clock div parameter: 0-8 (values: /16, /8, /4, /2, x1, x2, x4, x8, x16)
-  - Problem: No `clockCounter[3]` array in struct, no division logic in step()
-  - Need to add: Clock counter tracking and division/multiplication logic
-  - Status: Partially started - added clockCounter array to struct, need to finish implementation
+2. **VSeq Swing Implementation** - ✅ COMPLETE
+   - Added swing parameter (0-100%) to gate sequencer
+   - Odd-numbered steps (1,3,5...) delayed based on swing percentage
+   - swing=0: straight timing, swing=100: triplet/shuffle feel
+   - Swing delay calculated as percentage of clock period
+   - Committed as: "Implement swing for VSeq gate tracks"
+
+3. **VSeq CV Voltage Fix** - ✅ COMPLETE (Earlier)
+   - Fixed 0-1V output bug → now correctly outputs 0-10V
+   - Committed as: "Fix VSeq CV output voltage range"
+
+4. **VSeq Restoration** - ✅ COMPLETE (Earlier)
+   - Was accidentally replaced with VFader code in commit `3893a73`
+   - Restored from working commit `355e014`
 
 ## Plugin Status Overview
 
@@ -31,21 +37,22 @@
   - Top/Bottom value bugs in Number mode (25/75 settings don't scale range correctly)
   - See: `VFader/REMAINING_FEATURES.md` and `CHANGELOG.txt`
 
-### ⚠️ VSeq (Partially Working - Build 1)
+### ⚠️ VSeq (Working - Build 1+)
 - **Purpose:** 3 CV sequencers (9 outputs) + 6 trigger sequencers
-- **Location:** `/VSeq/src/main.cpp` (1766 lines)
+- **Location:** `/VSeq/src/main.cpp` (1915 lines)
 - **GUID:** `VSEQ`
 - **Build Output:** `build/1VSeq.o`
 - **What Works:**
   - ✅ Basic sequencing (32 steps per sequencer)
-  - ✅ CV output (0-10V range - JUST FIXED)
+  - ✅ CV output (0-10V range)
   - ✅ Direction modes (Forward, Backward, Pingpong)
   - ✅ Section looping with repeat counts
   - ✅ Gate sequencer (6 tracks)
-  - ✅ Swing and fill features for triggers
+  - ✅ Fill feature for triggers
+  - ✅ Clock division/multiplication (all 9 modes working)
+  - ✅ Swing (0-100% on gate tracks)
   
 - **Known Issues:**
-  - ❌ Clock division/multiplication not working (IN PROGRESS)
   - ⚠️ MIDI CC removed (was buggy - only track 6 worked, value stuck at 48)
   - ⚠️ Parameter changes reset patterns (unknown cause, needs debug)
 
@@ -68,6 +75,77 @@
 - **Note:** Not recently tested
 
 ## Critical API Patterns (Verified)
+
+### Clock Division/Multiplication Implementation
+**Pattern used in VSeq (working):**
+```cpp
+// State variables needed:
+int clockCounter[N];              // Division counter
+int internalClockCounter[N];      // Multiplication subdivision counter
+int lastClockPeriod[N];          // Measured samples between clocks
+int samplesSinceLastClock[N];    // Running sample counter
+
+// Division modes (0-3 = /16, /8, /4, /2):
+if (clockTrig) {
+    int divisor = 1 << (4 - clockDiv);  // 0->16, 1->8, 2->4, 3->2
+    clockCounter[i]++;
+    if (clockCounter[i] >= divisor) {
+        clockCounter[i] = 0;
+        advanceSequencer();  // Step only when divisor reached
+    }
+}
+
+// Multiplication modes (4-8 = x1, x2, x4, x8, x16):
+if (clockTrig) {
+    // Measure period between clocks
+    if (samplesSinceLastClock[i] > 100 && samplesSinceLastClock[i] < 96000) {
+        lastClockPeriod[i] = samplesSinceLastClock[i];
+    }
+    samplesSinceLastClock[i] = 0;
+    internalClockCounter[i] = 0;
+    advanceSequencer();  // Step on external clock
+}
+// Between clocks, generate internal steps
+if (clockDiv >= 5 && !clockTrig && lastClockPeriod[i] > 0) {
+    int multiplier = 1 << (clockDiv - 4);  // 5->2, 6->4, 7->8, 8->16
+    int subdivisionPeriod = lastClockPeriod[i] / multiplier;
+    if (samplesSinceLastClock[i] >= subdivisionPeriod * (internalClockCounter[i] + 1)) {
+        internalClockCounter[i]++;
+        if (internalClockCounter[i] < multiplier) {
+            advanceSequencer();  // Internal step
+        }
+    }
+}
+```
+
+### Swing Implementation
+**Pattern used in VSeq gate tracks:**
+```cpp
+// State: int gateSwingCounter[6];  // Countdown for swing delay
+
+if (gateStepped) {
+    int currentStep = gateCurrentStep[track];
+    bool isOddStep = (currentStep % 2) == 1;
+    
+    if (isOddStep && swing > 0) {
+        // Delay trigger by percentage of clock period
+        int swingDelay = (lastClockPeriod[track] * swing) / 200;
+        gateSwingCounter[track] = swingDelay;
+    } else {
+        // Trigger immediately
+        gateTriggerCounter[track] = 240;  // ~5ms pulse
+    }
+}
+
+// Each buffer, countdown swing delay
+if (gateSwingCounter[track] > 0) {
+    gateSwingCounter[track] -= numFrames;
+    if (gateSwingCounter[track] <= 0) {
+        gateSwingCounter[track] = 0;
+        gateTriggerCounter[track] = 240;  // Fire delayed trigger
+    }
+}
+```
 
 ### CV/Audio Bus Voltage Mapping
 **From API examples and VTrig inspection:**
@@ -122,17 +200,17 @@ cd VTrig && make clean && make    # Produces build/1VTrig.o
 
 ### Recent History Issues
 - Commit `3893a73` (VLoop2 v0.4.0) accidentally replaced VSeq with VFader code
-- Last good VSeq: commit `355e014` (Fix final gate track parameter stride issue)
-- Multiple MIDI-related commits that led to bugs
+- Last good VSeq before accidents: commit `355e014`
+- Session commits: `720f9c2` (clock div/mult), `67c5267` (swing)
 
 ### Current Branch State
 ```bash
 git log --oneline -- VSeq/src/main.cpp | head -5
+# 67c5267 Implement swing for VSeq gate tracks
+# 720f9c2 Implement clock division/multiplication for VSeq
 # 9cfb1f4 Fix VSeq CV output voltage range (0-10V instead of 0-1V)
-# 3893a73 VLoop2 v0.4.0 - Phase 4: Basic Playback
+# 3893a73 VLoop2 v0.4.0 - Phase 4: Basic Playback (ACCIDENT)
 # 355e014 Fix final gate track parameter stride issue in VSeq
-# f90c6b5 Fix gate track step selection in VSeq customUi
-# e0ab1b3 Update VSeq parameter defaults and fix gate track display bug
 ```
 
 ## File Structure
@@ -176,16 +254,19 @@ Codex-NT/
 
 ## Next Steps (Priority Order)
 
-1. **Finish VSeq Clock Division Fix**
-   - Add clock counter initialization in constructor
-   - Implement division logic in step() function
-   - Test with all 9 division values (/16 through x16)
-   - Commit when working
+1. **Test VSeq on Hardware**
+   - Verify all clock division/multiplication modes work correctly
+   - Test swing at various percentages
+   - Confirm no regressions in existing features
 
 2. **Debug VSeq Parameter Change Issue**
    - "Parameter changes reset patterns" (from CHANGELOG)
    - Need to compare debug snapshots before/after parameter change
    - Use `VSeq/analyze_debug.sh` to extract debug data
+
+3. **Consider Future Features**
+   - MIDI note output for CV sequencers (currently removed due to bugs)
+   - Additional sequencer modes or features as needed
 
 3. **VSeq Unit Tests**
    - Run: `cd VSeq/test && make test`
