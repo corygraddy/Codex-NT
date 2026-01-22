@@ -28,6 +28,10 @@ struct VSeq : public _NT_algorithm {
     int section1Counter[3];     // Track section 1 repeat count
     int section2Counter[3];     // Track section 2 repeat count
     bool inSection2[3];         // Which section is currently playing
+    int clockCounter[3];        // Clock division counter
+    int internalClockCounter[3]; // Internal subdivision counter for multiplication
+    int lastClockPeriod[3];     // Samples between last two clocks (for multiplication)
+    int samplesSinceLastClock[3]; // Sample counter since last clock
     
     // Gate sequencer state (6 tracks)
     int gateCurrentStep[6];     // Current step for each gate track (0-31)
@@ -39,6 +43,10 @@ struct VSeq : public _NT_algorithm {
     bool gateInFill[6];         // Whether we're in the fill section
     int gateTriggerCounter[6];  // Countdown for trigger pulse duration
     bool gateTriggered[6];      // Whether gate was just triggered this step
+    int gateClockCounter[6];    // Clock division counter for gate tracks
+    int gateInternalClockCounter[6]; // Internal subdivision counter for multiplication
+    int gateLastClockPeriod[6]; // Samples between last two clocks (for multiplication)
+    int gateSamplesSinceLastClock[6]; // Sample counter since last clock
     
     // Edge detection
     float lastClockIn;
@@ -82,6 +90,10 @@ struct VSeq : public _NT_algorithm {
             section1Counter[seq] = 0;
             section2Counter[seq] = 0;
             inSection2[seq] = false;
+            clockCounter[seq] = 0;
+            internalClockCounter[seq] = 0;
+            lastClockPeriod[seq] = 4800;  // Default ~10Hz at 48kHz
+            samplesSinceLastClock[seq] = 0;
         }
         
         lastClockIn = 0.0f;
@@ -111,7 +123,11 @@ struct VSeq : public _NT_algorithm {
             gateInSection2[track] = false;
             gateInFill[track] = false;
             gateTriggerCounter[track] = 0;
+            gateClockCounter[track] = 0;
             gateTriggered[track] = false;
+            gateInternalClockCounter[track] = 0;
+            gateLastClockPeriod[track] = 4800;  // Default ~10Hz at 48kHz
+            gateSamplesSinceLastClock[track] = 0;
         }
         
         for (int i = 0; i < 12; i++) {
@@ -961,12 +977,14 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     
     // Process each CV sequencer (3 total)
     for (int seq = 0; seq < 3; seq++) {
+        int divParam = kParamSeq1ClockDiv + (seq * 6);
         int dirParam = kParamSeq1Direction + (seq * 6);
         int stepParam = kParamSeq1StepCount + (seq * 6);
         int splitParam = kParamSeq1SplitPoint + (seq * 6);
         int sec1Param = kParamSeq1Section1Reps + (seq * 6);
         int sec2Param = kParamSeq1Section2Reps + (seq * 6);
         
+        int clockDiv = self->v[divParam];   // 0-8: /16, /8, /4, /2, x1, x2, x4, x8, x16
         int direction = self->v[dirParam];  // 0=Forward, 1=Backward, 2=Pingpong
         int stepCount = self->v[stepParam]; // 1-32
         int splitPoint = self->v[splitParam]; // 1-31
@@ -976,11 +994,52 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         // Reset handling
         if (resetTrig) {
             a->resetSequencer(seq);
+            a->clockCounter[seq] = 0;
+            a->internalClockCounter[seq] = 0;
+            a->samplesSinceLastClock[seq] = 0;
         }
         
-        // Clock handling - advance one step per clock
+        // Track samples for multiplication modes
+        a->samplesSinceLastClock[seq] += numFrames;
+        
+        // Clock handling with division/multiplication
+        bool seqStepped = false;
         if (clockTrig) {
-            a->advanceSequencer(seq, direction, stepCount, splitPoint, sec1Reps, sec2Reps);
+            // Measure clock period for multiplication
+            if (a->samplesSinceLastClock[seq] > 100 && a->samplesSinceLastClock[seq] < 96000) {
+                a->lastClockPeriod[seq] = a->samplesSinceLastClock[seq];
+            }
+            a->samplesSinceLastClock[seq] = 0;
+            a->internalClockCounter[seq] = 0;
+            
+            if (clockDiv < 4) {
+                // Division mode: 0-3=/16 to /2
+                int divisor = 1 << (4 - clockDiv);  // 0->16, 1->8, 2->4, 3->2
+                a->clockCounter[seq]++;
+                if (a->clockCounter[seq] >= divisor) {
+                    a->clockCounter[seq] = 0;
+                    a->advanceSequencer(seq, direction, stepCount, splitPoint, sec1Reps, sec2Reps);
+                    seqStepped = true;
+                }
+            } else {
+                // Multiplication mode: 4-8 = x1 to x16
+                a->advanceSequencer(seq, direction, stepCount, splitPoint, sec1Reps, sec2Reps);
+                seqStepped = true;
+            }
+        }
+        
+        // Internal clock multiplication - generate additional steps between external clocks
+        if (clockDiv >= 5 && !clockTrig && a->lastClockPeriod[seq] > 0) {
+            int multiplier = 1 << (clockDiv - 4);  // 5->2, 6->4, 7->8, 8->16
+            int subdivisionPeriod = a->lastClockPeriod[seq] / multiplier;
+            
+            if (subdivisionPeriod > numFrames && a->samplesSinceLastClock[seq] >= subdivisionPeriod * (a->internalClockCounter[seq] + 1)) {
+                a->internalClockCounter[seq]++;
+                if (a->internalClockCounter[seq] < multiplier) {
+                    a->advanceSequencer(seq, direction, stepCount, splitPoint, sec1Reps, sec2Reps);
+                    seqStepped = true;
+                }
+            }
         }
         
         // Clamp current step to step count (safety check)
@@ -1010,8 +1069,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 }
             }
             
-            // Send MIDI note if channel is configured and clock just triggered
-            if (clockTrig) {
+            // Send MIDI note if channel is configured and sequencer just stepped
+            if (seqStepped) {
                 int midiParam = kParamSeq1Midi1 + (seq * 3) + out;
                 int midiChannel = self->v[midiParam];  // 0 = off, 1-16 = MIDI channels
                 
@@ -1042,6 +1101,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int runParam = kParamGate1Run + (track * 9);   // 9 params per track now
         int lenParam = kParamGate1Length + (track * 9);
         int dirParam = kParamGate1Direction + (track * 9);
+        int divParam = kParamGate1ClockDiv + (track * 9);
         int splitParam = kParamGate1SplitPoint + (track * 9);
         int sec1Param = kParamGate1Section1Reps + (track * 9);
         int sec2Param = kParamGate1Section2Reps + (track * 9);
@@ -1051,6 +1111,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int isRunning = self->v[runParam];     // 0 = stopped, 1 = running
         int trackLength = self->v[lenParam];   // 1-32
         int direction = self->v[dirParam];     // 0=Forward, 1=Backward, 2=Pingpong
+        int clockDiv = self->v[divParam];      // 0-8: /16, /8, /4, /2, x1, x2, x4, x8, x16
         int splitPoint = self->v[splitParam];  // 0-31 (0 = no split)
         int sec1Reps = self->v[sec1Param];     // 1-99
         int sec2Reps = self->v[sec2Param];     // 1-99
@@ -1068,13 +1129,56 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             a->gateSection2Counter[track] = 0;
             a->gateInSection2[track] = false;
             a->gateInFill[track] = false;
+            a->gateClockCounter[track] = 0;
+            a->gateInternalClockCounter[track] = 0;
+            a->gateSamplesSinceLastClock[track] = 0;
         }
         
-        // Clock handling - advance one step per clock
+        // Track samples for multiplication modes
+        a->gateSamplesSinceLastClock[track] += numFrames;
+        
+        // Clock handling with division/multiplication
+        bool gateStepped = false;
         if (clockTrig) {
-            a->advanceGateSequencer(track, direction, trackLength, splitPoint, sec1Reps, sec2Reps, fillStart);
+            // Measure clock period for multiplication
+            if (a->gateSamplesSinceLastClock[track] > 100 && a->gateSamplesSinceLastClock[track] < 96000) {
+                a->gateLastClockPeriod[track] = a->gateSamplesSinceLastClock[track];
+            }
+            a->gateSamplesSinceLastClock[track] = 0;
+            a->gateInternalClockCounter[track] = 0;
             
-            // After advancing, mark if current step should trigger
+            if (clockDiv < 4) {
+                // Division mode: 0-3=/16 to /2
+                int divisor = 1 << (4 - clockDiv);  // 0->16, 1->8, 2->4, 3->2
+                a->gateClockCounter[track]++;
+                if (a->gateClockCounter[track] >= divisor) {
+                    a->gateClockCounter[track] = 0;
+                    a->advanceGateSequencer(track, direction, trackLength, splitPoint, sec1Reps, sec2Reps, fillStart);
+                    gateStepped = true;
+                }
+            } else {
+                // Multiplication mode: 4-8 = x1 to x16
+                a->advanceGateSequencer(track, direction, trackLength, splitPoint, sec1Reps, sec2Reps, fillStart);
+                gateStepped = true;
+            }
+        }
+        
+        // Internal clock multiplication - generate additional steps between external clocks
+        if (clockDiv >= 5 && !clockTrig && a->gateLastClockPeriod[track] > 0) {
+            int multiplier = 1 << (clockDiv - 4);  // 5->2, 6->4, 7->8, 8->16
+            int subdivisionPeriod = a->gateLastClockPeriod[track] / multiplier;
+            
+            if (subdivisionPeriod > numFrames && a->gateSamplesSinceLastClock[track] >= subdivisionPeriod * (a->gateInternalClockCounter[track] + 1)) {
+                a->gateInternalClockCounter[track]++;
+                if (a->gateInternalClockCounter[track] < multiplier) {
+                    a->advanceGateSequencer(track, direction, trackLength, splitPoint, sec1Reps, sec2Reps, fillStart);
+                    gateStepped = true;
+                }
+            }
+        }
+        
+        // After potential advancement, mark if current step should trigger
+        if (gateStepped) {  // Only trigger when we actually stepped
             int currentStep = a->gateCurrentStep[track];
             if (currentStep >= 0 && currentStep < 32 && a->gateSteps[track][currentStep]) {
                 // Gate is active on this step - trigger!
