@@ -10,6 +10,7 @@ else
 endif
 
 CXXFLAGS := -std=c++11 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -fno-exceptions -Os -Wall -MMD -MP
+LDFLAGS := -Wl,--relocatable -Wl,--gc-sections -Wl,-u,pluginEntry -nostdlib
 NT_API_PATH := ../distingNT_API/include
 INCLUDES := -I$(NT_API_PATH) -Iinclude
 
@@ -37,7 +38,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 
 $(TARGET): $(OBJECTS)
 	@echo "Linking $(TARGET) ..."
-	$(CXX) -r -o $(TARGET) $(OBJECTS)
+	$(CXX) $(LDFLAGS) -o $(TARGET) $(OBJECTS)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
