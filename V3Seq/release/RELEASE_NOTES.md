@@ -37,7 +37,7 @@ First public release of V3Seq, a 3-output CV sequencer for Disting NT.
 
 ## Installation
 
-Copy `V3Seq.o` to your Disting NT's SD card at `/programs/plug-ins/` and restart the device.
+Copy `1V3Seq.o` to your Disting NT's SD card at `/programs/plug-ins/` and restart the device.
 
 ## Known Limitations
 
