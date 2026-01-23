@@ -540,7 +540,8 @@ enum {
 
 // String arrays for enum parameters
 static const char* const divisionStrings[] = {
-    "/16", "/8", "/4", "/2", "x1", "x2", "x4", "x8", "x16", NULL
+    "/16", "/15", "/14", "/13", "/12", "/11", "/10", "/9", "/8", "/7", "/6", "/5", "/4", "/3", "/2",
+    "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", NULL
 };
 
 static const char* const directionStrings[] = {
@@ -737,8 +738,8 @@ static void initParameters() {
         // Clock Division parameter
         parameters[divParam].name = divNames[seq];
         parameters[divParam].min = 0;
-        parameters[divParam].max = 8;  // /16, /8, /4, /2, x1, x2, x4, x8, x16
-        parameters[divParam].def = 0;  // Default to /16 (lowest)
+        parameters[divParam].max = 30;  // /16 to /2, x1 to x16 (31 options)
+        parameters[divParam].def = 14;  // Default to /2
         parameters[divParam].unit = kNT_unitEnum;
         parameters[divParam].scaling = kNT_scalingNone;
         parameters[divParam].enumStrings = divisionStrings;
@@ -854,8 +855,8 @@ static void initParameters() {
         
         parameters[divParam].name = gateDivNames[track];
         parameters[divParam].min = 0;
-        parameters[divParam].max = 8;
-        parameters[divParam].def = 0;  // Default to /16
+        parameters[divParam].max = 30;
+        parameters[divParam].def = 14;  // Default to /2
         parameters[divParam].unit = kNT_unitEnum;
         parameters[divParam].scaling = kNT_scalingNone;
         parameters[divParam].enumStrings = divisionStrings;
@@ -984,12 +985,25 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int sec1Param = kParamSeq1Section1Reps + (seq * 6);
         int sec2Param = kParamSeq1Section2Reps + (seq * 6);
         
-        int clockDiv = self->v[divParam];   // 0-8: /16, /8, /4, /2, x1, x2, x4, x8, x16
+        int clockDiv = self->v[divParam];   // 0-30: /16 to /2, x1 to x16
         int direction = self->v[dirParam];  // 0=Forward, 1=Backward, 2=Pingpong
         int stepCount = self->v[stepParam]; // 1-32
         int splitPoint = self->v[splitParam]; // 1-31
         int sec1Reps = self->v[sec1Param];  // 1-99
         int sec2Reps = self->v[sec2Param];  // 1-99
+        
+        // Map clockDiv parameter to actual divisor/multiplier
+        // 0-14: divisions (/16, /15, /14, /13, /12, /11, /10, /9, /8, /7, /6, /5, /4, /3, /2)
+        // 15-30: multiplications (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16)
+        int divisor = 1;
+        int multiplier = 1;
+        bool isDivision = (clockDiv < 15);
+        
+        if (isDivision) {
+            divisor = 16 - clockDiv;  // 0->16, 1->15, 2->14, ..., 14->2
+        } else {
+            multiplier = clockDiv - 14;  // 15->1, 16->2, 17->3, ..., 30->16
+        }
         
         // Reset handling
         if (resetTrig) {
@@ -1012,9 +1026,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             a->samplesSinceLastClock[seq] = 0;
             a->internalClockCounter[seq] = 0;
             
-            if (clockDiv < 4) {
-                // Division mode: 0-3=/16 to /2
-                int divisor = 1 << (4 - clockDiv);  // 0->16, 1->8, 2->4, 3->2
+            if (isDivision) {
+                // Division mode: count clocks before advancing
                 a->clockCounter[seq]++;
                 if (a->clockCounter[seq] >= divisor) {
                     a->clockCounter[seq] = 0;
@@ -1022,15 +1035,14 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                     seqStepped = true;
                 }
             } else {
-                // Multiplication mode: 4-8 = x1 to x16
+                // Multiplication mode: step on external clock
                 a->advanceSequencer(seq, direction, stepCount, splitPoint, sec1Reps, sec2Reps);
                 seqStepped = true;
             }
         }
         
         // Internal clock multiplication - generate additional steps between external clocks
-        if (clockDiv >= 5 && !clockTrig && a->lastClockPeriod[seq] > 0) {
-            int multiplier = 1 << (clockDiv - 4);  // 5->2, 6->4, 7->8, 8->16
+        if (!isDivision && multiplier > 1 && !clockTrig && a->lastClockPeriod[seq] > 0) {
             int subdivisionPeriod = a->lastClockPeriod[seq] / multiplier;
             
             if (subdivisionPeriod > numFrames && a->samplesSinceLastClock[seq] >= subdivisionPeriod * (a->internalClockCounter[seq] + 1)) {
@@ -1112,12 +1124,23 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         int isRunning = self->v[runParam];     // 0 = stopped, 1 = running
         int trackLength = self->v[lenParam];   // 1-32
         int direction = self->v[dirParam];     // 0=Forward, 1=Backward, 2=Pingpong
-        int clockDiv = self->v[divParam];      // 0-8: /16, /8, /4, /2, x1, x2, x4, x8, x16
+        int clockDiv = self->v[divParam];      // 0-30: /16 to /2, x1 to x16
         int swing = self->v[swingParam];       // 0-100 (percentage of swing delay)
         int splitPoint = self->v[splitParam];  // 0-31 (0 = no split)
         int sec1Reps = self->v[sec1Param];     // 1-99
         int sec2Reps = self->v[sec2Param];     // 1-99
         int fillStart = self->v[fillParam];    // 1-32 (step where fill replaces section 1 on last rep)
+        
+        // Map clockDiv parameter to actual divisor/multiplier
+        int gateDivisor = 1;
+        int gateMultiplier = 1;
+        bool gateIsDivision = (clockDiv < 15);
+        
+        if (gateIsDivision) {
+            gateDivisor = 16 - clockDiv;  // 0->16, 1->15, 2->14, ..., 14->2
+        } else {
+            gateMultiplier = clockDiv - 14;  // 15->1, 16->2, 17->3, ..., 30->16
+        }
         
         // Skip sequencer advancement if not running
         if (isRunning == 0) continue;
@@ -1149,30 +1172,28 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             a->gateSamplesSinceLastClock[track] = 0;
             a->gateInternalClockCounter[track] = 0;
             
-            if (clockDiv < 4) {
-                // Division mode: 0-3=/16 to /2
-                int divisor = 1 << (4 - clockDiv);  // 0->16, 1->8, 2->4, 3->2
+            if (gateIsDivision) {
+                // Division mode: count clocks before advancing
                 a->gateClockCounter[track]++;
-                if (a->gateClockCounter[track] >= divisor) {
+                if (a->gateClockCounter[track] >= gateDivisor) {
                     a->gateClockCounter[track] = 0;
                     a->advanceGateSequencer(track, direction, trackLength, splitPoint, sec1Reps, sec2Reps, fillStart);
                     gateStepped = true;
                 }
             } else {
-                // Multiplication mode: 4-8 = x1 to x16
+                // Multiplication mode: step on external clock
                 a->advanceGateSequencer(track, direction, trackLength, splitPoint, sec1Reps, sec2Reps, fillStart);
                 gateStepped = true;
             }
         }
         
         // Internal clock multiplication - generate additional steps between external clocks
-        if (clockDiv >= 5 && !clockTrig && a->gateLastClockPeriod[track] > 0) {
-            int multiplier = 1 << (clockDiv - 4);  // 5->2, 6->4, 7->8, 8->16
-            int subdivisionPeriod = a->gateLastClockPeriod[track] / multiplier;
+        if (!gateIsDivision && gateMultiplier > 1 && !clockTrig && a->gateLastClockPeriod[track] > 0) {
+            int subdivisionPeriod = a->gateLastClockPeriod[track] / gateMultiplier;
             
             if (subdivisionPeriod > numFrames && a->gateSamplesSinceLastClock[track] >= subdivisionPeriod * (a->gateInternalClockCounter[track] + 1)) {
                 a->gateInternalClockCounter[track]++;
-                if (a->gateInternalClockCounter[track] < multiplier) {
+                if (a->gateInternalClockCounter[track] < gateMultiplier) {
                     a->advanceGateSequencer(track, direction, trackLength, splitPoint, sec1Reps, sec2Reps, fillStart);
                     gateStepped = true;
                 }
