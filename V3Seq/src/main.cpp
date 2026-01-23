@@ -90,12 +90,12 @@ enum {
     kParamClockIn,
     kParamResetIn,
     kParamOut1,
-    kParamMidi1,
     kParamOut2,
-    kParamMidi2,
     kParamOut3,
-    kParamMidi3,
     kParamMidiChannel,
+    kParamMidi1,
+    kParamMidi2,
+    kParamMidi3,
     kParamClockDiv,
     kParamDirection,
     kParamStepCount,
@@ -157,7 +157,7 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamResetIn].unit = kNT_unitCvInput;
     parameters[kParamResetIn].scaling = kNT_scalingNone;
     
-    // CV Outputs (1-28, 0 = off)
+    // CV Outputs (3 total, grouped together)
     parameters[kParamOut1].name = out1Name;
     parameters[kParamOut1].min = 0;
     parameters[kParamOut1].max = 28;
@@ -165,6 +165,29 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamOut1].unit = kNT_unitCvOutput;
     parameters[kParamOut1].scaling = kNT_scalingNone;
     
+    parameters[kParamOut2].name = out2Name;
+    parameters[kParamOut2].min = 0;
+    parameters[kParamOut2].max = 28;
+    parameters[kParamOut2].def = 0;
+    parameters[kParamOut2].unit = kNT_unitCvOutput;
+    parameters[kParamOut2].scaling = kNT_scalingNone;
+    
+    parameters[kParamOut3].name = out3Name;
+    parameters[kParamOut3].min = 0;
+    parameters[kParamOut3].max = 28;
+    parameters[kParamOut3].def = 0;
+    parameters[kParamOut3].unit = kNT_unitCvOutput;
+    parameters[kParamOut3].scaling = kNT_scalingNone;
+    
+    // MIDI Channel
+    parameters[kParamMidiChannel].name = midiChannelName;
+    parameters[kParamMidiChannel].min = 0;
+    parameters[kParamMidiChannel].max = 16;
+    parameters[kParamMidiChannel].def = 0;
+    parameters[kParamMidiChannel].unit = kNT_unitNone;
+    parameters[kParamMidiChannel].scaling = kNT_scalingNone;
+    
+    // MIDI CC numbers (3 total, grouped together)
     parameters[kParamMidi1].name = midi1Name;
     parameters[kParamMidi1].min = 0;
     parameters[kParamMidi1].max = 127;
