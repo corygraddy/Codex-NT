@@ -961,7 +961,7 @@ extern "C" {
             case kNT_selector_numFactories:
                 return 1;
             case kNT_selector_factoryInfo:
-                return reinterpret_cast<uintptr_t>(&factory);
+                return (uintptr_t)((data == 0) ? &factory : nullptr);
             default:
                 return 0;
         }
