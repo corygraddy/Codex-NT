@@ -8,12 +8,15 @@
 
 // V3Seq: Single 3-output CV sequencer
 // - Clock and Reset inputs
-// - 3 CV outputs
+// - 3 CV outputs with configurable voltage ranges (0-5V, 0-10V, -5V to +5V, -10V to +10V)
 // - 3 MIDI CC outputs
 // - 32 steps with 3 values per step
+// - First Step and Last Step parameters define active sequence range
 // - Direction control: Forward, Backward, Pingpong
 // - Section looping with configurable repeats
-// - Clock division and multiplication
+// - Clock division and multiplication (31 options)
+// - UI with page-based bar display (one page per CV output)
+// - Coarse (25 steps) and Fine (500 steps) adjustment modes
 
 struct V3Seq : public _NT_algorithm {
     // Sequencer data: 32 steps × 3 outputs
@@ -312,7 +315,7 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
 }
 
 // =============================================================================
-// Core Functions - Stubs for Phase 1
+// Core Functions
 // =============================================================================
 
 void V3Seq::advanceSequencer(int direction, int firstStep, int lastStep, int splitPoint, 

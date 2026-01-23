@@ -8,13 +8,14 @@
 
 // VTrig: 6-track trigger/gate sequencer
 // - Shared Clock and Reset inputs
-// - 6 independent trigger tracks
+// - 6 independent trigger tracks with CV outputs
+// - 6 MIDI CC outputs (one per track)
 // - 32 steps per track
 // - Direction control: Forward, Backward, Pingpong
-// - Clock division/multiplication (31 options)
+// - Clock division/multiplication (31 options: /16 to x16)
 // - Swing (0-100%)
 // - Section looping with configurable repeats
-// - Fill feature
+// - Fill feature (jumps to section 2 on last repeat of section 1)
 
 struct VTrig : public _NT_algorithm {
     // Trigger data: 6 tracks × 32 steps
