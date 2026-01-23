@@ -36,9 +36,11 @@ struct V3Seq : public _NT_algorithm {
     
     // UI state
     int selectedStep;           // 0-31
+    int selectedPage;           // 0-2 (CV1, CV2, CV3)
     int lastSelectedStep;       // Track when step changes to update pots
     uint16_t lastEncoderRButton; // For debouncing right encoder button
     bool potCaught[3];          // Track if each pot has caught the step value
+    bool pagePotCaught;         // Track if middle pot has caught page position
     
     V3Seq() {
         // Initialize step values to middle voltage (0V)
@@ -65,8 +67,10 @@ struct V3Seq : public _NT_algorithm {
         
         // Initialize UI state
         selectedStep = 0;
+        selectedPage = 0;
         lastSelectedStep = -1;
         lastEncoderRButton = 0;
+        pagePotCaught = false;
         for (int i = 0; i < 3; i++) {
             potCaught[i] = false;
         }
@@ -529,20 +533,211 @@ void parameterChanged(_NT_algorithm* self, int parameterIndex) {
 }
 
 bool draw(_NT_algorithm* self) {
-    // Phase 5: implement display
-    return false;
+    V3Seq* a = (V3Seq*)self;
+    
+    // Clear screen
+    NT_drawShapeI(kNT_rectangle, 0, 0, 256, 64, 0);  // Black background
+    
+    // Get parameters
+    int stepCount = self->v[kParamStepCount];
+    int splitPoint = self->v[kParamSplitPoint];
+    
+    // Draw title with page indicator
+    char title[16];
+    snprintf(title, sizeof(title), "V3S CV%d", a->selectedPage + 1);
+    NT_drawText(0, 0, title, 255);
+    
+    // Draw current step number in top right corner
+    char stepNum[4];
+    snprintf(stepNum, sizeof(stepNum), "%d", a->selectedStep + 1);
+    NT_drawText(240, 0, stepNum, 255);
+    
+    // Draw 32 steps in 2 rows of 16
+    // Each step shows 1 bar for the current page's CV output
+    // Screen is 256 wide, divided into 2 rows of 16 steps
+    
+    int barWidth = 10;     // Width of each bar
+    int stepGap = 6;       // Gap between steps
+    int stepWidth = barWidth + stepGap;  // Total width per step: 16
+    int startY = 12;       // Start below title
+    int rowHeight = 26;    // Height of each row
+    int maxBarHeight = 22; // Maximum bar height
+    
+    // Get which CV output to display based on page
+    int currentOutput = a->selectedPage;  // 0, 1, or 2
+    
+    for (int step = 0; step < 32; step++) {
+        int row = step / 16;     // 0 or 1
+        int col = step % 16;     // 0-15
+        
+        int x = col * stepWidth;
+        int y = startY + (row * rowHeight);
+        
+        // Determine if this step is active
+        bool isActive = (step < stepCount);
+        
+        // Skip drawing inactive steps completely
+        if (!isActive) continue;
+        
+        // Get value for current page's output
+        int16_t value = a->stepValues[step][currentOutput];
+        // Convert int16_t (-32768 to 32767) to 0.0-1.0
+        float normalized = (value + 32768.0f) / 65535.0f;
+        // Convert to bar height (1 to maxBarHeight pixels)
+        int barHeight = (int)(normalized * maxBarHeight);
+        if (barHeight < 1) barHeight = 1;
+        
+        int barBottomY = y + maxBarHeight;
+        int barTopY = barBottomY - barHeight;
+        
+        // Draw bar (filled rectangle from top to bottom)
+        NT_drawShapeI(kNT_rectangle, x, barTopY, x + barWidth - 1, barBottomY, 255);
+        
+        // Draw step indicator if this is the current playing step
+        if (step == a->currentStep) {
+            // Draw small dot above the bar
+            int dotX = x + (barWidth / 2) - 1;
+            NT_drawShapeI(kNT_rectangle, dotX, y - 3, dotX + 1, y - 2, 255);
+        }
+        
+        // Draw selection underline if this is the selected step
+        if (step == a->selectedStep) {
+            NT_drawShapeI(kNT_line, x, y + maxBarHeight + 2, x + barWidth - 1, y + maxBarHeight + 2, 255);
+        }
+        
+        // Draw split point marker if enabled
+        if (step == splitPoint && splitPoint > 0 && splitPoint < stepCount) {
+            int markerX = x + (barWidth / 2);
+            int markerY = y + maxBarHeight + 4;
+            NT_drawShapeI(kNT_rectangle, markerX, markerY, markerX + 1, markerY + 1, 255);
+        }
+    }
+    
+    return true;  // Suppress default parameter drawing
 }
 
 uint32_t hasCustomUi(_NT_algorithm* self) {
-    // Phase 5: enable custom UI
     (void)self;
-    return 0;
+    return kNT_potC | kNT_encoderL | kNT_encoderR;
 }
 
 void handleUi(_NT_algorithm* self, const _NT_uiData& data) {
-    // Phase 5: implement UI handling
-    (void)self;
-    (void)data;
+    V3Seq* a = (V3Seq*)self;
+    
+    // Get current sequencer length
+    int stepCount = self->v[kParamStepCount];
+    
+    // Middle pot: select page (CV1, CV2, CV3) with catch behavior
+    if (data.controls & kNT_potC) {
+        float potValue = data.pots[1];
+        
+        // Calculate virtual position for current page (0-2 maps to 0.0-1.0)
+        float pagePosition = a->selectedPage / 2.0f;
+        
+        // Check if pot has caught the page position (within 10% tolerance)
+        if (!a->pagePotCaught) {
+            if (fabsf(potValue - pagePosition) < 0.10f) {
+                a->pagePotCaught = true;
+            }
+        }
+        
+        // Only allow page changes when caught
+        if (a->pagePotCaught) {
+            // Map pot to page with hysteresis
+            int newPage;
+            if (potValue < 0.33f) newPage = 0;      // CV1
+            else if (potValue < 0.67f) newPage = 1; // CV2
+            else newPage = 2;                        // CV3
+            
+            // If page changed, update selection and reset catch
+            if (newPage != a->selectedPage) {
+                a->selectedPage = newPage;
+                a->pagePotCaught = false;
+            }
+        }
+    }
+    
+    // Right encoder: select step (0 to stepCount-1)
+    if (data.encoders[1] != 0) {
+        int delta = data.encoders[1];
+        a->selectedStep += delta;
+        
+        // Wrap around based on sequencer length
+        if (a->selectedStep < 0) a->selectedStep = stepCount - 1;
+        if (a->selectedStep >= stepCount) a->selectedStep = 0;
+    }
+    
+    // Left encoder: modify value for current page's output on selected step
+    if (data.encoders[0] != 0) {
+        int delta = data.encoders[0];
+        int currentOutput = a->selectedPage;  // 0, 1, or 2
+        
+        // Get current value
+        int16_t currentValue = a->stepValues[a->selectedStep][currentOutput];
+        
+        // Increment by delta (larger steps for faster editing)
+        // Each encoder step = ~1% of range = 655 units
+        int32_t newValue = (int32_t)currentValue + (delta * 655);
+        
+        // Clamp to valid range
+        if (newValue < -32768) newValue = -32768;
+        if (newValue > 32767) newValue = 32767;
+        
+        a->stepValues[a->selectedStep][currentOutput] = (int16_t)newValue;
+    }
+}
+
+void setupUi(_NT_algorithm* self, _NT_float3& pots) {
+    V3Seq* a = (V3Seq*)self;
+    
+    // Middle pot shows page position
+    pots[1] = a->selectedPage / 2.0f;  // 0.0, 0.5, or 1.0
+    
+    // Left and right pots unused
+    pots[0] = 0.5f;
+    pots[2] = 0.5f;
+}
+
+void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
+    V3Seq* a = (V3Seq*)self;
+    
+    // Save all step values as 2D array
+    stream.addMemberName("stepValues");
+    stream.openArray();
+    for (int step = 0; step < 32; step++) {
+        stream.openArray();
+        for (int out = 0; out < 3; out++) {
+            stream.addNumber((int)a->stepValues[step][out]);
+        }
+        stream.closeArray();
+    }
+    stream.closeArray();
+}
+
+bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
+    V3Seq* a = (V3Seq*)self;
+    
+    // Match "stepValues"
+    if (parse.matchName("stepValues")) {
+        int numSteps = 0;
+        if (parse.numberOfArrayElements(numSteps)) {
+            int stepsToLoad = (numSteps < 32) ? numSteps : 32;
+            for (int step = 0; step < stepsToLoad; step++) {
+                int numOutputs = 0;
+                if (parse.numberOfArrayElements(numOutputs)) {
+                    int outputsToLoad = (numOutputs < 3) ? numOutputs : 3;
+                    for (int out = 0; out < outputsToLoad; out++) {
+                        int value;
+                        if (parse.number(value)) {
+                            a->stepValues[step][out] = (int16_t)value;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    return true;
 }
 
 // =============================================================================
@@ -567,9 +762,9 @@ static const _NT_factory factory = {
     .tags = kNT_tagUtility,
     .hasCustomUi = hasCustomUi,
     .customUi = handleUi,
-    .setupUi = nullptr,
-    .serialise = nullptr,
-    .deserialise = nullptr,
+    .setupUi = setupUi,
+    .serialise = serialise,
+    .deserialise = deserialise,
     .midiSysEx = nullptr,
 };
 
@@ -578,8 +773,10 @@ extern "C" {
         switch (selector) {
             case kNT_selector_version:
                 return kNT_apiVersionCurrent;
+            case kNT_selector_numFactories:
+                return 1;
             case kNT_selector_factoryInfo:
-                return (uintptr_t)&factory;
+                return (uintptr_t)((data == 0) ? &factory : nullptr);
             default:
                 return 0;
         }
