@@ -15,7 +15,7 @@ INCLUDES := -I$(NT_API_PATH) -Iinclude
 
 SRC_DIR := src
 BUILD_DIR := build
-TARGET := $(BUILD_DIR)/1VTrig.o
+TARGET := $(BUILD_DIR)/VTrig.o
 
 SOURCES := $(wildcard $(SRC_DIR)/*.cpp)
 OBJECTS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))

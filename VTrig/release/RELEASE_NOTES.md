@@ -34,7 +34,7 @@ First public release of VTrig, a 6-track trigger sequencer for Disting NT.
 
 ## Installation
 
-Copy `1VTrig.o` to your Disting NT's SD card at `/programs/plug-ins/` and restart the device.
+Copy `VTrig.o` to your Disting NT's SD card at `/programs/plug-ins/` and restart the device.
 
 ## Known Limitations
 
