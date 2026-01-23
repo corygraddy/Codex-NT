@@ -402,6 +402,58 @@ void initParameters(_NT_algorithm* self) {
 }
 
 // =============================================================================
+// Parameter Pages
+// =============================================================================
+
+static uint8_t paramPageClock[] = { kParamClockIn, kParamResetIn, 0 };
+static uint8_t paramPageRouting[] = { 
+    kParamTrack1Out, kParamTrack2Out, kParamTrack3Out, kParamTrack4Out, kParamTrack5Out, kParamTrack6Out,
+    kParamTriggerMidiChannel,
+    kParamTrack1CC, kParamTrack2CC, kParamTrack3CC, kParamTrack4CC, kParamTrack5CC, kParamTrack6CC,
+    0 
+};
+static uint8_t paramPageTrack1[] = { 
+    kParamTrack1Run, kParamTrack1Length, kParamTrack1Direction, kParamTrack1ClockDiv, kParamTrack1Swing,
+    kParamTrack1SplitPoint, kParamTrack1Section1Reps, kParamTrack1Section2Reps, kParamTrack1FillStart, 0 
+};
+static uint8_t paramPageTrack2[] = { 
+    kParamTrack2Run, kParamTrack2Length, kParamTrack2Direction, kParamTrack2ClockDiv, kParamTrack2Swing,
+    kParamTrack2SplitPoint, kParamTrack2Section1Reps, kParamTrack2Section2Reps, kParamTrack2FillStart, 0 
+};
+static uint8_t paramPageTrack3[] = { 
+    kParamTrack3Run, kParamTrack3Length, kParamTrack3Direction, kParamTrack3ClockDiv, kParamTrack3Swing,
+    kParamTrack3SplitPoint, kParamTrack3Section1Reps, kParamTrack3Section2Reps, kParamTrack3FillStart, 0 
+};
+static uint8_t paramPageTrack4[] = { 
+    kParamTrack4Run, kParamTrack4Length, kParamTrack4Direction, kParamTrack4ClockDiv, kParamTrack4Swing,
+    kParamTrack4SplitPoint, kParamTrack4Section1Reps, kParamTrack4Section2Reps, kParamTrack4FillStart, 0 
+};
+static uint8_t paramPageTrack5[] = { 
+    kParamTrack5Run, kParamTrack5Length, kParamTrack5Direction, kParamTrack5ClockDiv, kParamTrack5Swing,
+    kParamTrack5SplitPoint, kParamTrack5Section1Reps, kParamTrack5Section2Reps, kParamTrack5FillStart, 0 
+};
+static uint8_t paramPageTrack6[] = { 
+    kParamTrack6Run, kParamTrack6Length, kParamTrack6Direction, kParamTrack6ClockDiv, kParamTrack6Swing,
+    kParamTrack6SplitPoint, kParamTrack6Section1Reps, kParamTrack6Section2Reps, kParamTrack6FillStart, 0 
+};
+
+static _NT_parameterPage pageArray[] = {
+    { .name = "Clock", .numParams = 2, .params = paramPageClock },
+    { .name = "Routing", .numParams = 13, .params = paramPageRouting },
+    { .name = "Track 1", .numParams = 9, .params = paramPageTrack1 },
+    { .name = "Track 2", .numParams = 9, .params = paramPageTrack2 },
+    { .name = "Track 3", .numParams = 9, .params = paramPageTrack3 },
+    { .name = "Track 4", .numParams = 9, .params = paramPageTrack4 },
+    { .name = "Track 5", .numParams = 9, .params = paramPageTrack5 },
+    { .name = "Track 6", .numParams = 9, .params = paramPageTrack6 }
+};
+
+static _NT_parameterPages pages = {
+    .numPages = 8,
+    .pages = pageArray
+};
+
+// =============================================================================
 // Construction
 // =============================================================================
 
@@ -413,6 +465,7 @@ void calculateRequirements(_NT_algorithmRequirements& req, const int32_t*) {
 _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorithmRequirements&, const int32_t*) {
     VTrig* alg = new (ptrs.sram) VTrig();
     initParameters(alg);
+    alg->parameterPages = &pages;
     return alg;
 }
 
