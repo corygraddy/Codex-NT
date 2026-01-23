@@ -11,8 +11,14 @@ BUILD_DIR := build
 NT_API_PATH := ../distingNT_API
 INCLUDES := -I$(NT_API_PATH)/include -Iinclude
 
-TARGET_ARCH := arm-none-eabi-
-CXX := $(TARGET_ARCH)c++
+# Use local ARM toolchain if available, otherwise use system
+ARM_TOOLCHAIN := $(HOME)/arm-toolchain
+ifneq ($(wildcard $(ARM_TOOLCHAIN)/bin/arm-none-eabi-c++),)
+	CXX := $(ARM_TOOLCHAIN)/bin/arm-none-eabi-c++
+else
+	TARGET_ARCH := arm-none-eabi-
+	CXX := $(TARGET_ARCH)c++
+endif
 CXXFLAGS := -std=c++11 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -fno-exceptions -Os -Wall -MMD -MP
 
 SOURCES := $(wildcard $(SRC_DIR)/*.cpp)

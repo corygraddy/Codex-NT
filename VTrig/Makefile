@@ -1,46 +1,49 @@
-# VTrig - 6-track trigger sequencer for Disting NT
-# Build configuration
+# VTrig Makefile
 
-PLUGIN_NAME := 1VTrig.o
+# Use local ARM toolchain if available, otherwise use system
+ARM_TOOLCHAIN := $(HOME)/arm-toolchain
+ifneq ($(wildcard $(ARM_TOOLCHAIN)/bin/arm-none-eabi-c++),)
+	CXX := $(ARM_TOOLCHAIN)/bin/arm-none-eabi-c++
+else
+	TARGET_ARCH := arm-none-eabi-
+	CXX := $(TARGET_ARCH)c++
+endif
+
+CXXFLAGS := -std=c++11 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -fno-exceptions -Os -Wall -MMD -MP
+NT_API_PATH := ../distingNT_API/include
+INCLUDES := -I$(NT_API_PATH) -Iinclude
+
 SRC_DIR := src
 BUILD_DIR := build
-
-# Adjust if your API path differs
-NT_API_PATH := ../distingNT_API
-INCLUDES := -I$(NT_API_PATH)/include -Iinclude
-
-TARGET_ARCH := arm-none-eabi-
-CXX := $(TARGET_ARCH)c++
-CXXFLAGS := -std=c++11 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -fno-exceptions -Os -Wall -MMD -MP
+TARGET := $(BUILD_DIR)/1VTrig.o
 
 SOURCES := $(wildcard $(SRC_DIR)/*.cpp)
-OBJ := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
-DEPS := $(OBJ:.o=.d)
-
-TARGET := $(BUILD_DIR)/$(PLUGIN_NAME)
+OBJECTS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
+DEPS := $(OBJECTS:.o=.d)
 
 .PHONY: all clean check_api
 
 all: check_api $(TARGET)
 
 check_api:
-	@if [ ! -d "$(NT_API_PATH)/include/distingnt" ]; then \
-		echo "Error: NT_API_PATH seems wrong. Expected headers at $(NT_API_PATH)/include/distingnt"; \
+	@if [ ! -d "$(NT_API_PATH)" ]; then \
+		echo "ERROR: distingNT_API not found at $(NT_API_PATH)"; \
+		echo "Please ensure distingNT_API exists relative to VTrig directory"; \
 		exit 1; \
 	fi
 
-$(TARGET): $(OBJ)
-	@mkdir -p $(@D)
-	@echo "Linking $(TARGET) ..."
-	$(CXX) -r -o $(TARGET) $(OBJ)
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@mkdir -p $(@D)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	@echo "Compiling $< ..."
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
+$(TARGET): $(OBJECTS)
+	@echo "Linking $@ ..."
+	$(CXX) -r -o $@ $^
+
 clean:
-	@echo "Cleaning build directory..."
-	rm -f $(BUILD_DIR)/*
+	rm -rf $(BUILD_DIR)
 
 -include $(DEPS)
