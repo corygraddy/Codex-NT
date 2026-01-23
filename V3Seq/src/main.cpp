@@ -41,6 +41,7 @@ struct V3Seq : public _NT_algorithm {
     uint16_t lastEncoderRButton; // For debouncing right encoder button
     bool potCaught[3];          // Track if each pot has caught the step value
     bool pagePotCaught;         // Track if middle pot has caught page position
+    bool fineAdjustMode;        // Fine (true) vs coarse (false) adjustment mode
     
     V3Seq() {
         // Initialize step values to middle voltage (0V)
@@ -71,6 +72,7 @@ struct V3Seq : public _NT_algorithm {
         lastSelectedStep = -1;
         lastEncoderRButton = 0;
         pagePotCaught = false;
+        fineAdjustMode = false;
         for (int i = 0; i < 3; i++) {
             potCaught[i] = false;
         }
@@ -100,6 +102,7 @@ enum {
     kParamSplitPoint,
     kParamSection1Reps,
     kParamSection2Reps,
+    kParamVoltageRange,
     kNumParameters
 };
 
@@ -121,6 +124,12 @@ static char stepCountName[] = "Step Count";
 static char splitPointName[] = "Split Point";
 static char section1RepsName[] = "Section 1 Reps";
 static char section2RepsName[] = "Section 2 Reps";
+static char voltageRangeName[] = "Voltage Range";
+
+// Voltage range strings
+static const char* const voltageRangeStrings[] = {
+    "0-5V", "0-10V", "-5-+5V", "-10-+10V", NULL
+};
 
 // Clock division/multiplication strings (31 options: /16-/2, x1-x16)
 static const char* const divisionStrings[] = {
@@ -243,6 +252,14 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSection2Reps].def = 1;
     parameters[kParamSection2Reps].unit = kNT_unitNone;
     parameters[kParamSection2Reps].scaling = kNT_scalingNone;
+    
+    parameters[kParamVoltageRange].name = voltageRangeName;
+    parameters[kParamVoltageRange].min = 0;
+    parameters[kParamVoltageRange].max = 3;
+    parameters[kParamVoltageRange].def = 1;  // Default to 0-10V
+    parameters[kParamVoltageRange].unit = kNT_unitEnum;
+    parameters[kParamVoltageRange].scaling = kNT_scalingNone;
+    parameters[kParamVoltageRange].enumStrings = voltageRangeStrings;
     
     self->parameters = parameters;
 }
@@ -484,13 +501,35 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     
     // Output current step values to all output buses
     int step = a->currentStep;
+    int voltageRange = self->v[kParamVoltageRange];  // 0=0-5V, 1=0-10V, 2=-5-+5V, 3=-10-+10V
+    
     for (int out = 0; out < 3; out++) {
         int outputBus = self->v[kParamOut1 + out];  // 0 = none, 1-28 = bus 0-27
         
         if (outputBus > 0 && outputBus <= 28) {
             int16_t value = a->stepValues[step][out];
-            // Convert from int16_t range (-32768 to 32767) to voltage (0.0V to 10.0V)
-            float outputValue = ((value + 32768) / 65535.0f) * 10.0f;
+            // Normalize to 0.0-1.0
+            float normalized = (value + 32768) / 65535.0f;
+            
+            // Convert to voltage based on selected range
+            float outputValue;
+            switch (voltageRange) {
+                case 0:  // 0-5V
+                    outputValue = normalized * 5.0f;
+                    break;
+                case 1:  // 0-10V
+                    outputValue = normalized * 10.0f;
+                    break;
+                case 2:  // -5V to +5V
+                    outputValue = (normalized * 10.0f) - 5.0f;
+                    break;
+                case 3:  // -10V to +10V
+                    outputValue = (normalized * 20.0f) - 10.0f;
+                    break;
+                default:
+                    outputValue = normalized * 10.0f;  // Fallback to 0-10V
+                    break;
+            }
             
             // Write to all frames in the output bus
             float* outBus = busFrames + ((outputBus - 1) * numFrames);
@@ -552,6 +591,26 @@ bool draw(_NT_algorithm* self) {
     snprintf(stepNum, sizeof(stepNum), "%d", a->selectedStep + 1);
     NT_drawText(240, 0, stepNum, 255);
     
+    // Draw fine adjustment mode indicator if active
+    if (a->fineAdjustMode) {
+        NT_drawText(220, 0, "F", 255);  // "F" for Fine mode
+    }
+    
+    // Draw page indicators at the top (3 bars for CV1, CV2, CV3)
+    // Position them centered with spacing between
+    int pageBarY = 4;
+    int pageBarWidth = 60;  // Width of each page bar
+    int pageBarSpacing = 20; // Space between bars
+    int totalPageWidth = (3 * pageBarWidth) + (2 * pageBarSpacing); // 180 pixels
+    int pageBarStartX = (256 - totalPageWidth) / 2; // Center horizontally
+    
+    for (int i = 0; i < 3; i++) {
+        int barStartX = pageBarStartX + (i * (pageBarWidth + pageBarSpacing));
+        int barEndX = barStartX + pageBarWidth;
+        int brightness = (i == a->selectedPage) ? 255 : 80;  // Bright if current page, dim otherwise
+        NT_drawShapeI(kNT_line, barStartX, pageBarY, barEndX, pageBarY, brightness);
+    }
+    
     // Draw 32 steps in 2 rows of 16
     // Each step shows 1 bar for the current page's CV output
     // Screen is 256 wide, divided into 2 rows of 16 steps
@@ -611,6 +670,26 @@ bool draw(_NT_algorithm* self) {
             int markerY = y + maxBarHeight + 4;
             NT_drawShapeI(kNT_rectangle, markerX, markerY, markerX + 1, markerY + 1, 255);
         }
+        
+        // Draw separator dots between step groups (4-5, 8-9, 12-13, 20-21, 24-25, 28-29)
+        // These appear in the gap after steps 4, 8, 12, 20, 24, 28
+        if (step == 4 || step == 8 || step == 12 || step == 20 || step == 24 || step == 28) {
+            int dotX = x + barWidth + (stepGap / 2);
+            
+            // Draw dots at 0%, 25%, 50%, 75%, 100% of bar height
+            int barBottomY = y + maxBarHeight;
+            int dot0Y = barBottomY;                                    // 0% (bottom)
+            int dot25Y = barBottomY - (maxBarHeight / 4);             // 25%
+            int dot50Y = barBottomY - (maxBarHeight / 2);             // 50%
+            int dot75Y = barBottomY - (3 * maxBarHeight / 4);         // 75%
+            int dot100Y = y;                                          // 100% (top)
+            
+            NT_drawShapeI(kNT_rectangle, dotX, dot0Y, dotX, dot0Y, 128);
+            NT_drawShapeI(kNT_rectangle, dotX, dot25Y, dotX, dot25Y, 128);
+            NT_drawShapeI(kNT_rectangle, dotX, dot50Y, dotX, dot50Y, 128);
+            NT_drawShapeI(kNT_rectangle, dotX, dot75Y, dotX, dot75Y, 128);
+            NT_drawShapeI(kNT_rectangle, dotX, dot100Y, dotX, dot100Y, 128);
+        }
     }
     
     return true;  // Suppress default parameter drawing
@@ -618,7 +697,7 @@ bool draw(_NT_algorithm* self) {
 
 uint32_t hasCustomUi(_NT_algorithm* self) {
     (void)self;
-    return kNT_potC | kNT_encoderL | kNT_encoderR;
+    return kNT_potC | kNT_encoderL | kNT_encoderR | kNT_encoderButtonR;
 }
 
 void handleUi(_NT_algorithm* self, const _NT_uiData& data) {
@@ -667,6 +746,14 @@ void handleUi(_NT_algorithm* self, const _NT_uiData& data) {
         if (a->selectedStep >= stepCount) a->selectedStep = 0;
     }
     
+    // Right encoder button: toggle fine adjustment mode
+    uint16_t currentEncoderRButton = data.controls & kNT_encoderButtonR;
+    uint16_t lastEncoderRButton = a->lastEncoderRButton & kNT_encoderButtonR;
+    if (currentEncoderRButton && !lastEncoderRButton) {  // Rising edge
+        a->fineAdjustMode = !a->fineAdjustMode;
+    }
+    a->lastEncoderRButton = data.controls;
+    
     // Left encoder: modify value for current page's output on selected step
     if (data.encoders[0] != 0) {
         int delta = data.encoders[0];
@@ -675,9 +762,13 @@ void handleUi(_NT_algorithm* self, const _NT_uiData& data) {
         // Get current value
         int16_t currentValue = a->stepValues[a->selectedStep][currentOutput];
         
-        // Increment by delta (larger steps for faster editing)
-        // Each encoder step = ~1% of range = 655 units
-        int32_t newValue = (int32_t)currentValue + (delta * 655);
+        // Calculate step size based on mode
+        // Coarse: 25 total values = 65535/25 = 2621 units per step
+        // Fine: 500 total values = 65535/500 = 131 units per step
+        int stepSize = a->fineAdjustMode ? 131 : 2621;
+        
+        // Increment by delta
+        int32_t newValue = (int32_t)currentValue + (delta * stepSize);
         
         // Clamp to valid range
         if (newValue < -32768) newValue = -32768;
