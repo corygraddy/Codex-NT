@@ -1412,9 +1412,9 @@ bool draw(_NT_algorithm* self) {
     // Screen is 256 wide, divided into 2 rows of 16 steps
     
     int barWidth = 3;   // Width of each bar
-    int barSpacing = 1; // Space between bars within a step
-    int barsWidth = (3 * barWidth) + (2 * barSpacing);  // Width of 3 bars: 3*3 + 2*1 = 11
-    int stepGap = 4;    // Gap after each step (reduced to make room for dots)
+    int barSpacing = 2; // Space between bars within a step (increased for visibility)
+    int barsWidth = (3 * barWidth) + (2 * barSpacing);  // Width of 3 bars: 3*3 + 2*2 = 13
+    int stepGap = 4;    // Gap after each step
     int stepWidth = barsWidth + stepGap;  // Total width per step: 11 + 4 = 15
     int startY = 10;    // Start below title
     int rowHeight = 26; // Height of each row
