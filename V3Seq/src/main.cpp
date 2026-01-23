@@ -78,7 +78,7 @@ struct V3Seq : public _NT_algorithm {
         }
     }
     
-    void advanceSequencer(int direction, int stepCount, int splitPoint, 
+    void advanceSequencer(int direction, int firstStep, int lastStep, int splitPoint, 
                           int sec1Reps, int sec2Reps);
 };
 
@@ -98,7 +98,8 @@ enum {
     kParamMidi3,
     kParamClockDiv,
     kParamDirection,
-    kParamStepCount,
+    kParamFirstStep,
+    kParamLastStep,
     kParamSplitPoint,
     kParamSection1Reps,
     kParamSection2Reps,
@@ -120,7 +121,8 @@ static char midi3Name[] = "MIDI CC 3";
 static char midiChannelName[] = "MIDI Channel";
 static char clockDivName[] = "Clock Div/Mult";
 static char directionName[] = "Direction";
-static char stepCountName[] = "Step Count";
+static char firstStepName[] = "First Step";
+static char lastStepName[] = "Last Step";
 static char splitPointName[] = "Split Point";
 static char section1RepsName[] = "Section 1 Reps";
 static char section2RepsName[] = "Section 2 Reps";
@@ -248,12 +250,19 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamDirection].scaling = kNT_scalingNone;
     parameters[kParamDirection].enumStrings = directionStrings;
     
-    parameters[kParamStepCount].name = stepCountName;
-    parameters[kParamStepCount].min = 1;
-    parameters[kParamStepCount].max = 32;
-    parameters[kParamStepCount].def = 16;
-    parameters[kParamStepCount].unit = kNT_unitNone;
-    parameters[kParamStepCount].scaling = kNT_scalingNone;
+    parameters[kParamFirstStep].name = firstStepName;
+    parameters[kParamFirstStep].min = 1;
+    parameters[kParamFirstStep].max = 32;
+    parameters[kParamFirstStep].def = 1;
+    parameters[kParamFirstStep].unit = kNT_unitNone;
+    parameters[kParamFirstStep].scaling = kNT_scalingNone;
+    
+    parameters[kParamLastStep].name = lastStepName;
+    parameters[kParamLastStep].min = 1;
+    parameters[kParamLastStep].max = 32;
+    parameters[kParamLastStep].def = 16;
+    parameters[kParamLastStep].unit = kNT_unitNone;
+    parameters[kParamLastStep].scaling = kNT_scalingNone;
     
     parameters[kParamSplitPoint].name = splitPointName;
     parameters[kParamSplitPoint].min = 0;
@@ -306,34 +315,39 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs, const _NT_algorith
 // Core Functions - Stubs for Phase 1
 // =============================================================================
 
-void V3Seq::advanceSequencer(int direction, int stepCount, int splitPoint, 
+void V3Seq::advanceSequencer(int direction, int firstStep, int lastStep, int splitPoint, 
                               int sec1Reps, int sec2Reps) {
-    // If no sections (splitPoint >= stepCount), use simple wrapping logic
-    if (splitPoint >= stepCount) {
+    // Convert 1-based step numbers to 0-based indices
+    int startIndex = firstStep - 1;  // 0-31
+    int endIndex = lastStep - 1;     // 0-31
+    int stepCount = (endIndex - startIndex) + 1;
+    
+    // If no sections (splitPoint >= lastStep), use simple wrapping logic
+    if (splitPoint >= lastStep) {
         if (direction == 0) {
             // Forward
             currentStep++;
-            if (currentStep >= stepCount) {
-                currentStep = 0;
+            if (currentStep > endIndex) {
+                currentStep = startIndex;
             }
         } else if (direction == 1) {
             // Backward
             currentStep--;
-            if (currentStep < 0) {
-                currentStep = stepCount - 1;
+            if (currentStep < startIndex) {
+                currentStep = endIndex;
             }
         } else {
             // Pingpong
             if (pingpongForward) {
                 currentStep++;
-                if (currentStep >= stepCount) {
-                    currentStep = stepCount - 1;
+                if (currentStep > endIndex) {
+                    currentStep = endIndex;
                     pingpongForward = false;
                 }
             } else {
                 currentStep--;
-                if (currentStep < 0) {
-                    currentStep = 0;
+                if (currentStep < startIndex) {
+                    currentStep = startIndex;
                     pingpongForward = true;
                 }
             }
@@ -348,7 +362,7 @@ void V3Seq::advanceSequencer(int direction, int stepCount, int splitPoint,
         
         // Check if we've reached the end of a section
         if (!inSection2) {
-            // In section 1
+            // In section 1 (startIndex to splitPoint-1)
             if (currentStep >= splitPoint) {
                 section1Counter++;
                 if (section1Counter >= sec1Reps) {
@@ -357,18 +371,18 @@ void V3Seq::advanceSequencer(int direction, int stepCount, int splitPoint,
                     section1Counter = 0;
                 } else {
                     // Repeat section 1
-                    currentStep = 0;
+                    currentStep = startIndex;
                 }
             }
         } else {
-            // In section 2
-            if (currentStep >= stepCount) {
+            // In section 2 (splitPoint to endIndex)
+            if (currentStep > endIndex) {
                 section2Counter++;
                 if (section2Counter >= sec2Reps) {
                     // Loop back to section 1
                     inSection2 = false;
                     section2Counter = 0;
-                    currentStep = 0;
+                    currentStep = startIndex;
                 } else {
                     // Repeat section 2
                     currentStep = splitPoint;
@@ -390,18 +404,18 @@ void V3Seq::advanceSequencer(int direction, int stepCount, int splitPoint,
                     section2Counter = 0;
                 } else {
                     // Repeat section 2
-                    currentStep = stepCount - 1;
+                    currentStep = endIndex;
                 }
             }
         } else {
             // In section 1
-            if (currentStep < 0) {
+            if (currentStep < startIndex) {
                 section1Counter++;
                 if (section1Counter >= sec1Reps) {
                     // Move to section 2
                     inSection2 = true;
                     section1Counter = 0;
-                    currentStep = stepCount - 1;
+                    currentStep = endIndex;
                 } else {
                     // Repeat section 1
                     currentStep = splitPoint - 1;
@@ -412,14 +426,14 @@ void V3Seq::advanceSequencer(int direction, int stepCount, int splitPoint,
         // Pingpong
         if (pingpongForward) {
             currentStep++;
-            if (currentStep >= stepCount) {
-                currentStep = stepCount - 1;
+            if (currentStep > endIndex) {
+                currentStep = endIndex;
                 pingpongForward = false;
             }
         } else {
             currentStep--;
-            if (currentStep <= 0) {
-                currentStep = 0;
+            if (currentStep < startIndex) {
+                currentStep = startIndex;
                 pingpongForward = true;
             }
         }
@@ -448,7 +462,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     // Get sequencer parameters
     int clockDiv = self->v[kParamClockDiv];
     int direction = self->v[kParamDirection];
-    int stepCount = self->v[kParamStepCount];
+    int firstStep = self->v[kParamFirstStep];  // 1-32
+    int lastStep = self->v[kParamLastStep];    // 1-32
     int splitPoint = self->v[kParamSplitPoint];
     int sec1Reps = self->v[kParamSection1Reps];
     int sec2Reps = self->v[kParamSection2Reps];
@@ -494,12 +509,12 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             a->clockCounter++;
             if (a->clockCounter >= divisor) {
                 a->clockCounter = 0;
-                a->advanceSequencer(direction, stepCount, splitPoint, sec1Reps, sec2Reps);
+                a->advanceSequencer(direction, firstStep, lastStep, splitPoint, sec1Reps, sec2Reps);
                 stepped = true;
             }
         } else {
             // Multiplication mode: step on external clock
-            a->advanceSequencer(direction, stepCount, splitPoint, sec1Reps, sec2Reps);
+            a->advanceSequencer(direction, firstStep, lastStep, splitPoint, sec1Reps, sec2Reps);
             stepped = true;
         }
     }
@@ -511,15 +526,20 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
         if (subdivisionPeriod > numFrames && a->samplesSinceLastClock >= subdivisionPeriod * (a->internalClockCounter + 1)) {
             a->internalClockCounter++;
             if (a->internalClockCounter < multiplier) {
-                a->advanceSequencer(direction, stepCount, splitPoint, sec1Reps, sec2Reps);
+                a->advanceSequencer(direction, firstStep, lastStep, splitPoint, sec1Reps, sec2Reps);
                 stepped = true;
             }
         }
     }
     
-    // Clamp current step to step count (safety check)
-    if (a->currentStep >= stepCount) {
-        a->currentStep = stepCount - 1;
+    // Clamp current step to valid range (safety check)
+    int startIndex = firstStep - 1;
+    int endIndex = lastStep - 1;
+    if (a->currentStep < startIndex) {
+        a->currentStep = startIndex;
+    }
+    if (a->currentStep > endIndex) {
+        a->currentStep = endIndex;
     }
     
     // Output current step values to all output buses
@@ -589,9 +609,50 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
 }
 
 void parameterChanged(_NT_algorithm* self, int parameterIndex) {
-    // Minimal parameter handling
-    (void)self;
-    (void)parameterIndex;
+    V3Seq* a = (V3Seq*)self;
+    
+    // Enforce First Step <= Last Step constraint
+    if (parameterIndex == kParamFirstStep) {
+        int firstStep = self->v[kParamFirstStep];
+        int lastStep = self->v[kParamLastStep];
+        
+        if (firstStep > lastStep) {
+            // Adjust last step to match first step
+            int32_t algoIdx = NT_algorithmIndex(self);
+            NT_setParameterFromAudio(algoIdx, kParamLastStep + NT_parameterOffset(), firstStep);
+        }
+        
+        // Clamp selected step to valid range
+        int startIndex = firstStep - 1;
+        int endIndex = self->v[kParamLastStep] - 1;
+        if (a->selectedStep < startIndex) {
+            a->selectedStep = startIndex;
+        }
+        if (a->selectedStep > endIndex) {
+            a->selectedStep = endIndex;
+        }
+    }
+    
+    if (parameterIndex == kParamLastStep) {
+        int firstStep = self->v[kParamFirstStep];
+        int lastStep = self->v[kParamLastStep];
+        
+        if (lastStep < firstStep) {
+            // Adjust first step to match last step
+            int32_t algoIdx = NT_algorithmIndex(self);
+            NT_setParameterFromAudio(algoIdx, kParamFirstStep + NT_parameterOffset(), lastStep);
+        }
+        
+        // Clamp selected step to valid range
+        int startIndex = self->v[kParamFirstStep] - 1;
+        int endIndex = lastStep - 1;
+        if (a->selectedStep < startIndex) {
+            a->selectedStep = startIndex;
+        }
+        if (a->selectedStep > endIndex) {
+            a->selectedStep = endIndex;
+        }
+    }
 }
 
 bool draw(_NT_algorithm* self) {
@@ -601,7 +662,8 @@ bool draw(_NT_algorithm* self) {
     NT_drawShapeI(kNT_rectangle, 0, 0, 256, 64, 0);  // Black background
     
     // Get parameters
-    int stepCount = self->v[kParamStepCount];
+    int firstStep = self->v[kParamFirstStep];  // 1-32
+    int lastStep = self->v[kParamLastStep];    // 1-32
     int splitPoint = self->v[kParamSplitPoint];
     
     // Draw title with page indicator
@@ -655,8 +717,8 @@ bool draw(_NT_algorithm* self) {
         int x = col * stepWidth;
         int y = startY + (row * rowHeight);
         
-        // Determine if this step is active
-        bool isActive = (step < stepCount);
+        // Determine if this step is active (within first-last range)
+        bool isActive = (step >= (firstStep - 1) && step <= (lastStep - 1));
         
         // Skip drawing inactive steps completely
         if (!isActive) continue;
@@ -688,7 +750,7 @@ bool draw(_NT_algorithm* self) {
         }
         
         // Draw split point marker if enabled
-        if (step == splitPoint && splitPoint > 0 && splitPoint < stepCount) {
+        if (step == splitPoint && splitPoint >= firstStep && splitPoint <= lastStep) {
             int markerX = x + (barWidth / 2);
             int markerY = y + maxBarHeight + 4;
             NT_drawShapeI(kNT_rectangle, markerX, markerY, markerX + 1, markerY + 1, 255);
@@ -726,8 +788,11 @@ uint32_t hasCustomUi(_NT_algorithm* self) {
 void handleUi(_NT_algorithm* self, const _NT_uiData& data) {
     V3Seq* a = (V3Seq*)self;
     
-    // Get current sequencer length
-    int stepCount = self->v[kParamStepCount];
+    // Get current sequencer range
+    int firstStep = self->v[kParamFirstStep];  // 1-32
+    int lastStep = self->v[kParamLastStep];    // 1-32
+    int startIndex = firstStep - 1;  // 0-31
+    int endIndex = lastStep - 1;     // 0-31
     
     // Middle pot: select page (CV1, CV2, CV3) with catch behavior
     if (data.controls & kNT_potC) {
@@ -759,14 +824,14 @@ void handleUi(_NT_algorithm* self, const _NT_uiData& data) {
         }
     }
     
-    // Right encoder: select step (0 to stepCount-1)
+    // Right encoder: select step (within firstStep to lastStep range)
     if (data.encoders[1] != 0) {
         int delta = data.encoders[1];
         a->selectedStep += delta;
         
-        // Wrap around based on sequencer length
-        if (a->selectedStep < 0) a->selectedStep = stepCount - 1;
-        if (a->selectedStep >= stepCount) a->selectedStep = 0;
+        // Wrap around based on sequencer range
+        if (a->selectedStep < startIndex) a->selectedStep = endIndex;
+        if (a->selectedStep > endIndex) a->selectedStep = startIndex;
     }
     
     // Right encoder button: toggle fine adjustment mode
