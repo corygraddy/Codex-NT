@@ -726,12 +726,149 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
 }
 
 void parameterChanged(_NT_algorithm* self, int parameterIndex) {
-    // Phase 3: implement parameter change handling
+    // Minimal parameter handling - most validation done by host
+    // Could add split point clamping if needed in future
+    (void)self;
+    (void)parameterIndex;
 }
 
 bool draw(_NT_algorithm* self) {
-    // Phase 4: implement display
-    return false;
+    VTrig* a = static_cast<VTrig*>(self);
+    
+    // Clear screen
+    NT_drawShapeI(kNT_rectangle, 0, 0, 256, 64, 0);
+    
+    // Show track and step info
+    char info[32];
+    snprintf(info, sizeof(info), "T%d S%d", a->selectedTrack + 1, a->selectedStep + 1);
+    NT_drawText(0, 0, info, 255);
+    
+    // Show gate state for current selection
+    bool currentGateState = a->steps[a->selectedTrack][a->selectedStep];
+    NT_drawText(60, 0, currentGateState ? "ON" : "off", currentGateState ? 255 : 100);
+    
+    // 6 tracks × 32 steps
+    // Screen: 256px wide, 64px tall
+    // Step size: 256/32 = 8px per step
+    // Track height: (64-8)/6 = ~9px per track (leave 8px for title)
+    
+    int stepWidth = 8;
+    int trackHeight = 9;
+    int startY = 8;
+    
+    for (int track = 0; track < 6; track++) {
+        int y = startY + (track * trackHeight);
+        
+        // Get track parameters
+        int lenParam = kParamTrack1Length + (track * 9);
+        int splitParam = kParamTrack1SplitPoint + (track * 9);
+        int trackLength = self->v[lenParam];
+        int splitPoint = self->v[splitParam];
+        int currentStep = a->currentStep[track];
+        
+        // Highlight selected track with a line on the left
+        if (track == a->selectedTrack) {
+            NT_drawShapeI(kNT_line, 0, y, 0, y + trackHeight - 1, 255);
+            NT_drawShapeI(kNT_line, 1, y, 1, y + trackHeight - 1, 255);
+        }
+        
+        // Draw split point line if active
+        if (splitPoint > 0 && splitPoint < trackLength) {
+            int splitX = splitPoint * stepWidth;
+            NT_drawShapeI(kNT_line, splitX, y, splitX, y + trackHeight - 1, 200);
+        }
+        
+        for (int step = 0; step < 32; step++) {
+            int x = step * stepWidth;
+            
+            // Determine if this step is active (within track length)
+            bool isActive = (step < trackLength);
+            
+            // Only draw steps that are within the track length
+            if (!isActive) continue;
+            
+            // Get gate state for this track/step
+            bool hasGate = a->steps[track][step];
+            
+            // Calculate center position
+            int centerX = x + (stepWidth / 2);
+            int centerY = y + (trackHeight / 2);
+            
+            // If gate is active, draw filled 5x5 square
+            if (hasGate) {
+                NT_drawShapeI(kNT_rectangle, centerX - 2, centerY - 2, centerX + 2, centerY + 2, 255);
+            } else {
+                // Just draw center pixel for inactive steps
+                NT_drawShapeI(kNT_rectangle, centerX, centerY, centerX, centerY, 255);
+            }
+            
+            // Draw small box below the current playing step
+            if (step == currentStep) {
+                NT_drawShapeI(kNT_rectangle, centerX, centerY + 3, centerX + 1, centerY + 3, 255);
+            }
+            
+            // Highlight selected step (for editing)
+            if (step == a->selectedStep && track == a->selectedTrack) {
+                NT_drawShapeI(kNT_line, centerX - 3, centerY - 3, centerX + 3, centerY - 3, 200);  // Top
+                NT_drawShapeI(kNT_line, centerX - 3, centerY + 3, centerX + 3, centerY + 3, 200);  // Bottom
+                NT_drawShapeI(kNT_line, centerX - 3, centerY - 3, centerX - 3, centerY + 3, 200);  // Left
+                NT_drawShapeI(kNT_line, centerX + 3, centerY - 3, centerX + 3, centerY + 3, 200);  // Right
+            }
+        }
+    }
+    
+    return true;  // Suppress default parameter drawing
+}
+
+uint32_t hasCustomUi(_NT_algorithm* self) {
+    (void)self;
+    return kNT_encoderL | kNT_encoderR | kNT_encoderButtonR;
+}
+
+void handleUi(_NT_algorithm* self, const _NT_uiData& data) {
+    VTrig* a = static_cast<VTrig*>(self);
+    
+    // Left encoder: select track (0-5)
+    if (data.encoders[0] != 0) {
+        int delta = data.encoders[0];
+        a->selectedTrack += delta;
+        
+        // Wrap around
+        if (a->selectedTrack < 0) a->selectedTrack = 5;
+        if (a->selectedTrack > 5) a->selectedTrack = 0;
+        
+        // Clamp selected step to new track's length
+        int lenParam = kParamTrack1Length + (a->selectedTrack * 9);
+        if (a->selectedStep >= self->v[lenParam]) {
+            a->selectedStep = self->v[lenParam] - 1;
+        }
+    }
+    
+    // Get current track length for encoder bounds
+    int lenParam = kParamTrack1Length + (a->selectedTrack * 9);
+    int trackLength = self->v[lenParam];
+    
+    // Right encoder: select step (0 to trackLength-1)
+    if (data.encoders[1] != 0) {
+        int delta = data.encoders[1];
+        a->selectedStep += delta;
+        
+        // Wrap around based on track length
+        if (a->selectedStep < 0) a->selectedStep = trackLength - 1;
+        if (a->selectedStep >= trackLength) a->selectedStep = 0;
+    }
+    
+    // Right encoder button: toggle gate
+    uint16_t currentEncoderRButton = data.controls & kNT_encoderButtonR;
+    uint16_t lastEncoderRButton = a->lastEncoderRButton & kNT_encoderButtonR;
+    if (currentEncoderRButton && !lastEncoderRButton) {  // Rising edge
+        // Toggle the gate
+        int track = a->selectedTrack;
+        int step = a->selectedStep;
+        a->steps[track][step] = !a->steps[track][step];
+    }
+    
+    a->lastEncoderRButton = data.controls;
 }
 
 // =============================================================================
@@ -754,8 +891,8 @@ static const _NT_factory factory = {
     .midiRealtime = nullptr,
     .midiMessage = nullptr,
     .tags = kNT_tagUtility,
-    .hasCustomUi = nullptr,
-    .customUi = nullptr,
+    .hasCustomUi = hasCustomUi,
+    .customUi = handleUi,
     .setupUi = nullptr,
     .serialise = nullptr,
     .deserialise = nullptr,
