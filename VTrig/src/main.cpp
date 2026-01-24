@@ -930,7 +930,7 @@ void handleUi(_NT_algorithm* self, const _NT_uiData& data) {
 // =============================================================================
 
 static const _NT_factory factory = {
-    .guid = NT_MULTICHAR('V', 'T', 'R', 'G'),
+    .guid = NT_MULTICHAR('C', 'G', 'V', 'T'),
     .name = "VTrig",
     .description = "6-Track Trigger Sequencer",
     .numSpecifications = 0,
