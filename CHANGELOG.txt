@@ -4,6 +4,24 @@ CODEX-NT PROJECT CHANGELOG
 Track bugs, fixes, new features, and new plugins across all projects
 --------------------------------------------------------------------------------
 
+Date: 2026-01-23
+Project: VTrig / V3Seq
+Type: Bug Investigation
+Description: NT Gallery upload troubleshooting
+- Gallery validator error: "no metadata returned for analysis"
+- Attempted fix: Added _NT_specification arrays to both plugins
+  * VTrig: specifications[0] = { "Tracks", min=6, max=6, def=6, kNT_typeGeneric }
+  * V3Seq: specifications[0] = { "Sequencers", min=3, max=3, def=3, kNT_typeGeneric }
+  * Updated .numSpecifications from 0 to 1
+  * Updated .specifications from nullptr to &specifications
+- Result: Still failed with same error
+- Reverted to commit 85efc06 (data parameter check only)
+Notes: Plugins work correctly on hardware but fail gallery validator. Neither missing 
+specifications nor data parameter check alone resolves the issue. May be related to 
+validator requiring specific metadata structure or different API expectations.
+
+--------------------------------------------------------------------------------
+
 Date: 2025-10-29
 Project: VSeq
 Type: Feature Removed

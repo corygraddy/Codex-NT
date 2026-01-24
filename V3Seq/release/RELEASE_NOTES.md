@@ -10,7 +10,7 @@ First public release of V3Seq, a 3-output CV sequencer for Disting NT.
 ✅ 3 independent CV outputs with 32 steps each  
 ✅ 4 configurable voltage ranges (0-5V, 0-10V, -5-+5V, -10-+10V)  
 ✅ Configurable sequence range (First Step / Last Step parameters)  
-✅ 4 playback modes: Forward, Backward, Pingpong, Random  
+✅ 3 playback modes: Forward, Backward, Pingpong  
 ✅ Per-output clock division (1, 2, 4, 8, 16, 32)  
 
 ### Section Looping
@@ -42,7 +42,6 @@ Copy `V3Seq.o` to your Disting NT's SD card at `/programs/plug-ins/` and restart
 ## Known Limitations
 
 - Section looping disabled in Pingpong mode (full sequence bounce)
-- Random mode uses full First-Last range (no section looping)
 
 ## Credits
 

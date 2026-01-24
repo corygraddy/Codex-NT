@@ -679,10 +679,9 @@ bool draw(_NT_algorithm* self) {
     snprintf(stepNum, sizeof(stepNum), "%d", a->selectedStep + 1);
     NT_drawText(240, 0, stepNum, 255);
     
-    // Draw fine adjustment mode indicator if active
-    if (a->fineAdjustMode) {
-        NT_drawText(220, 0, "F", 255);  // "F" for Fine mode
-    }
+    // Draw adjustment mode indicator (coarse or fine)
+    const char* modeText = a->fineAdjustMode ? "fine" : "coarse";
+    NT_drawText(200, 0, modeText, 255);
     
     // Draw page indicators at the top (3 bars for CV1, CV2, CV3)
     // Position them centered with spacing between
@@ -759,9 +758,9 @@ bool draw(_NT_algorithm* self) {
             NT_drawShapeI(kNT_rectangle, markerX, markerY, markerX + 1, markerY + 1, 255);
         }
         
-        // Draw separator dots between step groups (4-5, 8-9, 12-13, 20-21, 24-25, 28-29)
-        // These appear in the gap after steps 4, 8, 12, 20, 24, 28
-        if (step == 4 || step == 8 || step == 12 || step == 20 || step == 24 || step == 28) {
+        // Draw separator dots between step groups (after steps 3, 7, 11, 19, 23, 27)
+        // These appear in the gap after every 4th step (4, 8, 12, 20, 24, 28 in 1-indexed)
+        if (step == 3 || step == 7 || step == 11 || step == 19 || step == 23 || step == 27) {
             int dotX = x + barWidth + (stepGap / 2);
             
             // Draw dots at 0%, 25%, 50%, 75%, 100% of bar height
