@@ -47,13 +47,6 @@ struct V3Seq : public _NT_algorithm {
     bool fineAdjustMode;        // Fine (true) vs coarse (false) adjustment mode
     
     V3Seq() {
-        // Initialize step values to middle voltage (0V)
-        for (int step = 0; step < 32; step++) {
-            for (int out = 0; out < 3; out++) {
-                stepValues[step][out] = 0;  // 0V = middle of -5V to +5V range
-            }
-        }
-        
         // Initialize sequencer state
         currentStep = 0;
         pingpongForward = true;
@@ -95,10 +88,6 @@ enum {
     kParamOut1,
     kParamOut2,
     kParamOut3,
-    kParamMidiChannel,
-    kParamMidi1,
-    kParamMidi2,
-    kParamMidi3,
     kParamClockDiv,
     kParamDirection,
     kParamFirstStep,
@@ -116,12 +105,8 @@ static _NT_parameter parameters[kNumParameters];
 static char clockInName[] = "Clock In";
 static char resetInName[] = "Reset In";
 static char out1Name[] = "CV Out 1";
-static char midi1Name[] = "MIDI CC 1";
 static char out2Name[] = "CV Out 2";
-static char midi2Name[] = "MIDI CC 2";
 static char out3Name[] = "CV Out 3";
-static char midi3Name[] = "MIDI CC 3";
-static char midiChannelName[] = "MIDI Channel";
 static char clockDivName[] = "Clock Div/Mult";
 static char directionName[] = "Direction";
 static char firstStepName[] = "First Step";
@@ -184,21 +169,7 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamOut3].unit = kNT_unitCvOutput;
     parameters[kParamOut3].scaling = kNT_scalingNone;
     
-    // MIDI Channel
-    parameters[kParamMidiChannel].name = midiChannelName;
-    parameters[kParamMidiChannel].min = 0;
-    parameters[kParamMidiChannel].max = 16;
-    parameters[kParamMidiChannel].def = 0;
-    parameters[kParamMidiChannel].unit = kNT_unitNone;
-    parameters[kParamMidiChannel].scaling = kNT_scalingNone;
     
-    // MIDI CC numbers (3 total, grouped together)
-    parameters[kParamMidi1].name = midi1Name;
-    parameters[kParamMidi1].min = 0;
-    parameters[kParamMidi1].max = 127;
-    parameters[kParamMidi1].def = 1;
-    parameters[kParamMidi1].unit = kNT_unitNone;
-    parameters[kParamMidi1].scaling = kNT_scalingNone;
     
     parameters[kParamOut2].name = out2Name;
     parameters[kParamOut2].min = 0;
@@ -207,12 +178,6 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamOut2].unit = kNT_unitCvOutput;
     parameters[kParamOut2].scaling = kNT_scalingNone;
     
-    parameters[kParamMidi2].name = midi2Name;
-    parameters[kParamMidi2].min = 0;
-    parameters[kParamMidi2].max = 127;
-    parameters[kParamMidi2].def = 2;
-    parameters[kParamMidi2].unit = kNT_unitNone;
-    parameters[kParamMidi2].scaling = kNT_scalingNone;
     
     parameters[kParamOut3].name = out3Name;
     parameters[kParamOut3].min = 0;
@@ -221,20 +186,7 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamOut3].unit = kNT_unitCvOutput;
     parameters[kParamOut3].scaling = kNT_scalingNone;
     
-    parameters[kParamMidi3].name = midi3Name;
-    parameters[kParamMidi3].min = 0;
-    parameters[kParamMidi3].max = 127;
-    parameters[kParamMidi3].def = 3;
-    parameters[kParamMidi3].unit = kNT_unitNone;
-    parameters[kParamMidi3].scaling = kNT_scalingNone;
     
-    // MIDI Channel (0 = off, 1-16 = MIDI channels)
-    parameters[kParamMidiChannel].name = midiChannelName;
-    parameters[kParamMidiChannel].min = 0;
-    parameters[kParamMidiChannel].max = 16;
-    parameters[kParamMidiChannel].def = 0;
-    parameters[kParamMidiChannel].unit = kNT_unitNone;
-    parameters[kParamMidiChannel].scaling = kNT_scalingNone;
     
     // Sequencer parameters
     parameters[kParamClockDiv].name = clockDivName;
@@ -584,30 +536,6 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             }
         }
         
-        // Send MIDI CC if channel is configured and sequencer just stepped
-        if (stepped) {
-            int midiChannel = self->v[kParamMidiChannel];  // 0 = off, 1-16 = MIDI channels
-            
-            if (midiChannel > 0 && midiChannel <= 16) {
-                int ccNumber = self->v[kParamMidi1 + out];  // 0-127
-                
-                // Convert CV value to CC value (0-127)
-                int16_t value = a->stepValues[step][out];
-                float normalized = (value + 32768) / 65535.0f;  // 0.0-1.0
-                uint8_t ccValue = (uint8_t)(normalized * 127.0f);
-                if (ccValue > 127) ccValue = 127;
-                
-                uint8_t channel = (midiChannel - 1) & 0x0F;
-                
-                // Send CC message
-                NT_sendMidi3ByteMessage(
-                    kNT_destinationInternal,
-                    0xB0 | channel,  // CC message
-                    ccNumber,
-                    ccValue
-                );
-            }
-        }
     }
 }
 
@@ -898,23 +826,31 @@ void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
 bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
     V3Seq* a = (V3Seq*)self;
     
-    // Match "stepValues"
-    if (parse.matchName("stepValues")) {
-        int numSteps = 0;
-        if (parse.numberOfArrayElements(numSteps)) {
-            int stepsToLoad = (numSteps < 32) ? numSteps : 32;
-            for (int step = 0; step < stepsToLoad; step++) {
-                int numOutputs = 0;
-                if (parse.numberOfArrayElements(numOutputs)) {
-                    int outputsToLoad = (numOutputs < 3) ? numOutputs : 3;
-                    for (int out = 0; out < outputsToLoad; out++) {
-                        int value;
-                        if (parse.number(value)) {
-                            a->stepValues[step][out] = (int16_t)value;
+    int numMembers = 0;
+    if (!parse.numberOfObjectMembers(numMembers))
+        return false;
+    
+    for (int i = 0; i < numMembers; i++) {
+        if (parse.matchName("stepValues")) {
+            int numSteps = 0;
+            if (parse.numberOfArrayElements(numSteps)) {
+                int stepsToLoad = (numSteps < 32) ? numSteps : 32;
+                for (int step = 0; step < stepsToLoad; step++) {
+                    int numOutputs = 0;
+                    if (parse.numberOfArrayElements(numOutputs)) {
+                        int outputsToLoad = (numOutputs < 3) ? numOutputs : 3;
+                        for (int out = 0; out < outputsToLoad; out++) {
+                            int value;
+                            if (parse.number(value)) {
+                                a->stepValues[step][out] = (int16_t)value;
+                            }
                         }
                     }
                 }
             }
+        } else {
+            // Skip unrecognized members
+            parse.skipMember();
         }
     }
     

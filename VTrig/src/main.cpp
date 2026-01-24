@@ -50,11 +50,8 @@ struct VTrig : public _NT_algorithm {
     bool trackPotCaught;        // Track if left pot has caught track position
     
     VTrig() {
-        // Initialize trigger data
+        // Initialize track state
         for (int track = 0; track < 6; track++) {
-            for (int step = 0; step < 32; step++) {
-                steps[track][step] = false;
-            }
             currentStep[track] = 0;
             pingpongForward[track] = true;
             swingCounter[track] = 0;
@@ -94,19 +91,13 @@ enum {
     kParamClockIn,
     kParamResetIn,
     
-    // Track outputs (6 tracks, 2 params each: Out + CC)
+    // Track outputs
     kParamTrack1Out,
-    kParamTrack1CC,
     kParamTrack2Out,
-    kParamTrack2CC,
     kParamTrack3Out,
-    kParamTrack3CC,
     kParamTrack4Out,
-    kParamTrack4CC,
     kParamTrack5Out,
-    kParamTrack5CC,
     kParamTrack6Out,
-    kParamTrack6CC,
     
     // Track parameters (6 tracks, 9 params each)
     kParamTrack1Run,
@@ -169,8 +160,6 @@ enum {
     kParamTrack6Section2Reps,
     kParamTrack6FillStart,
     
-    kParamTriggerMidiChannel,
-    
     kNumParameters
 };
 
@@ -179,17 +168,11 @@ static char clockInName[] = "Clock In";
 static char resetInName[] = "Reset In";
 
 static char track1OutName[] = "Track 1 Out";
-static char track1CCName[] = "Track 1 CC";
 static char track2OutName[] = "Track 2 Out";
-static char track2CCName[] = "Track 2 CC";
 static char track3OutName[] = "Track 3 Out";
-static char track3CCName[] = "Track 3 CC";
 static char track4OutName[] = "Track 4 Out";
-static char track4CCName[] = "Track 4 CC";
 static char track5OutName[] = "Track 5 Out";
-static char track5CCName[] = "Track 5 CC";
 static char track6OutName[] = "Track 6 Out";
-static char track6CCName[] = "Track 6 CC";
 
 static char track1RunName[] = "Track 1 Run";
 static char track1LenName[] = "Track 1 Length";
@@ -251,8 +234,6 @@ static char track6Sec1Name[] = "Track 6 Sec1 Reps";
 static char track6Sec2Name[] = "Track 6 Sec2 Reps";
 static char track6FillName[] = "Track 6 Fill Start";
 
-static char triggerMidiChannelName[] = "Trigger MIDI Ch";
-
 static const char* const divisionStrings[] = {
     "/16", "/15", "/14", "/13", "/12", "/11", "/10", "/9", "/8", "/7", "/6", "/5", "/4", "/3", "/2",
     "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", NULL
@@ -280,13 +261,11 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamResetIn].unit = kNT_unitCvInput;
     parameters[kParamResetIn].scaling = kNT_scalingNone;
     
-    // Track outputs and MIDI CC parameters (6 tracks, 2 parameters each)
+    // Track outputs
     const char* outNames[] = {track1OutName, track2OutName, track3OutName, track4OutName, track5OutName, track6OutName};
-    const char* ccNames[] = {track1CCName, track2CCName, track3CCName, track4CCName, track5CCName, track6CCName};
     
     for (int track = 0; track < 6; track++) {
-        int outParam = kParamTrack1Out + (track * 2);
-        int ccParam = kParamTrack1CC + (track * 2);
+        int outParam = kParamTrack1Out + track;
         
         parameters[outParam].name = outNames[track];
         parameters[outParam].min = 0;
@@ -294,13 +273,6 @@ void initParameters(_NT_algorithm* self) {
         parameters[outParam].def = 0;
         parameters[outParam].unit = kNT_unitCvOutput;
         parameters[outParam].scaling = kNT_scalingNone;
-        
-        parameters[ccParam].name = ccNames[track];
-        parameters[ccParam].min = 0;
-        parameters[ccParam].max = 127;
-        parameters[ccParam].def = 0;
-        parameters[ccParam].unit = kNT_unitNone;
-        parameters[ccParam].scaling = kNT_scalingNone;
     }
     
     // Track parameters (6 tracks, 9 parameters each)
@@ -391,14 +363,6 @@ void initParameters(_NT_algorithm* self) {
         parameters[fillParam].scaling = kNT_scalingNone;
     }
     
-    // Trigger MIDI Channel
-    parameters[kParamTriggerMidiChannel].name = triggerMidiChannelName;
-    parameters[kParamTriggerMidiChannel].min = 0;
-    parameters[kParamTriggerMidiChannel].max = 16;
-    parameters[kParamTriggerMidiChannel].def = 0;
-    parameters[kParamTriggerMidiChannel].unit = kNT_unitNone;
-    parameters[kParamTriggerMidiChannel].scaling = kNT_scalingNone;
-    
     self->parameters = parameters;
 }
 
@@ -409,8 +373,6 @@ void initParameters(_NT_algorithm* self) {
 static uint8_t paramPageClock[] = { kParamClockIn, kParamResetIn, 0 };
 static uint8_t paramPageRouting[] = { 
     kParamTrack1Out, kParamTrack2Out, kParamTrack3Out, kParamTrack4Out, kParamTrack5Out, kParamTrack6Out,
-    kParamTriggerMidiChannel,
-    kParamTrack1CC, kParamTrack2CC, kParamTrack3CC, kParamTrack4CC, kParamTrack5CC, kParamTrack6CC,
     0 
 };
 static uint8_t paramPageTrack1[] = { 
@@ -440,7 +402,7 @@ static uint8_t paramPageTrack6[] = {
 
 static _NT_parameterPage pageArray[] = {
     { .name = "Clock", .numParams = 2, .params = paramPageClock },
-    { .name = "Routing", .numParams = 13, .params = paramPageRouting },
+    { .name = "Routing", .numParams = 6, .params = paramPageRouting },
     { .name = "Track 1", .numParams = 9, .params = paramPageTrack1 },
     { .name = "Track 2", .numParams = 9, .params = paramPageTrack2 },
     { .name = "Track 3", .numParams = 9, .params = paramPageTrack3 },
@@ -635,7 +597,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     
     // Process each track
     for (int track = 0; track < 6; track++) {
-        int outParam = kParamTrack1Out + (track * 2);
+        int outParam = kParamTrack1Out + track;
         int runParam = kParamTrack1Run + (track * 9);
         int lenParam = kParamTrack1Length + (track * 9);
         int dirParam = kParamTrack1Direction + (track * 9);
@@ -780,8 +742,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
 }
 
 void parameterChanged(_NT_algorithm* self, int parameterIndex) {
-    // Minimal parameter handling - most validation done by host
-    // Could add split point clamping if needed in future
+    // Parameters are read-only from the plugin's perspective
+    // All validation and constraints must be documented for the user
     (void)self;
     (void)parameterIndex;
 }
@@ -926,6 +888,60 @@ void handleUi(_NT_algorithm* self, const _NT_uiData& data) {
 }
 
 // =============================================================================
+// Serialization
+// =============================================================================
+
+void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
+    VTrig* a = (VTrig*)self;
+    
+    // Save all step data as 2D array [6 tracks][32 steps]
+    stream.addMemberName("steps");
+    stream.openArray();
+    for (int track = 0; track < 6; track++) {
+        stream.openArray();
+        for (int step = 0; step < 32; step++) {
+            stream.addBoolean(a->steps[track][step]);
+        }
+        stream.closeArray();
+    }
+    stream.closeArray();
+}
+
+bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
+    VTrig* a = (VTrig*)self;
+    
+    int numMembers = 0;
+    if (!parse.numberOfObjectMembers(numMembers))
+        return false;
+    
+    for (int i = 0; i < numMembers; i++) {
+        if (parse.matchName("steps")) {
+            int numTracks = 0;
+            if (parse.numberOfArrayElements(numTracks)) {
+                int tracksToLoad = (numTracks < 6) ? numTracks : 6;
+                for (int track = 0; track < tracksToLoad; track++) {
+                    int numSteps = 0;
+                    if (parse.numberOfArrayElements(numSteps)) {
+                        int stepsToLoad = (numSteps < 32) ? numSteps : 32;
+                        for (int step = 0; step < stepsToLoad; step++) {
+                            bool value;
+                            if (parse.boolean(value)) {
+                                a->steps[track][step] = value;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Skip unrecognized members
+            parse.skipMember();
+        }
+    }
+    
+    return true;
+}
+
+// =============================================================================
 // Plugin Factory
 // =============================================================================
 
@@ -948,8 +964,8 @@ static const _NT_factory factory = {
     .hasCustomUi = hasCustomUi,
     .customUi = handleUi,
     .setupUi = nullptr,
-    .serialise = nullptr,
-    .deserialise = nullptr,
+    .serialise = serialise,
+    .deserialise = deserialise,
     .midiSysEx = nullptr,
 };
 
