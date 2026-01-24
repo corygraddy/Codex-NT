@@ -77,7 +77,7 @@ A powerful 6-track trigger/gate sequencer with swing, fill patterns, section loo
 
 1. Download `VTrig-Build1.zip`
 2. Extract the ZIP file
-3. Copy `VTrig.o` to your Disting NT's SD card: `/programs/plug-ins/`
+3. Copy `1VTrig.o` to your Disting NT's SD card: `/programs/plug-ins/`
 4. Restart your Disting NT or reload plugins
 5. VTrig will appear in the plugin menu
 

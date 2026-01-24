@@ -927,7 +927,7 @@ bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
 // =============================================================================
 
 static const _NT_factory factory = {
-    .guid = NT_MULTICHAR('C', 'G', '3', 'S'),
+    .guid = NT_MULTICHAR('V', '3', 'S', 'Q'),
     .name = "V3Seq",
     .description = "3-Output CV Sequencer",
     .numSpecifications = 0,
@@ -954,7 +954,7 @@ extern "C" {
     uintptr_t pluginEntry(_NT_selector selector, uint32_t data) {
         switch (selector) {
             case kNT_selector_version:
-                return kNT_apiVersion9;
+                return kNT_apiVersionCurrent;
             case kNT_selector_numFactories:
                 return 1;
             case kNT_selector_factoryInfo:
