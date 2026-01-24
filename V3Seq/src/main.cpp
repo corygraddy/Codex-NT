@@ -954,7 +954,7 @@ extern "C" {
     uintptr_t pluginEntry(_NT_selector selector, uint32_t data) {
         switch (selector) {
             case kNT_selector_version:
-                return kNT_apiVersionCurrent;
+                return kNT_apiVersion9;
             case kNT_selector_numFactories:
                 return 1;
             case kNT_selector_factoryInfo:
