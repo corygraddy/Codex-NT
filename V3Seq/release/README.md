@@ -77,7 +77,7 @@ A versatile 3-output CV sequencer with configurable voltage ranges, section loop
 
 1. Download `V3Seq-Build1.zip`
 2. Extract the ZIP file
-3. Copy `1V3Seq.o` to your Disting NT's SD card: `/programs/plug-ins/`
+3. Copy `V3Seq.o` to your Disting NT's SD card: `/programs/plug-ins/`
 4. Restart your Disting NT or reload plugins
 5. V3Seq will appear in the plugin menu
 
