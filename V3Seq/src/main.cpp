@@ -927,7 +927,7 @@ bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
 // =============================================================================
 
 static const _NT_factory factory = {
-    .guid = NT_MULTICHAR('V', '3', 'S', 'Q'),
+    .guid = NT_MULTICHAR('C', 'G', '3', 'S'),
     .name = "V3Seq",
     .description = "3-Output CV Sequencer",
     .numSpecifications = 0,
