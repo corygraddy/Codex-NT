@@ -210,3 +210,148 @@ Located at `../distingNT_API/include/distingnt/`. **Must exist relative to plugi
 - SD card not mounting → Edit `BuildTransfer.sh` with correct volume name
 - Preset not found → Ensure preset was saved on device before fetching
 
+## Serialization Patterns (Critical for Preset Persistence)
+
+### The Problem
+Custom data arrays (like `steps[6][32]` or `stepValues[32][3]`) are NOT automatically saved by the Disting NT host. Only parameters in the `self->v[]` array persist automatically.
+
+### The Solution: serialize/deserialize Functions
+
+**Key Requirements:**
+1. **Add serialise() function** to write custom data to JSON stream
+2. **Add deserialise() function** to read custom data from JSON
+3. **Update factory** to point to these functions (not nullptr)
+4. **Critical:** Call `parse.skipMember()` for unrecognized JSON members in deserialise()
+5. **Critical:** Do NOT initialize arrays in constructor (deserialise runs AFTER construct)
+
+**Pattern from VTrig (working implementation):**
+```cpp
+void serialise(_NT_algorithm* self, _NT_jsonStream& stream) {
+    VTrig* a = (VTrig*)self;
+    stream.addMemberName("steps");
+    stream.openArray();
+    for (int track = 0; track < 6; track++) {
+        stream.openArray();
+        for (int step = 0; step < 32; step++) {
+            stream.addBoolean(a->steps[track][step]);
+        }
+        stream.closeArray();
+    }
+    stream.closeArray();
+}
+
+bool deserialise(_NT_algorithm* self, _NT_jsonParse& parse) {
+    VTrig* a = (VTrig*)self;
+    
+    int numMembers = 0;
+    if (!parse.numberOfObjectMembers(numMembers))
+        return false;
+    
+    // CRITICAL: Loop through ALL members
+    for (int i = 0; i < numMembers; i++) {
+        if (parse.matchName("steps")) {
+            int numTracks = 0;
+            if (parse.numberOfArrayElements(numTracks)) {
+                int tracksToLoad = (numTracks < 6) ? numTracks : 6;
+                for (int track = 0; track < tracksToLoad; track++) {
+                    int numSteps = 0;
+                    if (parse.numberOfArrayElements(numSteps)) {
+                        int stepsToLoad = (numSteps < 32) ? numSteps : 32;
+                        for (int step = 0; step < stepsToLoad; step++) {
+                            bool value;
+                            if (parse.boolean(value)) {
+                                a->steps[track][step] = value;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // CRITICAL: Skip unrecognized members
+            parse.skipMember();
+        }
+    }
+    return true;
+}
+
+// Update factory
+static const _NT_factory factory = {
+    // ... other fields ...
+    .serialise = serialise,      // NOT nullptr
+    .deserialise = deserialise,  // NOT nullptr
+    // ... other fields ...
+};
+```
+
+**Common Mistakes:**
+- ❌ Initializing arrays in constructor → Arrays zeroed AFTER deserialise loads data
+- ❌ Not calling `parse.numberOfObjectMembers()` at start → Parse state not set up
+- ❌ Not calling `parse.skipMember()` for unknown members → Parser gets stuck
+- ❌ Leaving factory pointers as nullptr → Serialization never called
+
+**API Methods Available:**
+- `stream.addBoolean(bool)`, `stream.addNumber(int/float)`, `stream.addString(const char*)`
+- `parse.boolean(bool&)`, `parse.number(int/float&)`, `parse.string(const char*&)`
+- `parse.numberOfArrayElements(int&)`, `parse.numberOfObjectMembers(int&)`
+- `parse.matchName(const char*)`, `parse.skipMember()`
+
+## Release Process (GitHub)
+
+### 1. Prepare Code
+- Remove unused features (MIDI, Random mode, etc.)
+- Update release notes in `<plugin>/release/RELEASE_NOTES.md`
+- Build: `cd <plugin> && make && cp build/<plugin>.o release/`
+- Test on hardware, verify preset persistence
+
+### 2. Commit and Push
+```bash
+cd /Users/corygraddy/Documents/Codex-NT
+git add <plugin>/src/main.cpp <plugin>/release/<plugin>.o
+git commit -m "Description of changes"
+git push origin main
+```
+
+### 3. Update Dedicated Repos (git subtree)
+```bash
+# VTrig
+git subtree push --prefix=VTrig https://github.com/corygraddy/VTrig.git main
+
+# V3Seq
+git subtree push --prefix=V3Seq https://github.com/corygraddy/V3Seq.git main
+```
+
+### 4. Create Tags (in dedicated repos, not main Codex-NT)
+```bash
+# Clone dedicated repo to /tmp
+cd /tmp
+git clone https://github.com/corygraddy/VTrig.git
+cd VTrig
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+**Why not tag in main repo?**
+- Pushing tags from main repo includes full Codex-NT history (huge upload)
+- Tags must be created in dedicated repos to avoid multi-GB transfers
+
+### 5. Create GitHub Release
+1. Navigate to `https://github.com/corygraddy/<plugin>/releases`
+2. Click "Draft a new release"
+3. Choose tag (e.g., v1.0.0)
+4. Upload `.o` file from `<plugin>/release/`
+5. Copy release notes from `<plugin>/release/RELEASE_NOTES.md`
+6. Publish release
+
+### 6. NT Gallery Upload
+- Upload `.o` file with matching tag version
+- Gallery validator may show errors even if plugin works on hardware
+- Unresolved: "no metadata returned for analysis" error
+
+**Plugin Sizes (typical):**
+- VTrig: ~11KB
+- V3Seq: ~7KB
+- VFader: ~19KB
+
+**Released Versions:**
+- VTrig v1.0.0: January 24, 2026
+- V3Seq v1.0.0: January 24, 2026

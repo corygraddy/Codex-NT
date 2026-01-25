@@ -12,6 +12,7 @@ First public release of V3Seq, a 3-output CV sequencer for Disting NT.
 ✅ Configurable sequence range (First Step / Last Step parameters)  
 ✅ 3 playback modes: Forward, Backward, Pingpong  
 ✅ Per-output clock division (1, 2, 4, 8, 16, 32)  
+✅ Step values persist in presets  
 
 ### Section Looping
 ✅ Two-section structure with split point  
@@ -22,18 +23,13 @@ First public release of V3Seq, a 3-output CV sequencer for Disting NT.
 ✅ Coarse mode: 25 steps across voltage range  
 ✅ Fine mode: 500 steps for precise control  
 ✅ Toggle between modes with right encoder button  
-✅ Visual indicator ("F") for fine mode  
+✅ Mode display shows "coarse" or "fine"  
 
 ### User Interface
 ✅ Page-based display (one page per CV output)  
 ✅ Bar graph visualization with reference dots  
 ✅ Current position and selected step indicators  
 ✅ Page indicator at top (1-3 bars)  
-
-### MIDI Output
-✅ 3 MIDI CC outputs (parallel to CV outputs)  
-✅ Configurable CC numbers (0-127)  
-✅ Single MIDI channel (shared across all outputs)  
 
 ## Installation
 
