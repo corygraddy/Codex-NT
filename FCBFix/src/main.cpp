@@ -6,16 +6,18 @@
 #include <cmath>
 #include <cstring>
 
-// FCBFix: MIDI Program Change to CV Gate converter
+// FCBFix: MIDI Program Change to CV Gate + MIDI Note converter
 // - 10 programmable slots
-// - Each slot: program change number (0-127) + CV output assignment
+// - Each slot: program change number (0-127) + CV output + MIDI note
 // - When matching program change is received, fires CV gate on assigned output
+// - Also sends MIDI Note On/Off messages
 // - Gate duration: 100ms fixed
 
 struct FCBFix : public _NT_algorithm {
     // Gate state for 10 slots
     int gateCounter[10];        // Countdown timer for gate pulse (in samples)
     float gateOutputs[10];      // Current gate voltage for each slot
+    bool noteActive[10];        // Track if MIDI note is currently on
     
     // UI state
     int selectedSlot;           // 0-9
@@ -25,15 +27,10 @@ struct FCBFix : public _NT_algorithm {
         for (int i = 0; i < 10; i++) {
             gateCounter[i] = 0;
             gateOutputs[i] = 0.0f;
+            noteActive[i] = false;
         }
         selectedSlot = 0;
         lastEncoderLButton = 0;
-    }
-    
-    void triggerGate(int slot) {
-        // Set gate duration: 100ms at 48kHz = 4800 samples
-        gateCounter[slot] = 4800;
-        gateOutputs[slot] = 10.0f;  // 10V gate
     }
 };
 
@@ -42,55 +39,103 @@ struct FCBFix : public _NT_algorithm {
 // =============================================================================
 
 enum {
-    // 10 slots × 2 parameters each (program number + output)
+    // Global MIDI settings
+    kParamMidiChannel,
+    kParamMidiDestination,
+    
+    // 10 slots × 3 parameters each (program number, output, MIDI note)
     kParamSlot1Program,
     kParamSlot1Output,
+    kParamSlot1MidiNote,
     kParamSlot2Program,
     kParamSlot2Output,
+    kParamSlot2MidiNote,
     kParamSlot3Program,
     kParamSlot3Output,
+    kParamSlot3MidiNote,
     kParamSlot4Program,
     kParamSlot4Output,
+    kParamSlot4MidiNote,
     kParamSlot5Program,
     kParamSlot5Output,
+    kParamSlot5MidiNote,
     kParamSlot6Program,
     kParamSlot6Output,
+    kParamSlot6MidiNote,
     kParamSlot7Program,
     kParamSlot7Output,
+    kParamSlot7MidiNote,
     kParamSlot8Program,
     kParamSlot8Output,
+    kParamSlot8MidiNote,
     kParamSlot9Program,
     kParamSlot9Output,
+    kParamSlot9MidiNote,
     kParamSlot10Program,
     kParamSlot10Output,
+    kParamSlot10MidiNote,
     kNumParameters
 };
 
 static _NT_parameter parameters[kNumParameters];
 
 // Parameter name strings
+static char midiChannelName[] = "MIDI Channel";
+static char midiDestinationName[] = "MIDI Destination";
 static char slot1ProgramName[] = "Slot 1 Program";
 static char slot1OutputName[] = "Slot 1 Output";
+static char slot1MidiNoteName[] = "Slot 1 MIDI Note";
 static char slot2ProgramName[] = "Slot 2 Program";
 static char slot2OutputName[] = "Slot 2 Output";
+static char slot2MidiNoteName[] = "Slot 2 MIDI Note";
 static char slot3ProgramName[] = "Slot 3 Program";
 static char slot3OutputName[] = "Slot 3 Output";
+static char slot3MidiNoteName[] = "Slot 3 MIDI Note";
 static char slot4ProgramName[] = "Slot 4 Program";
 static char slot4OutputName[] = "Slot 4 Output";
+static char slot4MidiNoteName[] = "Slot 4 MIDI Note";
 static char slot5ProgramName[] = "Slot 5 Program";
 static char slot5OutputName[] = "Slot 5 Output";
+static char slot5MidiNoteName[] = "Slot 5 MIDI Note";
 static char slot6ProgramName[] = "Slot 6 Program";
 static char slot6OutputName[] = "Slot 6 Output";
+static char slot6MidiNoteName[] = "Slot 6 MIDI Note";
 static char slot7ProgramName[] = "Slot 7 Program";
 static char slot7OutputName[] = "Slot 7 Output";
+static char slot7MidiNoteName[] = "Slot 7 MIDI Note";
 static char slot8ProgramName[] = "Slot 8 Program";
 static char slot8OutputName[] = "Slot 8 Output";
+static char slot8MidiNoteName[] = "Slot 8 MIDI Note";
 static char slot9ProgramName[] = "Slot 9 Program";
 static char slot9OutputName[] = "Slot 9 Output";
+static char slot9MidiNoteName[] = "Slot 9 MIDI Note";
 static char slot10ProgramName[] = "Slot 10 Program";
 static char slot10OutputName[] = "Slot 10 Output";
+static char slot10MidiNoteName[] = "Slot 10 MIDI Note";
+
+// MIDI destination strings
+static const char* const midiDestinationStrings[] = {
+    "Off", "Breakout", "SelectBus", "USB", "Internal", NULL
+};
 
 void initParameters(_NT_algorithm* self) {
+    // MIDI Channel (1-16)
+    parameters[kParamMidiChannel].name = midiChannelName;
+    parameters[kParamMidiChannel].min = 1;
+    parameters[kParamMidiChannel].max = 16;
+    parameters[kParamMidiChannel].def = 1;
+    parameters[kParamMidiChannel].unit = kNT_unitNone;
+    parameters[kParamMidiChannel].scaling = kNT_scalingNone;
+    
+    // MIDI Destination
+    parameters[kParamMidiDestination].name = midiDestinationName;
+    parameters[kParamMidiDestination].min = 0;
+    parameters[kParamMidiDestination].max = 4;
+    parameters[kParamMidiDestination].def = 3;  // USB by default
+    parameters[kParamMidiDestination].unit = kNT_unitEnum;
+    parameters[kParamMidiDestination].scaling = kNT_scalingNone;
+    parameters[kParamMidiDestination].enumStrings = midiDestinationStrings;
+    
     // Slot 1
     parameters[kParamSlot1Program].name = slot1ProgramName;
     parameters[kParamSlot1Program].min = 0;
@@ -105,6 +150,13 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSlot1Output].def = 0;
     parameters[kParamSlot1Output].unit = kNT_unitCvOutput;
     parameters[kParamSlot1Output].scaling = kNT_scalingNone;
+    
+    parameters[kParamSlot1MidiNote].name = slot1MidiNoteName;
+    parameters[kParamSlot1MidiNote].min = 0;
+    parameters[kParamSlot1MidiNote].max = 127;
+    parameters[kParamSlot1MidiNote].def = 60;  // Middle C
+    parameters[kParamSlot1MidiNote].unit = kNT_unitMIDINote;
+    parameters[kParamSlot1MidiNote].scaling = kNT_scalingNone;
     
     // Slot 2
     parameters[kParamSlot2Program].name = slot2ProgramName;
@@ -121,6 +173,13 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSlot2Output].unit = kNT_unitCvOutput;
     parameters[kParamSlot2Output].scaling = kNT_scalingNone;
     
+    parameters[kParamSlot2MidiNote].name = slot2MidiNoteName;
+    parameters[kParamSlot2MidiNote].min = 0;
+    parameters[kParamSlot2MidiNote].max = 127;
+    parameters[kParamSlot2MidiNote].def = 62;
+    parameters[kParamSlot2MidiNote].unit = kNT_unitMIDINote;
+    parameters[kParamSlot2MidiNote].scaling = kNT_scalingNone;
+    
     // Slot 3
     parameters[kParamSlot3Program].name = slot3ProgramName;
     parameters[kParamSlot3Program].min = 0;
@@ -135,6 +194,13 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSlot3Output].def = 0;
     parameters[kParamSlot3Output].unit = kNT_unitCvOutput;
     parameters[kParamSlot3Output].scaling = kNT_scalingNone;
+    
+    parameters[kParamSlot3MidiNote].name = slot3MidiNoteName;
+    parameters[kParamSlot3MidiNote].min = 0;
+    parameters[kParamSlot3MidiNote].max = 127;
+    parameters[kParamSlot3MidiNote].def = 64;
+    parameters[kParamSlot3MidiNote].unit = kNT_unitMIDINote;
+    parameters[kParamSlot3MidiNote].scaling = kNT_scalingNone;
     
     // Slot 4
     parameters[kParamSlot4Program].name = slot4ProgramName;
@@ -151,6 +217,13 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSlot4Output].unit = kNT_unitCvOutput;
     parameters[kParamSlot4Output].scaling = kNT_scalingNone;
     
+    parameters[kParamSlot4MidiNote].name = slot4MidiNoteName;
+    parameters[kParamSlot4MidiNote].min = 0;
+    parameters[kParamSlot4MidiNote].max = 127;
+    parameters[kParamSlot4MidiNote].def = 65;
+    parameters[kParamSlot4MidiNote].unit = kNT_unitMIDINote;
+    parameters[kParamSlot4MidiNote].scaling = kNT_scalingNone;
+    
     // Slot 5
     parameters[kParamSlot5Program].name = slot5ProgramName;
     parameters[kParamSlot5Program].min = 0;
@@ -165,6 +238,13 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSlot5Output].def = 0;
     parameters[kParamSlot5Output].unit = kNT_unitCvOutput;
     parameters[kParamSlot5Output].scaling = kNT_scalingNone;
+    
+    parameters[kParamSlot5MidiNote].name = slot5MidiNoteName;
+    parameters[kParamSlot5MidiNote].min = 0;
+    parameters[kParamSlot5MidiNote].max = 127;
+    parameters[kParamSlot5MidiNote].def = 67;
+    parameters[kParamSlot5MidiNote].unit = kNT_unitMIDINote;
+    parameters[kParamSlot5MidiNote].scaling = kNT_scalingNone;
     
     // Slot 6
     parameters[kParamSlot6Program].name = slot6ProgramName;
@@ -181,6 +261,13 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSlot6Output].unit = kNT_unitCvOutput;
     parameters[kParamSlot6Output].scaling = kNT_scalingNone;
     
+    parameters[kParamSlot6MidiNote].name = slot6MidiNoteName;
+    parameters[kParamSlot6MidiNote].min = 0;
+    parameters[kParamSlot6MidiNote].max = 127;
+    parameters[kParamSlot6MidiNote].def = 69;
+    parameters[kParamSlot6MidiNote].unit = kNT_unitMIDINote;
+    parameters[kParamSlot6MidiNote].scaling = kNT_scalingNone;
+    
     // Slot 7
     parameters[kParamSlot7Program].name = slot7ProgramName;
     parameters[kParamSlot7Program].min = 0;
@@ -195,6 +282,13 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSlot7Output].def = 0;
     parameters[kParamSlot7Output].unit = kNT_unitCvOutput;
     parameters[kParamSlot7Output].scaling = kNT_scalingNone;
+    
+    parameters[kParamSlot7MidiNote].name = slot7MidiNoteName;
+    parameters[kParamSlot7MidiNote].min = 0;
+    parameters[kParamSlot7MidiNote].max = 127;
+    parameters[kParamSlot7MidiNote].def = 71;
+    parameters[kParamSlot7MidiNote].unit = kNT_unitMIDINote;
+    parameters[kParamSlot7MidiNote].scaling = kNT_scalingNone;
     
     // Slot 8
     parameters[kParamSlot8Program].name = slot8ProgramName;
@@ -211,6 +305,13 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSlot8Output].unit = kNT_unitCvOutput;
     parameters[kParamSlot8Output].scaling = kNT_scalingNone;
     
+    parameters[kParamSlot8MidiNote].name = slot8MidiNoteName;
+    parameters[kParamSlot8MidiNote].min = 0;
+    parameters[kParamSlot8MidiNote].max = 127;
+    parameters[kParamSlot8MidiNote].def = 72;
+    parameters[kParamSlot8MidiNote].unit = kNT_unitMIDINote;
+    parameters[kParamSlot8MidiNote].scaling = kNT_scalingNone;
+    
     // Slot 9
     parameters[kParamSlot9Program].name = slot9ProgramName;
     parameters[kParamSlot9Program].min = 0;
@@ -225,6 +326,13 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSlot9Output].def = 0;
     parameters[kParamSlot9Output].unit = kNT_unitCvOutput;
     parameters[kParamSlot9Output].scaling = kNT_scalingNone;
+    
+    parameters[kParamSlot9MidiNote].name = slot9MidiNoteName;
+    parameters[kParamSlot9MidiNote].min = 0;
+    parameters[kParamSlot9MidiNote].max = 127;
+    parameters[kParamSlot9MidiNote].def = 74;
+    parameters[kParamSlot9MidiNote].unit = kNT_unitMIDINote;
+    parameters[kParamSlot9MidiNote].scaling = kNT_scalingNone;
     
     // Slot 10
     parameters[kParamSlot10Program].name = slot10ProgramName;
@@ -241,6 +349,13 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamSlot10Output].unit = kNT_unitCvOutput;
     parameters[kParamSlot10Output].scaling = kNT_scalingNone;
     
+    parameters[kParamSlot10MidiNote].name = slot10MidiNoteName;
+    parameters[kParamSlot10MidiNote].min = 0;
+    parameters[kParamSlot10MidiNote].max = 127;
+    parameters[kParamSlot10MidiNote].def = 76;
+    parameters[kParamSlot10MidiNote].unit = kNT_unitMIDINote;
+    parameters[kParamSlot10MidiNote].scaling = kNT_scalingNone;
+    
     self->parameters = parameters;
 }
 
@@ -248,32 +363,34 @@ void initParameters(_NT_algorithm* self) {
 // Parameter Pages
 // =============================================================================
 
-static const uint8_t slot1Params[] = { kParamSlot1Program, kParamSlot1Output };
-static const uint8_t slot2Params[] = { kParamSlot2Program, kParamSlot2Output };
-static const uint8_t slot3Params[] = { kParamSlot3Program, kParamSlot3Output };
-static const uint8_t slot4Params[] = { kParamSlot4Program, kParamSlot4Output };
-static const uint8_t slot5Params[] = { kParamSlot5Program, kParamSlot5Output };
-static const uint8_t slot6Params[] = { kParamSlot6Program, kParamSlot6Output };
-static const uint8_t slot7Params[] = { kParamSlot7Program, kParamSlot7Output };
-static const uint8_t slot8Params[] = { kParamSlot8Program, kParamSlot8Output };
-static const uint8_t slot9Params[] = { kParamSlot9Program, kParamSlot9Output };
-static const uint8_t slot10Params[] = { kParamSlot10Program, kParamSlot10Output };
+static const uint8_t midiParams[] = { kParamMidiChannel, kParamMidiDestination };
+static const uint8_t slot1Params[] = { kParamSlot1Program, kParamSlot1Output, kParamSlot1MidiNote };
+static const uint8_t slot2Params[] = { kParamSlot2Program, kParamSlot2Output, kParamSlot2MidiNote };
+static const uint8_t slot3Params[] = { kParamSlot3Program, kParamSlot3Output, kParamSlot3MidiNote };
+static const uint8_t slot4Params[] = { kParamSlot4Program, kParamSlot4Output, kParamSlot4MidiNote };
+static const uint8_t slot5Params[] = { kParamSlot5Program, kParamSlot5Output, kParamSlot5MidiNote };
+static const uint8_t slot6Params[] = { kParamSlot6Program, kParamSlot6Output, kParamSlot6MidiNote };
+static const uint8_t slot7Params[] = { kParamSlot7Program, kParamSlot7Output, kParamSlot7MidiNote };
+static const uint8_t slot8Params[] = { kParamSlot8Program, kParamSlot8Output, kParamSlot8MidiNote };
+static const uint8_t slot9Params[] = { kParamSlot9Program, kParamSlot9Output, kParamSlot9MidiNote };
+static const uint8_t slot10Params[] = { kParamSlot10Program, kParamSlot10Output, kParamSlot10MidiNote };
 
 static const _NT_parameterPage parameterPages[] = {
-    { .name = "Slot 1", .numParams = 2, .params = slot1Params },
-    { .name = "Slot 2", .numParams = 2, .params = slot2Params },
-    { .name = "Slot 3", .numParams = 2, .params = slot3Params },
-    { .name = "Slot 4", .numParams = 2, .params = slot4Params },
-    { .name = "Slot 5", .numParams = 2, .params = slot5Params },
-    { .name = "Slot 6", .numParams = 2, .params = slot6Params },
-    { .name = "Slot 7", .numParams = 2, .params = slot7Params },
-    { .name = "Slot 8", .numParams = 2, .params = slot8Params },
-    { .name = "Slot 9", .numParams = 2, .params = slot9Params },
-    { .name = "Slot 10", .numParams = 2, .params = slot10Params },
+    { .name = "MIDI", .numParams = 2, .params = midiParams },
+    { .name = "Slot 1", .numParams = 3, .params = slot1Params },
+    { .name = "Slot 2", .numParams = 3, .params = slot2Params },
+    { .name = "Slot 3", .numParams = 3, .params = slot3Params },
+    { .name = "Slot 4", .numParams = 3, .params = slot4Params },
+    { .name = "Slot 5", .numParams = 3, .params = slot5Params },
+    { .name = "Slot 6", .numParams = 3, .params = slot6Params },
+    { .name = "Slot 7", .numParams = 3, .params = slot7Params },
+    { .name = "Slot 8", .numParams = 3, .params = slot8Params },
+    { .name = "Slot 9", .numParams = 3, .params = slot9Params },
+    { .name = "Slot 10", .numParams = 3, .params = slot10Params },
 };
 
 static const _NT_parameterPages pages = {
-    .numPages = 10,
+    .numPages = 11,
     .pages = parameterPages
 };
 
@@ -302,9 +419,46 @@ static void parameterChanged(_NT_algorithm* self, int p) {
     // No action needed for parameter changes in this plugin
 }
 
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+static void triggerGate(_NT_algorithm* self, int slot) {
+    FCBFix* a = (FCBFix*)self;
+    
+    // Set gate duration: 100ms at 48kHz = 4800 samples
+    a->gateCounter[slot] = 4800;
+    a->gateOutputs[slot] = 10.0f;  // 10V gate
+    
+    // Send MIDI Note On
+    int midiChannel = a->v[kParamMidiChannel];
+    int midiDest = a->v[kParamMidiDestination];
+    uint32_t destination = 0;
+    if (midiDest == 1) destination = kNT_destinationBreakout;
+    else if (midiDest == 2) destination = kNT_destinationSelectBus;
+    else if (midiDest == 3) destination = kNT_destinationUSB;
+    else if (midiDest == 4) destination = kNT_destinationInternal;
+    
+    if (destination != 0) {
+        int noteNum = a->v[kParamSlot1MidiNote + (slot * 3)];
+        uint8_t statusByte = 0x90 | ((midiChannel - 1) & 0x0F);  // Note On + channel
+        NT_sendMidi3ByteMessage(destination, statusByte, noteNum, 100);  // Velocity 100
+        a->noteActive[slot] = true;
+    }
+}
+
 static void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     FCBFix* a = (FCBFix*)self;
     const int numFrames = numFramesBy4 * 4;
+    
+    // Get MIDI settings
+    int midiChannel = a->v[kParamMidiChannel];
+    int midiDest = a->v[kParamMidiDestination];
+    uint32_t destination = 0;
+    if (midiDest == 1) destination = kNT_destinationBreakout;
+    else if (midiDest == 2) destination = kNT_destinationSelectBus;
+    else if (midiDest == 3) destination = kNT_destinationUSB;
+    else if (midiDest == 4) destination = kNT_destinationInternal;
     
     // Process gate counters and output gates
     for (int slot = 0; slot < 10; slot++) {
@@ -313,11 +467,19 @@ static void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
             if (a->gateCounter[slot] <= 0) {
                 a->gateCounter[slot] = 0;
                 a->gateOutputs[slot] = 0.0f;  // Gate off
+                
+                // Send MIDI Note Off if note is active
+                if (a->noteActive[slot] && destination != 0) {
+                    int noteNum = a->v[kParamSlot1MidiNote + (slot * 3)];
+                    uint8_t statusByte = 0x80 | ((midiChannel - 1) & 0x0F);  // Note Off + channel
+                    NT_sendMidi3ByteMessage(destination, statusByte, noteNum, 0);
+                    a->noteActive[slot] = false;
+                }
             }
         }
         
         // Output gate voltage to assigned bus
-        int outputBus = a->v[kParamSlot1Output + (slot * 2)];
+        int outputBus = a->v[kParamSlot1Output + (slot * 3)];
         if (outputBus > 0 && outputBus <= 28) {
             float* bus = busFrames + ((outputBus - 1) * numFrames);
             float voltage = a->gateOutputs[slot];
@@ -337,9 +499,9 @@ static void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8
         
         // Check all 10 slots for a match
         for (int slot = 0; slot < 10; slot++) {
-            int assignedProgram = a->v[kParamSlot1Program + (slot * 2)];
+            int assignedProgram = a->v[kParamSlot1Program + (slot * 3)];
             if (program == assignedProgram) {
-                a->triggerGate(slot);
+                triggerGate(self, slot);
             }
         }
     }
