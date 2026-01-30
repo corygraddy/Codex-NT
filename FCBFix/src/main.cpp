@@ -19,18 +19,35 @@ struct FCBFix : public _NT_algorithm {
     float gateOutputs[10];      // Current gate voltage for each slot
     bool noteActive[10];        // Track if MIDI note is currently on
     
+    // Slot names and states
+    char slotNames[10][9];      // 10 slots, 8 chars + null terminator
+    bool slotStates[10];        // On/off state for each slot (for display brightness)
+    
     // UI state
     int selectedSlot;           // 0-9
     uint16_t lastEncoderLButton; // For debouncing left encoder button
+    
+    // Name edit mode
+    bool nameEditMode;          // Whether we're editing a slot name
+    uint8_t nameEditPos;        // Current character position (0-7)
+    uint8_t nameEditSlot;       // Which slot is being edited (0-9)
+    uint16_t lastButtonState;   // For button debouncing
     
     FCBFix() {
         for (int i = 0; i < 10; i++) {
             gateCounter[i] = 0;
             gateOutputs[i] = 0.0f;
             noteActive[i] = false;
+            slotStates[i] = false;  // All start dim
+            // Initialize default names
+            snprintf(slotNames[i], 9, "Slot %d", i + 1);
         }
         selectedSlot = 0;
         lastEncoderLButton = 0;
+        nameEditMode = false;
+        nameEditPos = 0;
+        nameEditSlot = 0;
+        lastButtonState = 0;
     }
 };
 
@@ -557,23 +574,96 @@ static bool draw(_NT_algorithm* self) {
 }
 
 static uint32_t hasCustomUi(_NT_algorithm* self) {
-    return kNT_encoderL;  // Use left encoder for slot selection
+    return kNT_encoderL | kNT_encoderR;  // Use both encoders
 }
 
 static void customUi(_NT_algorithm* self, const _NT_uiData& data) {
     FCBFix* a = (FCBFix*)self;
     
-    // Left encoder: select slot (0-9)
-    if (data.encoders[0] != 0) {
-        a->selectedSlot += data.encoders[0];
-        if (a->selectedSlot < 0) a->selectedSlot = 9;
-        if (a->selectedSlot > 9) a->selectedSlot = 0;
-    }
+    // Detect button presses (rising edge only)
+    bool leftButtonPressed = (data.controls & kNT_encoderButtonL) && !(a->lastButtonState & kNT_encoderButtonL);
+    bool rightButtonPressed = (data.controls & kNT_encoderButtonR) && !(a->lastButtonState & kNT_encoderButtonR);
+    a->lastButtonState = data.controls;
     
-    // Left encoder button: cycle through slots
-    if ((data.controls & kNT_encoderButtonL) && !(data.lastButtons & kNT_encoderButtonL)) {
-        a->selectedSlot++;
-        if (a->selectedSlot > 9) a->selectedSlot = 0;
+    // NAME EDIT MODE
+    if (a->nameEditMode) {
+        // Right encoder: change characters or toggle state
+        int encoderDelta = data.encoders[1];
+        if (encoderDelta > 1) encoderDelta = 1;
+        if (encoderDelta < -1) encoderDelta = -1;
+        
+        if (encoderDelta != 0) {
+            if (a->nameEditPos < 8) {
+                // Editing character
+                char* name = a->slotNames[a->nameEditSlot];
+                char c = name[a->nameEditPos];
+                
+                // Character set: space, 0-9, A-Z
+                const char charset[] = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                const int charsetLen = 37;
+                
+                // Find current position in charset
+                int currentIdx = 0;
+                if (c == 0) c = ' ';
+                for (int i = 0; i < charsetLen; i++) {
+                    if (charset[i] == c) {
+                        currentIdx = i;
+                        break;
+                    }
+                }
+                
+                // Move to next/previous character
+                currentIdx += encoderDelta;
+                if (currentIdx < 0) currentIdx = charsetLen - 1;
+                if (currentIdx >= charsetLen) currentIdx = 0;
+                
+                name[a->nameEditPos] = charset[currentIdx];
+            } else {
+                // Editing state (toggle on encoder turn)
+                a->slotStates[a->nameEditSlot] = !a->slotStates[a->nameEditSlot];
+            }
+        }
+        
+        // Left encoder: move cursor position
+        if (data.encoders[0] != 0) {
+            a->nameEditPos += data.encoders[0];
+            // Wrap around: 0-8 (0-7 for chars, 8 for state)
+            if (a->nameEditPos > 8) a->nameEditPos = 0;
+            if (a->nameEditPos > 8) a->nameEditPos = 8;  // Handle negative wrap
+        }
+        
+        // Left button: exit edit mode
+        if (leftButtonPressed) {
+            a->nameEditMode = false;
+        }
+        
+        // Right button: toggle state
+        if (rightButtonPressed) {
+            a->slotStates[a->nameEditSlot] = !a->slotStates[a->nameEditSlot];
+        }
+        
+    } else {
+        // NORMAL MODE
+        
+        // Left encoder: select slot (0-9)
+        if (data.encoders[0] != 0) {
+            a->selectedSlot += data.encoders[0];
+            if (a->selectedSlot < 0) a->selectedSlot = 9;
+            if (a->selectedSlot > 9) a->selectedSlot = 0;
+        }
+        
+        // Left encoder button: cycle through slots
+        if (leftButtonPressed) {
+            a->selectedSlot++;
+            if (a->selectedSlot > 9) a->selectedSlot = 0;
+        }
+        
+        // Right encoder button: enter edit mode for selected slot
+        if (rightButtonPressed) {
+            a->nameEditMode = true;
+            a->nameEditSlot = a->selectedSlot;
+            a->nameEditPos = 0;
+        }
     }
 }
 
@@ -600,8 +690,62 @@ static const _NT_factory factory = {
     .hasCustomUi = hasCustomUi,
     .customUi = customUi,
     .setupUi = nullptr,
-    .serialise = nullptr,
-    .deserialise = nullptr,
+    .serialise = [](struct _NT_algorithm* self, _NT_jsonStream& stream) {
+        FCBFix* a = (FCBFix*)self;
+        
+        // Serialize slot names
+        stream.addMemberName("slotNames");
+        stream.openArray();
+        for (int i = 0; i < 10; i++) {
+            stream.addString(a->slotNames[i]);
+        }
+        stream.closeArray();
+        
+        // Serialize slot states
+        stream.addMemberName("slotStates");
+        stream.openArray();
+        for (int i = 0; i < 10; i++) {
+            stream.addBoolean(a->slotStates[i]);
+        }
+        stream.closeArray();
+    },
+    .deserialise = [](struct _NT_algorithm* self, _NT_jsonParse& parse) -> bool {
+        FCBFix* a = (FCBFix*)self;
+        
+        int numMembers = 0;
+        if (!parse.numberOfObjectMembers(numMembers))
+            return false;
+        
+        for (int i = 0; i < numMembers; i++) {
+            if (parse.matchName("slotNames")) {
+                int numNames = 0;
+                if (parse.numberOfArrayElements(numNames)) {
+                    int count = (numNames < 10) ? numNames : 10;
+                    for (int j = 0; j < count; j++) {
+                        const char* str = nullptr;
+                        if (parse.string(str) && str) {
+                            strncpy(a->slotNames[j], str, 8);
+                            a->slotNames[j][8] = 0;  // Ensure null termination
+                        }
+                    }
+                }
+            } else if (parse.matchName("slotStates")) {
+                int numStates = 0;
+                if (parse.numberOfArrayElements(numStates)) {
+                    int count = (numStates < 10) ? numStates : 10;
+                    for (int j = 0; j < count; j++) {
+                        bool state;
+                        if (parse.boolean(state)) {
+                            a->slotStates[j] = state;
+                        }
+                    }
+                }
+            } else {
+                parse.skipMember();
+            }
+        }
+        return true;
+    },
     .midiSysEx = nullptr,
     .parameterUiPrefix = nullptr,
     .parameterString = nullptr
