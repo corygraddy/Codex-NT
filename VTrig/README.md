@@ -9,7 +9,7 @@ A powerful 6-track trigger/gate sequencer for Expert Sleepers Disting NT with sw
 - **Clock Division/Multiplication**: /16 to x16 (31 options per track)
 - **Swing**: 0-100% adjustable timing offset for odd steps
 - **Section Looping**: Two-section structure with repeat counts
-- **Fill Feature**: Jump to Section 2 on last repeat of Section 1
+- **Fill Feature**: Jump to Section 2 on last repeat of Section 1 (Forward mode only, requires Fill Start < Split Point)
 - **MIDI CC Output**: Parallel CC output for each trigger track
 - **Visual Editor**: Step grid with real-time playback indicator
 

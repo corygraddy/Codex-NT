@@ -35,6 +35,22 @@ Reason: MIDI implementation had bugs - only track 6 working, CC value stuck at 4
 
 --------------------------------------------------------------------------------
 
+Date: 2026-01-30
+Project: FCBFix
+Type: New Plugin
+Description: MIDI Program Change to CV Gate converter
+- 10 programmable slots mapping MIDI Program Change messages to CV gates
+- Each slot: Program number (0-127) + CV output assignment (1-28)
+- 100ms fixed gate duration at 10V
+- Custom UI with real-time gate indicators
+- Responds to all MIDI channels
+- Successfully built and tested on first try
+Notes: Created based on stable patterns from VTrig and V3Seq. Clean implementation
+with midiMessage() callback handling program changes (0xC0-0xCF status bytes).
+Perfect for FCB1010 foot controllers.
+
+--------------------------------------------------------------------------------
+
 Date: 
 Project: VFader
 Type: 
