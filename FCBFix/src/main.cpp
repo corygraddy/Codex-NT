@@ -58,7 +58,6 @@ struct FCBFix : public _NT_algorithm {
 enum {
     // Global MIDI settings
     kParamMidiChannel,
-    kParamMidiDestination,
     
     // 10 slots × 3 parameters each (program number, output, MIDI note)
     kParamSlot1Program,
@@ -98,7 +97,6 @@ static _NT_parameter parameters[kNumParameters];
 
 // Parameter name strings
 static char midiChannelName[] = "MIDI Channel";
-static char midiDestinationName[] = "MIDI Destination";
 static char slot1ProgramName[] = "Slot 1 Program";
 static char slot1OutputName[] = "Slot 1 Output";
 static char slot1MidiNoteName[] = "Slot 1 MIDI Note";
@@ -130,11 +128,6 @@ static char slot10ProgramName[] = "Slot 10 Program";
 static char slot10OutputName[] = "Slot 10 Output";
 static char slot10MidiNoteName[] = "Slot 10 MIDI Note";
 
-// MIDI destination strings
-static const char* const midiDestinationStrings[] = {
-    "Off", "Breakout", "SelectBus", "USB", "Internal", NULL
-};
-
 void initParameters(_NT_algorithm* self) {
     // MIDI Channel (1-16)
     parameters[kParamMidiChannel].name = midiChannelName;
@@ -143,15 +136,6 @@ void initParameters(_NT_algorithm* self) {
     parameters[kParamMidiChannel].def = 1;
     parameters[kParamMidiChannel].unit = kNT_unitNone;
     parameters[kParamMidiChannel].scaling = kNT_scalingNone;
-    
-    // MIDI Destination
-    parameters[kParamMidiDestination].name = midiDestinationName;
-    parameters[kParamMidiDestination].min = 0;
-    parameters[kParamMidiDestination].max = 4;
-    parameters[kParamMidiDestination].def = 3;  // USB by default
-    parameters[kParamMidiDestination].unit = kNT_unitEnum;
-    parameters[kParamMidiDestination].scaling = kNT_scalingNone;
-    parameters[kParamMidiDestination].enumStrings = midiDestinationStrings;
     
     // Slot 1
     parameters[kParamSlot1Program].name = slot1ProgramName;
@@ -380,7 +364,7 @@ void initParameters(_NT_algorithm* self) {
 // Parameter Pages
 // =============================================================================
 
-static const uint8_t midiParams[] = { kParamMidiChannel, kParamMidiDestination };
+static const uint8_t midiParams[] = { kParamMidiChannel };
 static const uint8_t slot1Params[] = { kParamSlot1Program, kParamSlot1Output, kParamSlot1MidiNote };
 static const uint8_t slot2Params[] = { kParamSlot2Program, kParamSlot2Output, kParamSlot2MidiNote };
 static const uint8_t slot3Params[] = { kParamSlot3Program, kParamSlot3Output, kParamSlot3MidiNote };
@@ -393,7 +377,7 @@ static const uint8_t slot9Params[] = { kParamSlot9Program, kParamSlot9Output, kP
 static const uint8_t slot10Params[] = { kParamSlot10Program, kParamSlot10Output, kParamSlot10MidiNote };
 
 static const _NT_parameterPage parameterPages[] = {
-    { .name = "MIDI", .numParams = 2, .params = midiParams },
+    { .name = "MIDI", .numParams = 1, .params = midiParams },
     { .name = "Slot 1", .numParams = 3, .params = slot1Params },
     { .name = "Slot 2", .numParams = 3, .params = slot2Params },
     { .name = "Slot 3", .numParams = 3, .params = slot3Params },
@@ -450,35 +434,17 @@ static void triggerGate(_NT_algorithm* self, int slot) {
     a->gateCounter[slot] = 4800;
     a->gateOutputs[slot] = 10.0f;  // 10V gate
     
-    // Send MIDI Note On
+    // Send MIDI Note On to internal (Disting handles global routing)
     int midiChannel = a->v[kParamMidiChannel];
-    int midiDest = a->v[kParamMidiDestination];
-    uint32_t destination = 0;
-    if (midiDest == 1) destination = kNT_destinationBreakout;
-    else if (midiDest == 2) destination = kNT_destinationSelectBus;
-    else if (midiDest == 3) destination = kNT_destinationUSB;
-    else if (midiDest == 4) destination = kNT_destinationInternal;
-    
-    if (destination != 0) {
-        int noteNum = a->v[kParamSlot1MidiNote + (slot * 3)];
-        uint8_t statusByte = 0x90 | ((midiChannel - 1) & 0x0F);  // Note On + channel
-        NT_sendMidi3ByteMessage(destination, statusByte, noteNum, 100);  // Velocity 100
-        a->noteActive[slot] = true;
-    }
+    int noteNum = a->v[kParamSlot1MidiNote + (slot * 3)];
+    uint8_t statusByte = 0x90 | ((midiChannel - 1) & 0x0F);  // Note On + channel
+    NT_sendMidi3ByteMessage(kNT_destinationInternal, statusByte, noteNum, 100);  // Velocity 100
+    a->noteActive[slot] = true;
 }
 
 static void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
     FCBFix* a = (FCBFix*)self;
     const int numFrames = numFramesBy4 * 4;
-    
-    // Get MIDI settings
-    int midiChannel = a->v[kParamMidiChannel];
-    int midiDest = a->v[kParamMidiDestination];
-    uint32_t destination = 0;
-    if (midiDest == 1) destination = kNT_destinationBreakout;
-    else if (midiDest == 2) destination = kNT_destinationSelectBus;
-    else if (midiDest == 3) destination = kNT_destinationUSB;
-    else if (midiDest == 4) destination = kNT_destinationInternal;
     
     // Process gate counters and output gates
     for (int slot = 0; slot < 10; slot++) {
@@ -489,10 +455,11 @@ static void step(_NT_algorithm* self, float* busFrames, int numFramesBy4) {
                 a->gateOutputs[slot] = 0.0f;  // Gate off
                 
                 // Send MIDI Note Off if note is active
-                if (a->noteActive[slot] && destination != 0) {
+                if (a->noteActive[slot]) {
+                    int midiChannel = a->v[kParamMidiChannel];
                     int noteNum = a->v[kParamSlot1MidiNote + (slot * 3)];
                     uint8_t statusByte = 0x80 | ((midiChannel - 1) & 0x0F);  // Note Off + channel
-                    NT_sendMidi3ByteMessage(destination, statusByte, noteNum, 0);
+                    NT_sendMidi3ByteMessage(kNT_destinationInternal, statusByte, noteNum, 0);
                     a->noteActive[slot] = false;
                 }
             }
