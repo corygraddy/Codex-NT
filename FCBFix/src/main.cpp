@@ -443,6 +443,9 @@ static void parameterChanged(_NT_algorithm* self, int p) {
 static void triggerGate(_NT_algorithm* self, int slot) {
     FCBFix* a = (FCBFix*)self;
     
+    // Toggle slot state (for display brightness)
+    a->slotStates[slot] = !a->slotStates[slot];
+    
     // Set gate duration: 100ms at 48kHz = 4800 samples
     a->gateCounter[slot] = 4800;
     a->gateOutputs[slot] = 10.0f;  // 10V gate
@@ -527,50 +530,60 @@ static void midiMessage(_NT_algorithm* self, uint8_t byte0, uint8_t byte1, uint8
 static bool draw(_NT_algorithm* self) {
     FCBFix* a = (FCBFix*)self;
     
-    // Draw title
-    NT_drawText(0, 2, "FCBFix: MIDI PC->CV Gate", 15, kNT_textLeft, kNT_textNormal);
-    
-    // Draw slot status (2 rows of 5 slots each)
-    char buffer[32];
-    int y = 20;
-    for (int row = 0; row < 2; row++) {
-        for (int col = 0; col < 5; col++) {
-            int slot = row * 5 + col;
-            int x = col * 51;
-            
-            // Slot number
-            snprintf(buffer, sizeof(buffer), "%d", slot + 1);
-            NT_drawText(x + 2, y, buffer, 15, kNT_textLeft, kNT_textNormal);
-            
-            // Program number
-            int program = a->v[kParamSlot1Program + (slot * 2)];
-            snprintf(buffer, sizeof(buffer), "P%d", program);
-            NT_drawText(x + 12, y, buffer, 15, kNT_textLeft, kNT_textNormal);
-            
-            // Output assignment
-            int output = a->v[kParamSlot1Output + (slot * 2)];
-            if (output > 0) {
-                snprintf(buffer, sizeof(buffer), "O%d", output);
-                NT_drawText(x + 30, y, buffer, 15, kNT_textLeft, kNT_textNormal);
-            } else {
-                NT_drawText(x + 30, y, "--", 7, kNT_textLeft, kNT_textNormal);
-            }
-            
-            // Gate indicator (bright when active)
-            int color = (a->gateCounter[slot] > 0) ? 15 : 7;
-            NT_drawShapeI(kNT_circle, x + 45, y + 4, x + 48, y + 7, color);
+    // Popup name editor
+    if (a->nameEditMode) {
+        // Row 1: "EDIT SLOT"
+        NT_drawText(2, 8, "EDIT SLOT", 15, kNT_textLeft, kNT_textNormal);
+        
+        // Row 2: Slot name - draw each character with different brightness
+        for (int i = 0; i < 8; i++) {
+            char singleChar[2];
+            singleChar[0] = a->slotNames[a->nameEditSlot][i];
+            singleChar[1] = '\0';
+            int brightness = (i == a->nameEditPos) ? 15 : 7;
+            NT_drawText(2 + (i * 8), 24, singleChar, brightness, kNT_textLeft, kNT_textNormal);
         }
-        y += 20;
+        
+        // Row 3: "STATE" label
+        NT_drawText(2, 40, "STATE", 15, kNT_textLeft, kNT_textNormal);
+        
+        // Row 4: "on" or "off" - brighter when editing
+        const char* stateText = a->slotStates[a->nameEditSlot] ? "on" : "off";
+        int stateBrightness = (a->nameEditPos == 8) ? 15 : 7;
+        NT_drawText(2, 52, stateText, stateBrightness, kNT_textLeft, kNT_textNormal);
+        
+        return true;
     }
     
-    // Draw selected slot indicator
-    int selectedRow = a->selectedSlot / 5;
-    int selectedCol = a->selectedSlot % 5;
-    int indicatorX = selectedCol * 51;
-    int indicatorY = 20 + (selectedRow * 20) - 2;
-    NT_drawShapeI(kNT_line, indicatorX, indicatorY, indicatorX + 48, indicatorY, 15);
+    // Clean 2x5 grid - just slot names
+    // Top row: Slots 6-10
+    int topRowY = 20;
+    int bottomRowY = 40;
     
-    return true;  // Suppress default parameter line
+    for (int i = 0; i < 5; i++) {
+        // Top row (slots 6-10)
+        int topSlot = i + 5;
+        int x = i * 51 + 2;
+        int brightness = a->slotStates[topSlot] ? 15 : 4;
+        NT_drawText(x, topRowY, a->slotNames[topSlot], brightness, kNT_textLeft, kNT_textNormal);
+        
+        // Short underline for selected slot in top row
+        if (a->selectedSlot == topSlot) {
+            NT_drawShapeI(kNT_line, x, topRowY + 8, x + 15, topRowY + 8, 15);
+        }
+        
+        // Bottom row (slots 1-5)
+        int bottomSlot = i;
+        brightness = a->slotStates[bottomSlot] ? 15 : 4;
+        NT_drawText(x, bottomRowY, a->slotNames[bottomSlot], brightness, kNT_textLeft, kNT_textNormal);
+        
+        // Short underline for selected slot in bottom row
+        if (a->selectedSlot == bottomSlot) {
+            NT_drawShapeI(kNT_line, x, bottomRowY + 8, x + 15, bottomRowY + 8, 15);
+        }
+    }
+    
+    return true;
 }
 
 static uint32_t hasCustomUi(_NT_algorithm* self) {
@@ -632,14 +645,9 @@ static void customUi(_NT_algorithm* self, const _NT_uiData& data) {
             if (a->nameEditPos > 8) a->nameEditPos = 8;  // Handle negative wrap
         }
         
-        // Left button: exit edit mode
-        if (leftButtonPressed) {
-            a->nameEditMode = false;
-        }
-        
-        // Right button: toggle state
+        // Right button: exit edit mode
         if (rightButtonPressed) {
-            a->slotStates[a->nameEditSlot] = !a->slotStates[a->nameEditSlot];
+            a->nameEditMode = false;
         }
         
     } else {
